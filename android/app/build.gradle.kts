@@ -17,7 +17,7 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // Only build arm64-v8a for Phase 3; x86_64 for emulator testing
+        // Phase 4: arm64-v8a for device, x86_64 for emulator testing
         ndk {
             abiFilters += listOf("arm64-v8a", "x86_64")
         }
@@ -61,4 +61,6 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+    // ActivityScenario for Phase 4 rendering test
+    androidTestImplementation("androidx.test:core:1.6.1")
 }

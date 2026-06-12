@@ -41,7 +41,6 @@ elseif(ANDROID_ABI STREQUAL "x86_64")
 elseif(ANDROID_ABI STREQUAL "armeabi-v7a")
     target_sources(libco PRIVATE "${ARES_ROOT}/libco/arm.c")
 else()
-    # Fallback to setjmp/longjmp implementation
     target_sources(libco PRIVATE "${ARES_ROOT}/libco/sjlj.c")
 endif()
 target_include_directories(libco INTERFACE "${ARES_ROOT}")
@@ -53,21 +52,14 @@ add_library(nall OBJECT
     "${ARES_ROOT}/nall/nall/nall.cpp"
     "${ARES_ROOT}/nall/nall/sljitAllocator.cpp"
 )
-# nall's includes live one level above nall/nall/
 target_include_directories(nall PUBLIC "${ARES_ROOT}/nall")
 target_link_libraries(nall PUBLIC sljit)
 target_compile_definitions(nall PUBLIC BUILD_RELEASE)
-# Android provides pthreads in the C library — no separate link needed
 target_link_libraries(nall PUBLIC log)
 
 # ---------------------------------------------------------------------------
-# ares core — the emulation framework (no system cores yet; Phase 4+)
+# ares core — the emulation framework (node tree, scheduler, platform)
 # ---------------------------------------------------------------------------
-# We compile our own ares_android.cpp instead of using configure_file on
-# ares.cpp.in, because:
-#   1. The resource embed (icons/logos) is not needed on Android.
-#   2. We can skip the sourcery build-tool dependency entirely.
-#   3. Version strings are inlined directly.
 add_library(ares_core STATIC
     "${CMAKE_CURRENT_SOURCE_DIR}/ares_android.cpp"
     "${ARES_ROOT}/ares/ares/memory/fixed-allocator.cpp"
@@ -83,13 +75,59 @@ target_compile_definitions(ares_core PUBLIC
 )
 
 # ---------------------------------------------------------------------------
-# retro_emulator — the JNI shared library loaded by AresCore.kt
+# sfc_core — Super Famicom / SNES system (unity build via sfc.cpp)
+#
+# sfc.cpp (via sfc.hpp) includes the processor .hpp headers (struct decls)
+# inside the ares::SuperFamicom namespace context.  The actual method bodies
+# live in separate processor unity-build .cpp files that must be compiled as
+# their own TUs and linked alongside sfc.cpp.
+#
+# Required processors for SFC:
+#   wdc65816  — main CPU (65816)
+#   spc700    — audio CPU (SPC700)
+#   gsu       — SuperFX coprocessor
+#   hg51b     — Hitachi DSP coprocessor (SA1 / HiROM)
+#   upd96050  — NEC DSP coprocessor (DSP-1 through DSP-4)
+# ---------------------------------------------------------------------------
+set(PROC "${ARES_ROOT}/ares/component/processor")
+add_library(sfc_core STATIC
+    "${ARES_ROOT}/ares/sfc/sfc.cpp"
+    "${PROC}/arm7tdmi/arm7tdmi.cpp"
+    "${PROC}/wdc65816/wdc65816.cpp"
+    "${PROC}/spc700/spc700.cpp"
+    "${PROC}/gsu/gsu.cpp"
+    "${PROC}/hg51b/hg51b.cpp"
+    "${PROC}/upd96050/upd96050.cpp"
+)
+target_include_directories(sfc_core PUBLIC
+    # stubs/ must come BEFORE ${ARES_ROOT}/ares so our ares/resource/resource.hpp
+    # shadows the missing sourcery-generated version in the ares submodule.
+    "${CMAKE_CURRENT_SOURCE_DIR}/stubs"
+    "${ARES_ROOT}/ares"          # for <sfc/sfc.hpp>, <component/processor/…>
+)
+# Inherit ARES_ROOT and nall includes through ares_core's PUBLIC interface.
+target_link_libraries(sfc_core PUBLIC ares_core)
+target_compile_definitions(sfc_core PUBLIC
+    PROFILE_PERFORMANCE
+    BUILD_RELEASE
+    CORE_SFC
+)
+
+# ---------------------------------------------------------------------------
+# retro_emulator — JNI shared library + GL renderer + SFC pak builder
 # ---------------------------------------------------------------------------
 add_library(retro_emulator SHARED
     "${CMAKE_CURRENT_SOURCE_DIR}/ares_jni.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/sfc_pak.cpp"
 )
 target_include_directories(retro_emulator PRIVATE
     "${ARES_ROOT}"
     "${ARES_ROOT}/ares"
+    "${CMAKE_CURRENT_SOURCE_DIR}"
 )
-target_link_libraries(retro_emulator PRIVATE ares_core android log)
+target_link_libraries(retro_emulator PRIVATE
+    sfc_core
+    android
+    log
+    GLESv2
+)
