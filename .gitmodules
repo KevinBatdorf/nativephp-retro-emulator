@@ -1,0 +1,3 @@
+[submodule "ares"]
+	path = ares
+	url = https://github.com/ares-emulator/ares
