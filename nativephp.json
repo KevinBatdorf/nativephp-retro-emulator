@@ -1,0 +1,284 @@
+{
+    "name": "kevinbatdorf/retro-emulator",
+    "version": "0.1.0",
+    "description": "Native retro emulation for NativePHP Mobile apps via the ares emulator core",
+    "namespace": "Emulator",
+    "keywords": ["emulator", "retro", "gaming", "ares", "snes", "nes"],
+    "category": "utilities",
+    "license": "MIT",
+    "author": {
+        "name": "Kevin Batdorf",
+        "email": "kbat82@gmail.com",
+        "url": "https://github.com/kevinbatdorf"
+    },
+    "homepage": "https://github.com/kevinbatdorf/nativephp-retro-emulator",
+    "repository": "https://github.com/kevinbatdorf/nativephp-retro-emulator",
+    "platforms": ["android", "ios"],
+
+    "components": [
+        {
+            "type": "emulator",
+            "element": "KevinBatdorf\\RetroEmulator\\Elements\\Emulator",
+            "blade": "KevinBatdorf\\RetroEmulator\\Components\\Emulator",
+            "android_renderer": "com.kevinbatdorf.plugins.retroemulator.EmulatorRenderer",
+            "ios_renderer": "EmulatorRenderer"
+        }
+    ],
+
+    "bridge_functions": [
+        {
+            "name": "Emulator.Boot",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.Boot",
+            "ios": "EmulatorFunctions.Boot",
+            "description": "Bind to the named surface declared in the component tree; native creates the rendering surface"
+        },
+        {
+            "name": "Emulator.LoadSystem",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.LoadSystem",
+            "ios": "EmulatorFunctions.LoadSystem",
+            "description": "Initialise ares core for a system with system-level config"
+        },
+        {
+            "name": "Emulator.LoadRom",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.LoadRom",
+            "ios": "EmulatorFunctions.LoadRom",
+            "description": "Start emulation with ROM at given path; call again to swap ROMs"
+        },
+        {
+            "name": "Emulator.Pause",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.Pause",
+            "ios": "EmulatorFunctions.Pause",
+            "description": "Pause emulation"
+        },
+        {
+            "name": "Emulator.Resume",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.Resume",
+            "ios": "EmulatorFunctions.Resume",
+            "description": "Resume emulation"
+        },
+        {
+            "name": "Emulator.Stop",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.Stop",
+            "ios": "EmulatorFunctions.Stop",
+            "description": "Stop emulator and teardown core"
+        },
+        {
+            "name": "Emulator.StateSave",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.StateSave",
+            "ios": "EmulatorFunctions.StateSave",
+            "description": "Snapshot full emulator state to slot"
+        },
+        {
+            "name": "Emulator.StateLoad",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.StateLoad",
+            "ios": "EmulatorFunctions.StateLoad",
+            "description": "Restore emulator state from slot"
+        },
+        {
+            "name": "Emulator.UndoStateSave",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.UndoStateSave",
+            "ios": "EmulatorFunctions.UndoStateSave",
+            "description": "Undo most recent state save"
+        },
+        {
+            "name": "Emulator.UndoStateLoad",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.UndoStateLoad",
+            "ios": "EmulatorFunctions.UndoStateLoad",
+            "description": "Undo most recent state load"
+        },
+        {
+            "name": "Emulator.ReadMemory",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.ReadMemory",
+            "ios": "EmulatorFunctions.ReadMemory",
+            "description": "Sync RAM read — returns bytes directly"
+        },
+        {
+            "name": "Emulator.ReadMemoryAsync",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.ReadMemoryAsync",
+            "ios": "EmulatorFunctions.ReadMemoryAsync",
+            "description": "Async RAM read — dispatches MemoryRead event"
+        },
+        {
+            "name": "Emulator.WriteMemory",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.WriteMemory",
+            "ios": "EmulatorFunctions.WriteMemory",
+            "description": "Write bytes to RAM"
+        },
+        {
+            "name": "Emulator.WatchMemory",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.WatchMemory",
+            "ios": "EmulatorFunctions.WatchMemory",
+            "description": "Register/merge address watches; fires MemoryChanged on value change"
+        },
+        {
+            "name": "Emulator.UnwatchMemory",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.UnwatchMemory",
+            "ios": "EmulatorFunctions.UnwatchMemory",
+            "description": "Remove specific address watches"
+        },
+        {
+            "name": "Emulator.ClearMemoryWatches",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.ClearMemoryWatches",
+            "ios": "EmulatorFunctions.ClearMemoryWatches",
+            "description": "Remove all memory watches"
+        },
+        {
+            "name": "Emulator.SetAudio",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.SetAudio",
+            "ios": "EmulatorFunctions.SetAudio",
+            "description": "Merge audio options (volume, balance)"
+        },
+        {
+            "name": "Emulator.SetVideo",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.SetVideo",
+            "ios": "EmulatorFunctions.SetVideo",
+            "description": "Merge video options (luminance, saturation, gamma, etc.)"
+        },
+        {
+            "name": "Emulator.Configure",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.Configure",
+            "ios": "EmulatorFunctions.Configure",
+            "description": "Merge general live options (speed, runAhead, rewind, etc.)"
+        },
+        {
+            "name": "Emulator.SetSystemOptions",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.SetSystemOptions",
+            "ios": "EmulatorFunctions.SetSystemOptions",
+            "description": "Merge system-specific options"
+        },
+        {
+            "name": "Emulator.FastForward",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.FastForward",
+            "ios": "EmulatorFunctions.FastForward",
+            "description": "Toggle fast-forward mode"
+        },
+        {
+            "name": "Emulator.SetInputMapping",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.SetInputMapping",
+            "ios": "EmulatorFunctions.SetInputMapping",
+            "description": "Merge controller input mappings for a port"
+        },
+        {
+            "name": "Emulator.SetRumble",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.SetRumble",
+            "ios": "EmulatorFunctions.SetRumble",
+            "description": "Enable/disable rumble for current controller"
+        },
+        {
+            "name": "Emulator.SetShader",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.SetShader",
+            "ios": "EmulatorFunctions.SetShader",
+            "description": "Load a .slangp shader preset by path; null clears"
+        },
+        {
+            "name": "Emulator.AddCheat",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.AddCheat",
+            "ios": "EmulatorFunctions.AddCheat",
+            "description": "Add a cheat code"
+        },
+        {
+            "name": "Emulator.RemoveCheat",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.RemoveCheat",
+            "ios": "EmulatorFunctions.RemoveCheat",
+            "description": "Remove a cheat code"
+        },
+        {
+            "name": "Emulator.ClearCheats",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.ClearCheats",
+            "ios": "EmulatorFunctions.ClearCheats",
+            "description": "Remove all cheats"
+        },
+        {
+            "name": "Emulator.PressButton",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.PressButton",
+            "ios": "EmulatorFunctions.PressButton",
+            "description": "Set a single button state to pressed in the input state map"
+        },
+        {
+            "name": "Emulator.ReleaseButton",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.ReleaseButton",
+            "ios": "EmulatorFunctions.ReleaseButton",
+            "description": "Set a single button state to released in the input state map"
+        },
+        {
+            "name": "Emulator.SetButtons",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.SetButtons",
+            "ios": "EmulatorFunctions.SetButtons",
+            "description": "Atomically merge multiple button states into the input state map"
+        },
+        {
+            "name": "Emulator.Screenshot",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.Screenshot",
+            "ios": "EmulatorFunctions.Screenshot",
+            "description": "Capture current frame"
+        },
+        {
+            "name": "Emulator.GetStatus",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.GetStatus",
+            "ios": "EmulatorFunctions.GetStatus",
+            "description": "Return current emulator status (stopped/loading/running/paused)"
+        },
+        {
+            "name": "Emulator.GetRegion",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.GetRegion",
+            "ios": "EmulatorFunctions.GetRegion",
+            "description": "Return region of loaded ROM"
+        },
+        {
+            "name": "Emulator.GetPorts",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.GetPorts",
+            "ios": "EmulatorFunctions.GetPorts",
+            "description": "Return controller ports for current system"
+        },
+        {
+            "name": "Emulator.GetSystems",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.GetSystems",
+            "ios": "EmulatorFunctions.GetSystems",
+            "description": "Return all supported systems as rich objects"
+        }
+    ],
+
+    "events": [
+        "KevinBatdorf\\RetroEmulator\\Events\\EmulatorStarted",
+        "KevinBatdorf\\RetroEmulator\\Events\\EmulatorStopped",
+        "KevinBatdorf\\RetroEmulator\\Events\\EmulatorPaused",
+        "KevinBatdorf\\RetroEmulator\\Events\\EmulatorResumed",
+        "KevinBatdorf\\RetroEmulator\\Events\\MemoryRead",
+        "KevinBatdorf\\RetroEmulator\\Events\\MemoryChanged",
+        "KevinBatdorf\\RetroEmulator\\Events\\EmulatorError"
+    ],
+
+    "service_provider": "KevinBatdorf\\RetroEmulator\\RetroEmulatorServiceProvider",
+
+    "android": {
+        "min_version": 21,
+        "permissions": [],
+        "repositories": [],
+        "dependencies": {
+            "implementation": []
+        },
+        "activities": [],
+        "services": [],
+        "receivers": [],
+        "providers": []
+    },
+
+    "ios": {
+        "min_version": "15.0",
+        "permissions": [],
+        "repositories": [],
+        "dependencies": {
+            "swift_packages": [],
+            "pods": []
+        }
+    },
+
+    "assets": {
+        "android": [],
+        "ios": []
+    },
+
+    "hooks": {
+        "copy_assets": "nativephp:retro-emulator:copy-assets"
+    }
+}
