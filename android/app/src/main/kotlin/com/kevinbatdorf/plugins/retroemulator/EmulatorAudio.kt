@@ -1,0 +1,91 @@
+package com.kevinbatdorf.plugins.retroemulator
+
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioTrack
+import android.util.Log
+
+private const val TAG = "EmulatorAudio"
+private const val SAMPLE_RATE = 48000
+
+/**
+ * Streams mixed stereo audio from [AresCore]'s native ring buffer into an
+ * [AudioTrack] running in streaming mode.
+ *
+ * Lifecycle: call [start] once after the ROM loads; call [stop] from any thread
+ * to flush and release the AudioTrack. [start] and [stop] are not thread-safe
+ * with respect to each other — call them sequentially.
+ */
+class EmulatorAudio(private val core: AresCore) {
+
+    private val minBufBytes = AudioTrack.getMinBufferSize(
+        SAMPLE_RATE,
+        AudioFormat.CHANNEL_OUT_STEREO,
+        AudioFormat.ENCODING_PCM_FLOAT,
+    ).coerceAtLeast(4096)
+
+    private val audioTrack = AudioTrack.Builder()
+        .setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_GAME)
+                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                .build()
+        )
+        .setAudioFormat(
+            AudioFormat.Builder()
+                .setEncoding(AudioFormat.ENCODING_PCM_FLOAT)
+                .setSampleRate(SAMPLE_RATE)
+                .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO)
+                .build()
+        )
+        // 4× min so the drain thread rarely blocks on a full buffer.
+        .setBufferSizeInBytes(minBufBytes * 4)
+        .setTransferMode(AudioTrack.MODE_STREAM)
+        .build()
+
+    // Drain buffer holds enough frames for one AudioTrack write at a time.
+    // minBufBytes / (4 bytes/float) gives the frame capacity in floats.
+    private val drainBuffer = FloatArray(minBufBytes / 4)
+
+    @Volatile private var running = false
+    private var drainThread: Thread? = null
+
+    fun start() {
+        audioTrack.play()
+        running = true
+        drainThread = Thread {
+            while (running) {
+                val n = core.readAudio(drainBuffer)
+                if (n > 0) {
+                    var written = 0
+                    while (written < n) {
+                        val result = audioTrack.write(
+                            drainBuffer, written, n - written,
+                            AudioTrack.WRITE_BLOCKING,
+                        )
+                        if (result < 0) {
+                            Log.e(TAG, "AudioTrack write error: $result")
+                            break
+                        }
+                        written += result
+                    }
+                } else {
+                    Thread.sleep(1)
+                }
+            }
+        }.apply {
+            name = "emu-audio"
+            start()
+        }
+        Log.i(TAG, "started — sampleRate=$SAMPLE_RATE bufferBytes=${minBufBytes * 4}")
+    }
+
+    fun stop() {
+        running = false
+        drainThread?.join(500)
+        drainThread = null
+        audioTrack.stop()
+        audioTrack.release()
+        Log.i(TAG, "stopped")
+    }
+}

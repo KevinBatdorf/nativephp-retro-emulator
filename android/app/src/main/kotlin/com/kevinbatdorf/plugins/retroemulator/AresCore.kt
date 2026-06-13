@@ -83,6 +83,32 @@ class AresCore {
     fun getFrameHeight(): Int = nativeGetFrameHeight()
 
     // -------------------------------------------------------------------------
+    // Phase 5 — audio
+    // -------------------------------------------------------------------------
+
+    /**
+     * Drain mixed stereo audio samples from the native ring buffer into
+     * [buffer] (interleaved L/R float pairs, range −1..+1).
+     *
+     * @return Number of floats written (always even; 0 if nothing pending).
+     *         May be called from any thread.
+     */
+    fun readAudio(buffer: FloatArray): Int = nativeReadAudio(buffer)
+
+    // -------------------------------------------------------------------------
+    // Phase 6 — input
+    // -------------------------------------------------------------------------
+
+    /**
+     * Write the current button bitmask for one controller port. Safe to call
+     * from any thread. Bit positions match [EmulatorInput] companion constants.
+     *
+     * @param port    1 or 2.
+     * @param buttons Bitmask of pressed buttons.
+     */
+    fun setInputState(port: Int, buttons: Int) = nativeSetInputState(port, buttons)
+
+    // -------------------------------------------------------------------------
     // Native declarations
     // -------------------------------------------------------------------------
 
@@ -102,4 +128,8 @@ class AresCore {
     private external fun nativeTick()
     private external fun nativeGetFrameWidth(): Int
     private external fun nativeGetFrameHeight(): Int
+
+    private external fun nativeReadAudio(buffer: FloatArray): Int
+
+    private external fun nativeSetInputState(port: Int, buttons: Int)
 }

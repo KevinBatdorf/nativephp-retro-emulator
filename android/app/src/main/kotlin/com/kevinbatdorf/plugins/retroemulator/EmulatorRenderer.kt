@@ -28,7 +28,9 @@ private const val TEX_H = 512
  */
 class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
 
-    private val core = AresCore()
+    private val core  = AresCore()
+    private val audio = EmulatorAudio(core)
+    val input = EmulatorInput(core)
 
     // Pending commands posted from the main thread and consumed on the GL thread.
     @Volatile var pendingIplRom: ByteArray?    = null
@@ -37,6 +39,7 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
 
     @Volatile private var systemLoaded = false
     @Volatile private var romLoaded    = false
+    @Volatile private var audioStarted = false
 
     // Current UV extents for the content region within the 1024×512 texture.
     private var uvW = 1f
@@ -125,7 +128,15 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
             if (systemLoaded && !romLoaded && rom != null) {
                 romLoaded = core.loadRom(rom)
                 pendingRomBytes = null   // consumed
-                if (!romLoaded) Log.e(TAG, "loadRom failed")
+                if (!romLoaded) {
+                    Log.e(TAG, "loadRom failed")
+                }
+            }
+
+            // --- Start audio once the ROM is running ---
+            if (romLoaded && !audioStarted) {
+                audioStarted = true
+                audio.start()
             }
 
             GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
@@ -182,6 +193,17 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
     fun queueRomLoad(romBytes: ByteArray) {
         pendingRomBytes = romBytes
         requestRender()
+    }
+
+    /**
+     * Stop audio and tear down the ares core. Call from [Activity.onDestroy].
+     * Audio is stopped immediately on the calling thread; core teardown is
+     * queued on the GL thread to keep libco coroutine contexts consistent.
+     */
+    fun release() {
+        input.reset()
+        audio.stop()
+        queueEvent { core.destroy() }
     }
 }
 

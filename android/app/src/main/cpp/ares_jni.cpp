@@ -2,6 +2,13 @@
 #include <android/log.h>
 #include <GLES2/gl2.h>
 
+#include <algorithm>
+#include <atomic>
+#include <mutex>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
 #include <ares/ares.hpp>
 #include <sfc/sfc.hpp>
 
@@ -12,7 +19,8 @@
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 // ---------------------------------------------------------------------------
-// Emulator state — all fields are accessed exclusively from the GL thread.
+// Emulator state — video/ROM fields accessed from the GL thread only.
+// audioMutex guards audioRingBuffer (written on GL thread, drained on audio thread).
 // ---------------------------------------------------------------------------
 struct EmulatorState {
     std::shared_ptr<vfs::directory> systemPak;
@@ -25,6 +33,28 @@ struct EmulatorState {
     ares::Node::System root;
     bool systemLoaded = false;
     bool romLoaded    = false;
+
+    // Audio — written by GL thread, read by audio drain thread.
+    std::vector<ares::Node::Audio::Stream> audioStreams;
+    std::mutex    audioMutex;
+    std::vector<float> audioRingBuffer;
+    // Cap at ~0.5 s of stereo PCM (48 kHz × 2 channels × 0.5 s).
+    static constexpr size_t kAudioCap = 48000u;
+
+    // Phase 6 — input.
+    // Written by the main thread via nativeSetInputState; read by the GL thread
+    // inside Platform::input(). Atomic so no mutex is needed.
+    std::atomic<uint32_t> inputMaskPort1 {0};
+    std::atomic<uint32_t> inputMaskPort2 {0};
+
+    // Cached mapping from ares button node → (port mask pointer, bit).
+    // Built once on the GL thread after nativeLoadSystem; read-only thereafter.
+    struct CachedButton {
+        ares::Node::Input::Button node;
+        std::atomic<uint32_t>*   mask;
+        uint32_t                 bit;
+    };
+    std::vector<CachedButton> inputCache;
 };
 
 static EmulatorState* g_state = nullptr;
@@ -33,6 +63,26 @@ static EmulatorState* g_state = nullptr;
 // AndroidPlatform — wires ares callbacks to the emulator state.
 // ---------------------------------------------------------------------------
 struct AndroidPlatform : ares::Platform {
+
+    auto attach(ares::Node::Object node) -> void override {
+        if (!g_state) return;
+        if (auto stream = node->cast<ares::Node::Audio::Stream>()) {
+            stream->setResamplerFrequency(48000.0);
+            g_state->audioStreams =
+                g_state->root->find<ares::Node::Audio::Stream>();
+            LOGI("audio stream attached — %zu total", g_state->audioStreams.size());
+        }
+    }
+
+    auto detach(ares::Node::Object node) -> void override {
+        if (!g_state) return;
+        if (auto stream = node->cast<ares::Node::Audio::Stream>()) {
+            g_state->audioStreams =
+                g_state->root->find<ares::Node::Audio::Stream>();
+            std::erase(g_state->audioStreams, stream);
+            LOGI("audio stream detached — %zu remaining", g_state->audioStreams.size());
+        }
+    }
 
     auto pak(ares::Node::Object node) -> std::shared_ptr<vfs::directory> override {
         if (!g_state) return {};
@@ -66,9 +116,50 @@ struct AndroidPlatform : ares::Platform {
         }
     }
 
-    auto audio(ares::Node::Audio::Stream) -> void override {}
+    auto audio(ares::Node::Audio::Stream) -> void override {
+        if (!g_state || g_state->audioStreams.empty()) return;
 
-    auto input(ares::Node::Input::Input) -> void override {}
+        while (true) {
+            // All streams must have at least one pending frame before we mix.
+            for (auto& stream : g_state->audioStreams) {
+                if (!stream->pending()) return;
+            }
+
+            f64 samples[2] = {0.0, 0.0};
+            for (auto& stream : g_state->audioStreams) {
+                f64 buf[2] = {0.0, 0.0};
+                u32 channels = stream->read(buf);
+                if (channels == 1) {
+                    samples[0] += buf[0];
+                    samples[1] += buf[0];
+                } else {
+                    samples[0] += buf[0];
+                    samples[1] += buf[1];
+                }
+            }
+
+            float l = (float)std::max(-1.0, std::min(+1.0, samples[0]));
+            float r = (float)std::max(-1.0, std::min(+1.0, samples[1]));
+
+            std::lock_guard<std::mutex> lock(g_state->audioMutex);
+            if (g_state->audioRingBuffer.size() < EmulatorState::kAudioCap) {
+                g_state->audioRingBuffer.push_back(l);
+                g_state->audioRingBuffer.push_back(r);
+            }
+        }
+    }
+
+    auto input(ares::Node::Input::Input node) -> void override {
+        if (!g_state) return;
+        if (auto btn = node->cast<ares::Node::Input::Button>()) {
+            for (auto& cached : g_state->inputCache) {
+                if (cached.node == btn) {
+                    btn->setValue(cached.mask->load(std::memory_order_relaxed) & cached.bit);
+                    return;
+                }
+            }
+        }
+    }
 };
 
 static AndroidPlatform* g_platform = nullptr;
@@ -179,6 +270,31 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadSystem(
         port->connect();
     }
 
+    // Build button cache for both ports. Maps ares button names to bitmask
+    // positions that match the Kotlin EmulatorInput constants.
+    static const std::unordered_map<std::string, uint32_t> kSnesButtons = {
+        {"B",      1u <<  0}, {"Y",      1u <<  1},
+        {"Select", 1u <<  2}, {"Start",  1u <<  3},
+        {"Up",     1u <<  4}, {"Down",   1u <<  5},
+        {"Left",   1u <<  6}, {"Right",  1u <<  7},
+        {"A",      1u <<  8}, {"X",      1u <<  9},
+        {"L",      1u << 10}, {"R",      1u << 11},
+    };
+    auto cachePortButtons = [&](const char* portName, std::atomic<uint32_t>& mask) {
+        auto port = g_state->root->find<ares::Node::Port>(portName);
+        if (!port) { LOGE("cachePortButtons: port '%s' not found", portName); return; }
+        for (auto& btn : port->find<ares::Node::Input::Button>()) {
+            auto it = kSnesButtons.find(std::string((const char*)btn->name()));
+            if (it != kSnesButtons.end()) {
+                g_state->inputCache.push_back({btn, &mask, it->second});
+            }
+        }
+        LOGI("cached buttons for %s (%zu total so far)", portName,
+             g_state->inputCache.size());
+    };
+    cachePortButtons("Controller Port 1", g_state->inputMaskPort1);
+    cachePortButtons("Controller Port 2", g_state->inputMaskPort2);
+
     g_state->systemLoaded = true;
     LOGI("SFC system loaded");
     return JNI_TRUE;
@@ -255,6 +371,56 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetFrameHeight(
     JNIEnv*, jobject)
 {
     return g_state ? (jint)g_state->frameHeight : 0;
+}
+
+// Phase 5 — audio drain -----------------------------------------------------
+
+/**
+ * Drain mixed audio samples from the ring buffer into a caller-supplied float
+ * array. Returns the number of floats written (interleaved L/R pairs).
+ * Thread-safe: may be called from the audio drain thread while the GL thread
+ * fills the buffer.
+ */
+JNIEXPORT jint JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeReadAudio(
+    JNIEnv* env, jobject, jfloatArray buffer)
+{
+    if (!g_state) return 0;
+
+    std::lock_guard<std::mutex> lock(g_state->audioMutex);
+    if (g_state->audioRingBuffer.empty()) return 0;
+
+    jsize capacity = env->GetArrayLength(buffer);
+    jsize count    = (jsize)std::min(
+        (size_t)capacity, g_state->audioRingBuffer.size());
+
+    env->SetFloatArrayRegion(buffer, 0, count,
+                             g_state->audioRingBuffer.data());
+
+    g_state->audioRingBuffer.erase(
+        g_state->audioRingBuffer.begin(),
+        g_state->audioRingBuffer.begin() + count);
+
+    return count;
+}
+
+// Phase 6 — input ---------------------------------------------------------
+
+/**
+ * Write the current button bitmask for one controller port. Safe to call from
+ * any thread; the GL thread reads atomically inside Platform::input().
+ *
+ * @param port     1 or 2.
+ * @param buttons  Bitmask — bit positions match EmulatorInput companion constants.
+ */
+JNIEXPORT void JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetInputState(
+    JNIEnv*, jobject, jint port, jint buttons)
+{
+    if (!g_state) return;
+    auto mask = static_cast<uint32_t>(buttons);
+    if (port == 1) g_state->inputMaskPort1.store(mask, std::memory_order_relaxed);
+    else if (port == 2) g_state->inputMaskPort2.store(mask, std::memory_order_relaxed);
 }
 
 } // extern "C"
