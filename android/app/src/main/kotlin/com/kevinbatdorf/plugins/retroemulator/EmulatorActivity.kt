@@ -3,6 +3,8 @@ package com.kevinbatdorf.plugins.retroemulator
 import android.app.Activity
 import android.os.Bundle
 import android.util.Log
+import android.view.KeyEvent
+import android.view.MotionEvent
 import java.io.File
 
 /**
@@ -66,5 +68,16 @@ class EmulatorActivity : Activity() {
     }
 
     override fun onResume()  { super.onResume();  renderer.onResume() }
-    override fun onPause()   { super.onPause();   renderer.onPause() }
+    override fun onPause()   { super.onPause();   renderer.onPause();  renderer.input.reset() }
+    override fun onDestroy() { super.onDestroy(); renderer.release() }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (renderer.input.onKeyEvent(event)) return true
+        return super.dispatchKeyEvent(event)
+    }
+
+    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
+        if (renderer.input.onMotionEvent(event)) return true
+        return super.dispatchGenericMotionEvent(event)
+    }
 }
