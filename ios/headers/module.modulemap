@@ -1,0 +1,4 @@
+module RetroEmulator {
+    header "ares_ios_api.h"
+    export *
+}
