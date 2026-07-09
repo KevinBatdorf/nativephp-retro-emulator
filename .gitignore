@@ -3,6 +3,9 @@
 .DS_Store
 *.log
 
+# Private local working files — never tracked
+.claude/
+
 # Android
 android/local.properties
 android/.gradle/
