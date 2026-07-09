@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstdio>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -55,6 +56,15 @@ struct EmulatorState {
         uint32_t                 bit;
     };
     std::vector<CachedButton> inputCache;
+
+    // Phase 7 — emulator control.
+    std::atomic<bool> paused {false};
+
+    // ROM metadata set during nativeLoadRom; read-only afterward.
+    std::string romRegion;
+
+    // Port info JSON built once during nativeLoadSystem; read-only afterward.
+    std::string portsJson;
 };
 
 static EmulatorState* g_state = nullptr;
@@ -295,6 +305,32 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadSystem(
     cachePortButtons("Controller Port 1", g_state->inputMaskPort1);
     cachePortButtons("Controller Port 2", g_state->inputMaskPort2);
 
+    // Build ports JSON — read-only after this point.
+    {
+        std::string json = "[";
+        bool firstPort = true;
+        const char* portNames[] = {"Controller Port 1", "Controller Port 2"};
+        const char* portLabels[] = {"1", "2"};
+        for (int i = 0; i < 2; ++i) {
+            auto port = g_state->root->find<ares::Node::Port>(portNames[i]);
+            if (!port) continue;
+            if (!firstPort) json += ",";
+            firstPort = false;
+            json += std::string("{\"port\":") + portLabels[i] + ",\"buttons\":[";
+            bool firstBtn = true;
+            for (auto& btn : port->find<ares::Node::Input::Button>()) {
+                if (!firstBtn) json += ",";
+                firstBtn = false;
+                json += "\"";
+                json += std::string((const char*)btn->name());
+                json += "\"";
+            }
+            json += "]}";
+        }
+        json += "]";
+        g_state->portsJson = json;
+    }
+
     g_state->systemLoaded = true;
     LOGI("SFC system loaded");
     return JNI_TRUE;
@@ -342,8 +378,9 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadRom(
     cartridgeSlot->connect();
 
     g_state->root->power(false);
-    g_state->romLoaded = true;
-    LOGI("ROM loaded and powered on");
+    g_state->romLoaded  = true;
+    g_state->romRegion  = info.region;
+    LOGI("ROM loaded and powered on — region=%s", info.region.c_str());
     return JNI_TRUE;
 }
 
@@ -354,6 +391,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeTick(
     JNIEnv*, jobject)
 {
     if (!g_state || !g_state->romLoaded) return;
+    if (g_state->paused.load(std::memory_order_relaxed)) return;
     ares::SuperFamicom::system.run();
 }
 
@@ -421,6 +459,140 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetInputState(
     auto mask = static_cast<uint32_t>(buttons);
     if (port == 1) g_state->inputMaskPort1.store(mask, std::memory_order_relaxed);
     else if (port == 2) g_state->inputMaskPort2.store(mask, std::memory_order_relaxed);
+}
+
+// Phase 7 — pause / resume / stop ------------------------------------------
+
+JNIEXPORT void JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativePause(JNIEnv*, jobject)
+{
+    if (g_state) g_state->paused.store(true, std::memory_order_relaxed);
+    LOGI("emulator paused");
+}
+
+JNIEXPORT void JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeResume(JNIEnv*, jobject)
+{
+    if (g_state) g_state->paused.store(false, std::memory_order_relaxed);
+    LOGI("emulator resumed");
+}
+
+// Phase 7 — state save / load -----------------------------------------------
+
+JNIEXPORT jboolean JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeStateSave(
+    JNIEnv* env, jobject, jstring pathStr)
+{
+    if (!g_state || !g_state->romLoaded) return JNI_FALSE;
+
+    const char* path = env->GetStringUTFChars(pathStr, nullptr);
+    std::string pathCpp(path);
+    env->ReleaseStringUTFChars(pathStr, path);
+
+    try {
+        auto s = g_state->root->serialize(false);
+        FILE* f = std::fopen(pathCpp.c_str(), "wb");
+        if (!f) { LOGE("stateSave: cannot open %s", pathCpp.c_str()); return JNI_FALSE; }
+        std::fwrite(s.data(), 1, s.size(), f);
+        std::fclose(f);
+        LOGI("state saved: %s (%u bytes)", pathCpp.c_str(), s.size());
+        return JNI_TRUE;
+    } catch (...) {
+        LOGE("stateSave: exception");
+        return JNI_FALSE;
+    }
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeStateLoad(
+    JNIEnv* env, jobject, jstring pathStr)
+{
+    if (!g_state || !g_state->romLoaded) return JNI_FALSE;
+
+    const char* path = env->GetStringUTFChars(pathStr, nullptr);
+    std::string pathCpp(path);
+    env->ReleaseStringUTFChars(pathStr, path);
+
+    FILE* f = std::fopen(pathCpp.c_str(), "rb");
+    if (!f) { LOGE("stateLoad: file not found: %s", pathCpp.c_str()); return JNI_FALSE; }
+    std::fseek(f, 0, SEEK_END);
+    long fileSize = std::ftell(f);
+    std::fseek(f, 0, SEEK_SET);
+    if (fileSize <= 0) { std::fclose(f); return JNI_FALSE; }
+
+    std::vector<u8> data((size_t)fileSize);
+    std::fread(data.data(), 1, (size_t)fileSize, f);
+    std::fclose(f);
+
+    try {
+        nall::serializer s{data.data(), (u32)fileSize};
+        bool ok = g_state->root->unserialize(s);
+        LOGI("state loaded: %s — %s", pathCpp.c_str(), ok ? "ok" : "failed");
+        return ok ? JNI_TRUE : JNI_FALSE;
+    } catch (...) {
+        LOGE("stateLoad: exception");
+        return JNI_FALSE;
+    }
+}
+
+// Phase 7 — memory read / write ---------------------------------------------
+// Only WRAM bus addresses (0x7E0000–0x7FFFFF) are supported.
+// Must be called from the GL thread (same thread as tick) to avoid data races
+// on cpu.wram that is written during emulation.
+
+JNIEXPORT jbyteArray JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeReadMemory(
+    JNIEnv* env, jobject, jint address, jint length)
+{
+    if (!g_state || !g_state->romLoaded) return nullptr;
+    if (length <= 0 || length > 0x10000) return nullptr;
+
+    uint32_t addr = (uint32_t)address;
+    uint32_t len  = (uint32_t)length;
+
+    if (addr < 0x7E0000u || addr + len > 0x800000u) return nullptr;
+    uint32_t offset = addr - 0x7E0000u;
+    if (offset + len > 0x20000u) return nullptr;
+
+    jbyteArray result = env->NewByteArray((jsize)len);
+    env->SetByteArrayRegion(
+        result, 0, (jsize)len,
+        reinterpret_cast<const jbyte*>(&ares::SuperFamicom::cpu.wram[offset]));
+    return result;
+}
+
+JNIEXPORT void JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeWriteMemory(
+    JNIEnv* env, jobject, jint address, jbyteArray bytes)
+{
+    if (!g_state || !g_state->romLoaded || !bytes) return;
+
+    uint32_t addr = (uint32_t)address;
+    jsize    len  = env->GetArrayLength(bytes);
+
+    if (addr < 0x7E0000u || addr + (uint32_t)len > 0x800000u) return;
+    uint32_t offset = addr - 0x7E0000u;
+    if (offset + (uint32_t)len > 0x20000u) return;
+
+    env->GetByteArrayRegion(
+        bytes, 0, len,
+        reinterpret_cast<jbyte*>(&ares::SuperFamicom::cpu.wram[offset]));
+}
+
+// Phase 7 — region / ports --------------------------------------------------
+
+JNIEXPORT jstring JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetRegion(JNIEnv* env, jobject)
+{
+    if (!g_state) return env->NewStringUTF("");
+    return env->NewStringUTF(g_state->romRegion.c_str());
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetPortsJson(JNIEnv* env, jobject)
+{
+    if (!g_state || !g_state->systemLoaded) return env->NewStringUTF("[]");
+    return env->NewStringUTF(g_state->portsJson.c_str());
 }
 
 } // extern "C"

@@ -284,3 +284,119 @@ describe('Composer config', function () {
             ->toContain('KevinBatdorf\\RetroEmulator\\RetroEmulatorServiceProvider');
     });
 });
+
+// ---------------------------------------------------------------------------
+// Phase 7 — bridge response parsing (native layer mocked via nativephp_call stub)
+// ---------------------------------------------------------------------------
+
+describe('Bridge response parsing', function () {
+    afterEach(function () {
+        $GLOBALS['__nativephp_mock'] = [];
+    });
+
+    it('getStatus parses running from native response', function () {
+        $GLOBALS['__nativephp_mock']['Emulator.GetStatus'] = '{"status":"running"}';
+        expect((new Emulator)->getStatus())->toBe('running');
+    });
+
+    it('getStatus parses paused from native response', function () {
+        $GLOBALS['__nativephp_mock']['Emulator.GetStatus'] = '{"status":"paused"}';
+        expect((new Emulator)->getStatus())->toBe('paused');
+    });
+
+    it('getStatus returns stopped when native returns no status key', function () {
+        $GLOBALS['__nativephp_mock']['Emulator.GetStatus'] = '{}';
+        expect((new Emulator)->getStatus())->toBe('stopped');
+    });
+
+    it('readMemory parses bytes from native response', function () {
+        $GLOBALS['__nativephp_mock']['Emulator.ReadMemory'] = '{"address":8257552,"bytes":[7,0]}';
+        expect((new Emulator)->readMemory(0x7E0010, 2))->toBe([7, 0]);
+    });
+
+    it('readMemory returns empty array when native returns no bytes key', function () {
+        $GLOBALS['__nativephp_mock']['Emulator.ReadMemory'] = '{}';
+        expect((new Emulator)->readMemory(0x7E0010))->toBe([]);
+    });
+
+    it('getRegion parses region from native response', function () {
+        $GLOBALS['__nativephp_mock']['Emulator.GetRegion'] = '{"region":"NTSC"}';
+        expect((new Emulator)->getRegion())->toBe('NTSC');
+    });
+
+    it('getRegion returns empty string when native returns no region key', function () {
+        $GLOBALS['__nativephp_mock']['Emulator.GetRegion'] = '{}';
+        expect((new Emulator)->getRegion())->toBe('');
+    });
+
+    it('getPorts parses ports array from native response', function () {
+        $GLOBALS['__nativephp_mock']['Emulator.GetPorts'] = json_encode([
+            'ports' => [
+                ['port' => 1, 'buttons' => ['B', 'Y', 'Select', 'Start', 'Up', 'Down', 'Left', 'Right', 'A', 'X', 'L', 'R']],
+            ],
+        ]);
+        $ports = (new Emulator)->getPorts();
+        expect($ports)->toHaveCount(1);
+        expect($ports[0]['port'])->toBe(1);
+        expect($ports[0]['buttons'])->toContain('B');
+        expect($ports[0]['buttons'])->toContain('Start');
+    });
+
+    it('getSystems parses systems array from native response', function () {
+        $GLOBALS['__nativephp_mock']['Emulator.GetSystems'] = json_encode([
+            'systems' => [
+                ['id' => 'sfc', 'name' => 'SNES / Super Famicom', 'biosRequired' => false, 'stable' => true],
+                ['id' => 'ps1', 'name' => 'PlayStation', 'biosRequired' => true, 'stable' => false],
+            ],
+        ]);
+        $systems = Emulator::getSystems();
+        expect($systems)->toHaveCount(2);
+        expect($systems[0]['id'])->toBe('sfc');
+        expect($systems[0]['biosRequired'])->toBeFalse();
+        expect($systems[1]['id'])->toBe('ps1');
+        expect($systems[1]['biosRequired'])->toBeTrue();
+        expect($systems[1]['stable'])->toBeFalse();
+    });
+
+    it('boot returns Emulator instance after successful native call', function () {
+        $GLOBALS['__nativephp_mock']['Emulator.Boot'] = '{"status":"bound","surface":"main"}';
+        $emu = (new Emulator)->boot('main');
+        expect($emu)->toBeInstanceOf(Emulator::class);
+    });
+
+    it('loadRom returns fluent instance', function () {
+        $GLOBALS['__nativephp_mock']['Emulator.LoadRom'] = '{"status":"loading","path":"/path/to/rom.sfc"}';
+        $emu = (new Emulator)->loadRom('/path/to/rom.sfc');
+        expect($emu)->toBeInstanceOf(Emulator::class);
+    });
+
+    it('pause returns fluent instance', function () {
+        $GLOBALS['__nativephp_mock']['Emulator.Pause'] = '{"status":"paused"}';
+        $emu = (new Emulator)->pause();
+        expect($emu)->toBeInstanceOf(Emulator::class);
+    });
+
+    it('watchMemory returns fluent instance', function () {
+        $GLOBALS['__nativephp_mock']['Emulator.WatchMemory'] = '{"status":"watching","count":2}';
+        $emu = (new Emulator)->watchMemory([0x7E0010, ['address' => 0x7EF340, 'length' => 2]]);
+        expect($emu)->toBeInstanceOf(Emulator::class);
+    });
+
+    it('fastForward returns fluent instance', function () {
+        $GLOBALS['__nativephp_mock']['Emulator.FastForward'] = '{"status":"fast"}';
+        $emu = (new Emulator)->fastForward(true);
+        expect($emu)->toBeInstanceOf(Emulator::class);
+    });
+
+    it('stateSave returns fluent instance', function () {
+        $GLOBALS['__nativephp_mock']['Emulator.StateSave'] = '{"status":"saved","slot":1}';
+        $emu = (new Emulator)->stateSave(1);
+        expect($emu)->toBeInstanceOf(Emulator::class);
+    });
+
+    it('stateLoad returns fluent instance', function () {
+        $GLOBALS['__nativephp_mock']['Emulator.StateLoad'] = '{"status":"loaded","slot":1}';
+        $emu = (new Emulator)->stateLoad(1);
+        expect($emu)->toBeInstanceOf(Emulator::class);
+    });
+});

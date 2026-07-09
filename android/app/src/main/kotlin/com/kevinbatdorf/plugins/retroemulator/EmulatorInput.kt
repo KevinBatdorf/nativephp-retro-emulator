@@ -32,12 +32,34 @@ class EmulatorInput(private val core: AresCore) {
         const val BTN_X      = 1 shl 9
         const val BTN_L      = 1 shl 10
         const val BTN_R      = 1 shl 11
+
+        /**
+         * Map a button name (as reported by ares or used in the PHP API) to its
+         * bitmask. Names are case-insensitive. Returns null for unknown names.
+         */
+        fun buttonNameToBit(name: String): Int? = when (name.lowercase()) {
+            "b"      -> BTN_B
+            "y"      -> BTN_Y
+            "select" -> BTN_SELECT
+            "start"  -> BTN_START
+            "up"     -> BTN_UP
+            "down"   -> BTN_DOWN
+            "left"   -> BTN_LEFT
+            "right"  -> BTN_RIGHT
+            "a"      -> BTN_A
+            "x"      -> BTN_X
+            "l"      -> BTN_L
+            "r"      -> BTN_R
+            else     -> null
+        }
     }
 
-    // Current button state split into two sources so they can be updated
-    // independently without clobbering each other.
-    private var keyBits = 0  // set by dispatchKeyEvent (UI thread)
-    private var hatBits = 0  // set by dispatchGenericMotionEvent hat axes (UI thread)
+    // Current button state split into three independent sources that are OR'd together.
+    // Each source is updated on a different thread; none overrides the others.
+    private var keyBits      = 0  // hardware key events (UI thread)
+    private var hatBits      = 0  // hardware hat-switch motion events (UI thread)
+    @Volatile private var softBitsPort1 = 0  // PHP software presses (bridge thread)
+    @Volatile private var softBitsPort2 = 0  // PHP software presses, port 2
 
     /**
      * Process a key event from a connected gamepad. Returns true if the event
@@ -50,7 +72,7 @@ class EmulatorInput(private val core: AresCore) {
             KeyEvent.ACTION_UP   -> keyBits = keyBits and bit.inv()
             else -> {}
         }
-        push()
+        pushPort1()
         return true
     }
 
@@ -72,19 +94,46 @@ class EmulatorInput(private val core: AresCore) {
         if (hatY < -0.5f) mask = mask or BTN_UP
         if (hatY >  0.5f) mask = mask or BTN_DOWN
         hatBits = mask
-        push()
+        pushPort1()
         return true
     }
 
     /** Clear all button state (call when the activity loses focus). */
     fun reset() {
-        keyBits = 0
-        hatBits = 0
-        push()
+        keyBits      = 0
+        hatBits      = 0
+        softBitsPort1 = 0
+        softBitsPort2 = 0
+        pushPort1()
+        pushPort2()
     }
 
-    private fun push() {
-        core.setInputState(1, keyBits or hatBits)
+    // -------------------------------------------------------------------------
+    // Phase 7 — software (PHP-controlled) button state
+    // -------------------------------------------------------------------------
+
+    /** Set a button to pressed in the software state map for [port] (1 or 2). */
+    fun pressSoftwareButton(port: Int, bit: Int) {
+        when (port) {
+            1 -> { softBitsPort1 = softBitsPort1 or bit; pushPort1() }
+            2 -> { softBitsPort2 = softBitsPort2 or bit; pushPort2() }
+        }
+    }
+
+    /** Set a button to released in the software state map for [port] (1 or 2). */
+    fun releaseSoftwareButton(port: Int, bit: Int) {
+        when (port) {
+            1 -> { softBitsPort1 = softBitsPort1 and bit.inv(); pushPort1() }
+            2 -> { softBitsPort2 = softBitsPort2 and bit.inv(); pushPort2() }
+        }
+    }
+
+    private fun pushPort1() {
+        core.setInputState(1, keyBits or hatBits or softBitsPort1)
+    }
+
+    private fun pushPort2() {
+        core.setInputState(2, softBitsPort2)
     }
 
     private fun keycodeToBit(keyCode: Int): Int? = when (keyCode) {

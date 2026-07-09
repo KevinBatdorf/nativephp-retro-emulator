@@ -109,6 +109,56 @@ class AresCore {
     fun setInputState(port: Int, buttons: Int) = nativeSetInputState(port, buttons)
 
     // -------------------------------------------------------------------------
+    // Phase 7 — emulator control (any thread)
+    // -------------------------------------------------------------------------
+
+    /** Pause emulation — tick() becomes a no-op until resume(). Safe to call from any thread. */
+    fun pause() = nativePause()
+
+    /** Resume emulation after a pause(). Safe to call from any thread. */
+    fun resume() = nativeResume()
+
+    // -------------------------------------------------------------------------
+    // Phase 7 — state save / load (GL thread only — ares serializer uses libco)
+    // -------------------------------------------------------------------------
+
+    /** Serialize full emulator state to [path]. Returns true on success. */
+    fun stateSave(path: String): Boolean = nativeStateSave(path)
+
+    /** Restore emulator state from [path]. Returns true on success. */
+    fun stateLoad(path: String): Boolean = nativeStateLoad(path)
+
+    // -------------------------------------------------------------------------
+    // Phase 7 — WRAM memory access (GL thread only — avoids data race with tick)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Read [length] bytes from WRAM at bus address [address] (0x7E0000–0x7FFFFF).
+     * Returns null if the address is out of range or the emulator is not running.
+     */
+    fun readMemory(address: Int, length: Int): ByteArray? = nativeReadMemory(address, length)
+
+    /**
+     * Write [bytes] into WRAM at bus address [address] (0x7E0000–0x7FFFFF).
+     * Out-of-range writes are silently ignored.
+     */
+    fun writeMemory(address: Int, bytes: ByteArray) = nativeWriteMemory(address, bytes)
+
+    // -------------------------------------------------------------------------
+    // Phase 7 — ROM metadata (safe from any thread after loadRom)
+    // -------------------------------------------------------------------------
+
+    /** Region of the loaded ROM (e.g. "NTSC", "PAL"). Empty if no ROM is loaded. */
+    fun getRegion(): String = nativeGetRegion()
+
+    /**
+     * JSON array of controller ports and their available buttons.
+     * Example: `[{"port":1,"buttons":["B","Y","Select","Start","Up","Down","Left","Right","A","X","L","R"]}]`
+     * Returns "[]" if called before [loadSystem].
+     */
+    fun getPortsJson(): String = nativeGetPortsJson()
+
+    // -------------------------------------------------------------------------
     // Native declarations
     // -------------------------------------------------------------------------
 
@@ -132,4 +182,16 @@ class AresCore {
     private external fun nativeReadAudio(buffer: FloatArray): Int
 
     private external fun nativeSetInputState(port: Int, buttons: Int)
+
+    private external fun nativePause()
+    private external fun nativeResume()
+
+    private external fun nativeStateSave(path: String): Boolean
+    private external fun nativeStateLoad(path: String): Boolean
+
+    private external fun nativeReadMemory(address: Int, length: Int): ByteArray?
+    private external fun nativeWriteMemory(address: Int, bytes: ByteArray)
+
+    private external fun nativeGetRegion(): String
+    private external fun nativeGetPortsJson(): String
 }
