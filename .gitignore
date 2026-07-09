@@ -8,5 +8,11 @@ android/local.properties
 android/.gradle/
 android/build/
 android/app/build/
+android/app/.cxx/
 android/.idea/
 android/*.iml
+
+# iOS / native build output
+/build/
+.build/
+.swiftpm/
