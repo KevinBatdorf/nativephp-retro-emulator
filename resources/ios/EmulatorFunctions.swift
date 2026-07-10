@@ -156,6 +156,8 @@ enum EmulatorFunctions {
             }
 
             renderer.fastForward = false
+            let config = parameters["config"] as? [String: Any] ?? [:]
+            renderer.autoSave = config["autoSave"] as? Bool ?? true
             guard renderer.loadSystem(system) else {
                 return BridgeResponse.error(code: "LOAD_FAILED", message: "ares_load_system failed for '\(system)'")
             }
@@ -177,7 +179,14 @@ enum EmulatorFunctions {
                 return BridgeResponse.error(code: "ROM_NOT_FOUND", message: "ROM not found: \(path)")
             }
 
-            guard renderer.loadRom(romData, path: path) else {
+            // Battery saves live in app support, keyed by surface + ROM basename.
+            let saveDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("saves/\(surfaceName(parameters))", isDirectory: true)
+            try? FileManager.default.createDirectory(at: saveDir, withIntermediateDirectories: true)
+            let base = URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent
+            let savePrefix = saveDir.appendingPathComponent(base).path
+
+            guard renderer.loadRom(romData, path: path, savePrefix: savePrefix) else {
                 return BridgeResponse.error(code: "LOAD_FAILED", message: "ares_load_rom rejected \(path)")
             }
             return BridgeResponse.success(data: ["status": "loading", "path": path])

@@ -29,7 +29,16 @@ bool ares_load_system(AresContext* ctx, const char* system_id);
 const char* ares_supported_systems(void);
 
 // Load and power a ROM image for the loaded system.  Returns false on bad header.
-bool ares_load_rom(AresContext* ctx, const uint8_t* rom, size_t rom_size);
+// save_prefix: battery-save location — files are written as
+// "<prefix>.save.ram", "<prefix>.save.eeprom", etc., and existing files seed
+// the cartridge before boot.  NULL disables persistence.
+bool ares_load_rom(AresContext* ctx, const uint8_t* rom, size_t rom_size,
+                   const char* save_prefix);
+
+// Write current battery-backed memory to disk under the prefix passed to
+// ares_load_rom.  Must run on the emulation thread.  Returns false when
+// nothing was persisted.
+bool ares_flush_saves(AresContext* ctx);
 
 // Emulation control -----------------------------------------------------------
 

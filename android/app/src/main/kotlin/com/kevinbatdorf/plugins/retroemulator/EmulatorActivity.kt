@@ -49,8 +49,12 @@ class EmulatorActivity : Activity() {
         renderer.queueSystemLoad(system)
 
         // Queue the ROM load (executes on GL thread after system is ready).
-        val romBytes = File(romPath).readBytes()
-        renderer.queueRomLoad(romBytes, system, romPath)
+        val romFile = File(romPath)
+        val saveDir = File(filesDir, "saves")
+        saveDir.mkdirs()
+        val savePrefix = File(saveDir, romFile.nameWithoutExtension).absolutePath
+        val romBytes = romFile.readBytes()
+        renderer.queueRomLoad(romBytes, system, romPath, savePrefix)
 
         Log.i(TAG, "ROM queued: $romPath (${romBytes.size} bytes, system=$system)")
     }

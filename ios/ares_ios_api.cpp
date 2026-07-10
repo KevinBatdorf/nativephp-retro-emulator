@@ -3,6 +3,7 @@
 #include <ares/ares.hpp>
 
 #include "system_registry.hpp"
+#include "save_io.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -55,6 +56,9 @@ struct AresContext {
     // ROM metadata (set once during ares_load_rom, read-only afterward).
     std::string romRegion;
     std::string portsJson;
+
+    // Battery-save location ("<prefix>.save.ram", …); empty disables persistence.
+    std::string savePrefix;
 };
 
 static AresContext* g_ctx      = nullptr;
@@ -268,7 +272,8 @@ bool ares_load_system(AresContext* ctx, const char* system_id) {
     return true;
 }
 
-bool ares_load_rom(AresContext* ctx, const uint8_t* rom, size_t rom_size) {
+bool ares_load_rom(AresContext* ctx, const uint8_t* rom, size_t rom_size,
+                   const char* save_prefix) {
     if (!ctx || !ctx->systemLoaded || !rom || rom_size == 0) return false;
 
     auto built = ctx->system->makeCartridgePak(rom, rom_size);
@@ -280,6 +285,10 @@ bool ares_load_rom(AresContext* ctx, const uint8_t* rom, size_t rom_size) {
     ctx->cartridgePak = built.pak;
     ctx->romRegion    = built.region;
 
+    // Seed battery saves from disk before the boards read the pak at connect.
+    ctx->savePrefix = save_prefix ? save_prefix : "";
+    SaveIO::seed(ctx->cartridgePak, ctx->savePrefix);
+
     auto cartridgeSlot = ctx->root->find<ares::Node::Port>("Cartridge Slot");
     if (!cartridgeSlot) return false;
 
@@ -290,6 +299,13 @@ bool ares_load_rom(AresContext* ctx, const uint8_t* rom, size_t rom_size) {
     ctx->root->power(false);
     ctx->romLoaded = true;
     return true;
+}
+
+bool ares_flush_saves(AresContext* ctx) {
+    if (!ctx || !ctx->romLoaded || ctx->savePrefix.empty()) return false;
+    // System::save() writes board memory back into the cartridge pak.
+    ctx->root->save();
+    return SaveIO::flush(ctx->cartridgePak, ctx->savePrefix);
 }
 
 bool ares_tick(AresContext* ctx) {

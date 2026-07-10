@@ -72,7 +72,7 @@ final class BootTests: XCTestCase {
 
         let rom = Self.makeMinimalLoRom()
         let ok  = rom.withUnsafeBytes {
-            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count)
+            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil)
         }
         XCTAssertTrue(ok, "ares_load_rom() must accept a valid synthetic LoROM")
     }
@@ -80,7 +80,7 @@ final class BootTests: XCTestCase {
     func testLoadRomFailsWithoutSystem() {
         let rom = Self.makeMinimalLoRom()
         let ok  = rom.withUnsafeBytes {
-            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count)
+            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil)
         }
         XCTAssertFalse(ok, "ares_load_rom() must fail when no system is loaded")
     }
@@ -90,7 +90,7 @@ final class BootTests: XCTestCase {
 
         let tiny = Data(count: 100)
         let ok   = tiny.withUnsafeBytes {
-            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count)
+            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil)
         }
         XCTAssertFalse(ok)
     }
@@ -174,9 +174,45 @@ final class BootTests: XCTestCase {
         let rom = Self.makeMinimalLoRom()
         XCTAssertTrue(ares_load_system(ctx, "sfc"))
         let ok = rom.withUnsafeBytes {
-            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count)
+            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil)
         }
         XCTAssertTrue(ok, "boot() failed at ares_load_rom()")
+    }
+
+    // MARK: - Battery-save persistence (Phase 13)
+
+    func testBatterySaveRoundTrip() throws {
+        // A LoROM with 8KB battery RAM: the LOROM-RAM board reads save.ram at
+        // connect and System::save() writes it back to the pak. Seeding a
+        // pattern from disk and flushing must round-trip it through the board.
+        let prefix = NSTemporaryDirectory() + "phase13-\(UUID().uuidString)"
+        let savePath = prefix + ".save.ram"
+        let pattern = Data(repeating: 0xAB, count: 8192)
+        try pattern.write(to: URL(fileURLWithPath: savePath))
+
+        XCTAssertTrue(ares_load_system(ctx, "sfc"))
+        let rom = Self.makeMinimalLoRom(withSram: true)
+        let ok = rom.withUnsafeBytes {
+            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, prefix)
+        }
+        XCTAssertTrue(ok, "SRAM LoROM must load")
+
+        _ = ares_tick(ctx)
+        XCTAssertTrue(ares_flush_saves(ctx), "flush must succeed with a save prefix")
+
+        let flushed = try Data(contentsOf: URL(fileURLWithPath: savePath))
+        XCTAssertEqual(flushed.count, 8192)
+        XCTAssertEqual(flushed, pattern, "seeded SRAM must survive the board round-trip")
+        try? FileManager.default.removeItem(atPath: savePath)
+    }
+
+    func testFlushWithoutPrefixReturnsFalse() {
+        XCTAssertTrue(ares_load_system(ctx, "sfc"))
+        let rom = Self.makeMinimalLoRom()
+        _ = rom.withUnsafeBytes {
+            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil)
+        }
+        XCTAssertFalse(ares_flush_saves(ctx), "no prefix → nothing persisted")
     }
 
     // MARK: - Minimal synthetic LoROM
@@ -189,7 +225,7 @@ final class BootTests: XCTestCase {
     ///   $7FB0+ header    LoROM internal header
     ///   $7FFC  00 80     emulation-mode reset vector → $8000
     ///   $7FDC-$7FDF      checksum complement + checksum
-    static func makeMinimalLoRom() -> Data {
+    static func makeMinimalLoRom(withSram: Bool = false) -> Data {
         let size = 0x8000  // 32 KB
         var rom  = [UInt8](repeating: 0, count: size)
 
@@ -207,12 +243,12 @@ final class BootTests: XCTestCase {
 
         // $7FD5 — map mode: LoROM ($20).
         rom[hb + 0x25] = 0x20
-        // $7FD6 — ROM type: ROM only ($00).
-        rom[hb + 0x26] = 0x00
+        // $7FD6 — ROM type: $02 = ROM+RAM+battery, $00 = ROM only.
+        rom[hb + 0x26] = withSram ? 0x02 : 0x00
         // $7FD7 — ROM size byte: $05 = 32 KB.
         rom[hb + 0x27] = 0x05
-        // $7FD8 — RAM size: none.
-        rom[hb + 0x28] = 0x00
+        // $7FD8 — RAM size: SfcPakBuilder decodes 1 << (value-1) KB, so $04 = 8 KB.
+        rom[hb + 0x28] = withSram ? 0x04 : 0x00
         // $7FD9 — Country: USA ($01).
         rom[hb + 0x29] = 0x01
         // $7FDA — Developer ID.

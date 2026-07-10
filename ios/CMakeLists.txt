@@ -219,6 +219,7 @@ target_compile_definitions(md_core PUBLIC
 add_library(retro_emulator_ios STATIC
     "${CMAKE_CURRENT_SOURCE_DIR}/ares_ios_api.cpp"
     "${NATIVE_ROOT}/system_registry.cpp"
+    "${NATIVE_ROOT}/save_io.cpp"
     "${NATIVE_ROOT}/pak/sfc_pak.cpp"
     "${NATIVE_ROOT}/pak/multi_pak.cpp"
     "${NATIVE_ROOT}/pak/mia_mediums.cpp"

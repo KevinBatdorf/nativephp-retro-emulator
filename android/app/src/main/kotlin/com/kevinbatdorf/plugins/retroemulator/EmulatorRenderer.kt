@@ -28,6 +28,9 @@ private const val TEX_H = 512
 private const val TARGET_FPS = 60.0988
 private const val MAX_TICKS_PER_FRAME = 8
 
+// Battery-save auto-flush cadence — matches ares' desktop 30 s auto-save.
+private const val AUTOSAVE_INTERVAL_NANOS = 30_000_000_000L
+
 /**
  * A [GLSurfaceView] that drives the ares emulator and blits each frame via a
  * full-screen textured quad. All ares calls happen on the GL thread so libco
@@ -47,6 +50,7 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
     // Pending commands posted from the main thread and consumed on the GL thread.
     @Volatile var pendingSystemId: String?    = null
     @Volatile var pendingRomBytes: ByteArray? = null
+    @Volatile var pendingSavePrefix: String?  = null
 
     @Volatile private var systemLoaded = false
     @Volatile private var romLoaded    = false
@@ -106,6 +110,11 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
     // are budgeted by wall clock against the console's native frame rate.
     private var lastTickNanos = 0L
     private var tickAccumulator = 0.0
+
+    // Phase 13 — periodic battery-save flush (30 s, matching ares' desktop
+    // auto-save cadence). Set false via LoadSystem config { autoSave: false }.
+    @Volatile var autoSave: Boolean = true
+    private var lastAutoSaveNanos = 0L
 
     // Current UV extents for the content region within the 1024×512 texture.
     private var uvW = 1f
@@ -191,7 +200,7 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
             // --- Consume pending ROM load ---
             val rom = pendingRomBytes
             if (systemLoaded && !romLoaded && rom != null) {
-                romLoaded = core.loadRom(rom)
+                romLoaded = core.loadRom(rom, pendingSavePrefix)
                 pendingRomBytes = null
                 if (romLoaded) {
                     currentStatus = "loading"
@@ -233,6 +242,15 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
                 tickAccumulator -= ticks
             }
             repeat(ticks) { core.tick() }
+
+            // --- Periodic battery-save flush ---
+            if (autoSave) {
+                if (lastAutoSaveNanos == 0L) lastAutoSaveNanos = now
+                if (now - lastAutoSaveNanos >= AUTOSAVE_INTERVAL_NANOS) {
+                    lastAutoSaveNanos = now
+                    core.flushSaves()
+                }
+            }
 
             // --- Fire EmulatorStarted on the first rendered frame ---
             val fw = core.getFrameWidth()
@@ -322,13 +340,21 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
 
     /**
      * Queue a ROM load; it executes on the next [onDrawFrame] after the system is ready.
-     * @param system  ares system ID (e.g. "sfc") — stored for [EmulatorStarted] event.
-     * @param romPath Absolute file path — stored for [EmulatorStarted] event.
+     * @param system     ares system ID (e.g. "sfc") — stored for [EmulatorStarted] event.
+     * @param romPath    Absolute file path — stored for [EmulatorStarted] event.
+     * @param savePrefix Battery-save file prefix (see [AresCore.loadRom]); null
+     *                   disables persistence.
      */
-    fun queueRomLoad(romBytes: ByteArray, system: String = "sfc", romPath: String = "") {
+    fun queueRomLoad(
+        romBytes: ByteArray,
+        system: String = "sfc",
+        romPath: String = "",
+        savePrefix: String? = null,
+    ) {
         loadedSystem  = system
         loadedRomPath = romPath
         firstFrameSent = false
+        pendingSavePrefix = savePrefix
         pendingRomBytes = romBytes
         requestRender()
     }
@@ -336,6 +362,7 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
     /** Pause emulation. Audio keeps running; tick() becomes a no-op until [resumeEmulation]. */
     fun pauseEmulation() {
         core.pause()
+        queueEvent { core.flushSaves() }
         currentStatus = "paused"
         eventListener?.onPaused()
     }
@@ -356,6 +383,7 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
         input.reset()
         audio.stop()
         queueEvent {
+            core.flushSaves()
             core.destroy()
             romLoaded     = false
             systemLoaded  = false
@@ -373,7 +401,10 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
         watchedAddresses.clear()
         input.reset()
         audio.stop()
-        queueEvent { core.destroy() }
+        queueEvent {
+            core.flushSaves()
+            core.destroy()
+        }
     }
 
     // ---------------------------------------------------------------------------

@@ -182,6 +182,9 @@ object EmulatorFunctions {
 
             val renderer = entry!!.renderer
             renderer.fastForward = false
+            @Suppress("UNCHECKED_CAST")
+            val config = parameters["config"] as? Map<String, Any> ?: emptyMap()
+            renderer.autoSave = config["autoSave"] as? Boolean ?: true
             renderer.queueSystemLoad(system)
 
             Log.d(TAG, "LoadSystem: queued system=$system")
@@ -209,8 +212,13 @@ object EmulatorFunctions {
             return try {
                 val romBytes = file.readBytes()
                 val system   = entry!!.renderer.loadedSystem.ifEmpty { "sfc" }
-                entry.renderer.queueRomLoad(romBytes, system, path)
-                Log.d(TAG, "LoadRom: queued $path (${romBytes.size} bytes)")
+                // Battery saves live in app storage, keyed by surface + ROM
+                // basename: "<filesDir>/saves/<surface>/<rom>.save.ram", etc.
+                val saveDir = File(activity.filesDir, "saves/${surface(parameters)}")
+                saveDir.mkdirs()
+                val savePrefix = File(saveDir, file.nameWithoutExtension).absolutePath
+                entry.renderer.queueRomLoad(romBytes, system, path, savePrefix)
+                Log.d(TAG, "LoadRom: queued $path (${romBytes.size} bytes, saves=$savePrefix)")
                 BridgeResponse.success(mapOf("status" to "loading", "path" to path))
             } catch (e: Exception) {
                 Log.e(TAG, "LoadRom failed: ${e.message}")

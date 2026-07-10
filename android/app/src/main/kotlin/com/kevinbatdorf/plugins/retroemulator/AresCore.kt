@@ -62,10 +62,21 @@ class AresCore {
      * Load a ROM image and power on the emulator. Must be called after
      * [loadSystem] and from the GL thread.
      *
-     * @param romBytes Raw ROM bytes. A 512-byte copier header is stripped
-     *                 automatically if detected.
+     * @param romBytes   Raw ROM bytes. A 512-byte copier header is stripped
+     *                   automatically if detected.
+     * @param savePrefix Battery-save location prefix — files are written as
+     *                   "<prefix>.save.ram", "<prefix>.save.eeprom", etc.
+     *                   Existing files seed the cartridge before boot.
+     *                   Null disables persistence.
      */
-    fun loadRom(romBytes: ByteArray): Boolean = nativeLoadRom(romBytes)
+    fun loadRom(romBytes: ByteArray, savePrefix: String? = null): Boolean =
+        nativeLoadRom(romBytes, savePrefix)
+
+    /**
+     * Write current battery-backed memory to disk under the prefix passed to
+     * [loadRom]. GL thread only. Returns false when nothing was persisted.
+     */
+    fun flushSaves(): Boolean = nativeFlushSaves()
 
     // -------------------------------------------------------------------------
     // Phase 4 — per-frame operations (GL thread only)
@@ -175,7 +186,8 @@ class AresCore {
     private external fun nativeLoadSystem(systemId: String): Boolean
     private external fun nativeGetSupportedSystems(): String
 
-    private external fun nativeLoadRom(romBytes: ByteArray): Boolean
+    private external fun nativeLoadRom(romBytes: ByteArray, savePrefix: String?): Boolean
+    private external fun nativeFlushSaves(): Boolean
 
     private external fun nativeTick()
     private external fun nativeGetFrameWidth(): Int

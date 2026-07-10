@@ -12,6 +12,7 @@
 #include <ares/ares.hpp>
 
 #include "system_registry.hpp"
+#include "save_io.hpp"
 
 #define LOG_TAG "AresCore"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO,  LOG_TAG, __VA_ARGS__)
@@ -72,6 +73,10 @@ struct EmulatorState {
 
     // ROM metadata set during nativeLoadRom; read-only afterward.
     std::string romRegion;
+
+    // Battery-save location ("<prefix>.save.ram", …). Set per nativeLoadRom;
+    // empty disables persistence.
+    std::string savePrefix;
 
     // Port info JSON built once during nativeLoadSystem; read-only afterward.
     std::string portsJson;
@@ -356,7 +361,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadSystem(
 
 JNIEXPORT jboolean JNICALL
 Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadRom(
-    JNIEnv* env, jobject, jbyteArray romBytes)
+    JNIEnv* env, jobject, jbyteArray romBytes, jstring savePrefixStr)
 {
     if (!g_state || !g_state->systemLoaded) {
         LOGE("nativeLoadRom: system not loaded");
@@ -377,6 +382,10 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadRom(
     LOGI("ROM: title='%s' region='%s'", built.title.c_str(), built.region.c_str());
 
     g_state->cartridgePak = built.pak;
+
+    // Seed battery saves from disk before the boards read the pak at connect.
+    g_state->savePrefix = jstringToString(env, savePrefixStr);
+    SaveIO::seed(g_state->cartridgePak, g_state->savePrefix);
 
     auto cartridgeSlot =
         g_state->root->find<ares::Node::Port>("Cartridge Slot");
@@ -624,6 +633,26 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetPortsJson(JNIEnv* 
 {
     if (!g_state || !g_state->systemLoaded) return env->NewStringUTF("[]");
     return env->NewStringUTF(g_state->portsJson.c_str());
+}
+
+// Phase 13 — battery-save flush ------------------------------------------------
+
+/**
+ * Write current battery-backed memory (save.ram, save.eeprom, …) to disk under
+ * the prefix passed to nativeLoadRom. Must run on the GL thread (root->save()
+ * touches core state). Returns false when nothing was persisted.
+ */
+JNIEXPORT jboolean JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeFlushSaves(
+    JNIEnv*, jobject)
+{
+    if (!g_state || !g_state->romLoaded || g_state->savePrefix.empty()) {
+        return JNI_FALSE;
+    }
+    // System::save() writes board memory back into the cartridge pak.
+    g_state->root->save();
+    return SaveIO::flush(g_state->cartridgePak, g_state->savePrefix)
+        ? JNI_TRUE : JNI_FALSE;
 }
 
 // Phase 11 — supported systems ------------------------------------------------

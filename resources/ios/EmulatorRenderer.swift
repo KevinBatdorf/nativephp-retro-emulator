@@ -45,6 +45,9 @@ final class EmulatorRenderer: UIView {
     /// parity with Android; consumed by the loop's frame pacing.
     var fastForward: Bool = false
 
+    /// Periodic battery-save flush toggle (LoadSystem config { autoSave }).
+    var autoSave: Bool = true
+
     // MARK: - System / ROM loading
 
     /// Initialise the ares core for `system` (an ares id such as "sfc", "fc",
@@ -66,13 +69,16 @@ final class EmulatorRenderer: UIView {
         String(cString: ares_supported_systems()).components(separatedBy: ",")
     }
 
-    func loadRom(_ romData: Data, path: String) -> Bool {
+    /// - Parameter savePrefix: battery-save location — files are written as
+    ///   "<prefix>.save.ram" etc., and existing files seed the cartridge before
+    ///   boot. Nil disables persistence.
+    func loadRom(_ romData: Data, path: String, savePrefix: String? = nil) -> Bool {
         // A fresh ROM invalidates every watch baseline (spec: watches clear on loadRom).
         clearMemoryWatches()
 
         emuLock.lock()
         let ok = romData.withUnsafeBytes {
-            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count)
+            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, savePrefix)
         }
         emuLock.unlock()
 
@@ -89,6 +95,7 @@ final class EmulatorRenderer: UIView {
 
     func pauseEmulation() {
         ares_pause(ctx)
+        flushSaves()
         currentStatus = "paused"
         eventListener?.onPaused()
     }
@@ -101,9 +108,18 @@ final class EmulatorRenderer: UIView {
 
     func stopEmulation() {
         stopLoop()
+        flushSaves()
         audio.stop()
         currentStatus = "stopped"
         eventListener?.onStopped()
+    }
+
+    /// Write battery-backed memory to disk (see ares_flush_saves). Safe from
+    /// any thread — serialised on emuLock like every other ctx access.
+    func flushSaves() {
+        emuLock.lock()
+        _ = ares_flush_saves(ctx)
+        emuLock.unlock()
     }
 
     // MARK: - Memory
@@ -326,9 +342,18 @@ final class EmulatorRenderer: UIView {
     }
 
     private func emulationLoop() {
+        var lastAutoSave = DispatchTime.now()
         while running {
             emuLock.lock()
             ares_tick(ctx)
+
+            // Periodic battery-save flush (30 s, ares' desktop cadence).
+            if autoSave,
+               DispatchTime.now().uptimeNanoseconds - lastAutoSave.uptimeNanoseconds
+                   >= 30_000_000_000 {
+                lastAutoSave = DispatchTime.now()
+                _ = ares_flush_saves(ctx)
+            }
 
             // Copy latest frame while holding the lock — ares_get_frame reads ctx.
             var w: UInt32 = 0, h: UInt32 = 0
