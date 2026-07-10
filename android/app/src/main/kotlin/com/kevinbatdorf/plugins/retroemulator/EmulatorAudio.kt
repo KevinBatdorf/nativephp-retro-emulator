@@ -84,8 +84,13 @@ class EmulatorAudio(private val core: AresCore) {
         running = false
         drainThread?.join(500)
         drainThread = null
-        audioTrack.stop()
-        audioTrack.release()
-        Log.i(TAG, "stopped")
+        // Idempotent: stop() may be called again from a teardown path after the
+        // track has already been stopped/released (e.g. stopEmulation followed
+        // by Activity.onDestroy → release).
+        if (audioTrack.state == AudioTrack.STATE_INITIALIZED) {
+            audioTrack.stop()
+            audioTrack.release()
+            Log.i(TAG, "stopped")
+        }
     }
 }

@@ -39,9 +39,8 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
     val input = EmulatorInput(core)
 
     // Pending commands posted from the main thread and consumed on the GL thread.
-    @Volatile var pendingIplRom: ByteArray?    = null
-    @Volatile var pendingBoardsBml: ByteArray? = null
-    @Volatile var pendingRomBytes: ByteArray?  = null
+    @Volatile var pendingSystemId: String?    = null
+    @Volatile var pendingRomBytes: ByteArray? = null
 
     @Volatile private var systemLoaded = false
     @Volatile private var romLoaded    = false
@@ -171,11 +170,10 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
 
         override fun onDrawFrame(gl: GL10?) {
             // --- Consume pending system load ---
-            val bml = pendingBoardsBml
-            if (!systemLoaded && bml != null) {
-                val ipl = pendingIplRom
-                systemLoaded = core.loadSystem(ipl, bml)
-                if (!systemLoaded) Log.e(TAG, "loadSystem failed")
+            val systemId = pendingSystemId
+            if (!systemLoaded && systemId != null) {
+                systemLoaded = core.loadSystem(systemId)
+                if (!systemLoaded) Log.e(TAG, "loadSystem($systemId) failed")
             }
 
             // --- Consume pending ROM load ---
@@ -283,10 +281,12 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
     // Public API — called from any thread; GL-critical work is queued/synced.
     // ---------------------------------------------------------------------------
 
-    /** Queue a system load; it executes on the next [onDrawFrame]. */
-    fun queueSystemLoad(iplRomBytes: ByteArray?, boardsBmlBytes: ByteArray) {
-        pendingIplRom    = iplRomBytes
-        pendingBoardsBml = boardsBmlBytes
+    /**
+     * Queue a system load; it executes on the next [onDrawFrame].
+     * @param systemId ares system ID — one of [AresCore.supportedSystems].
+     */
+    fun queueSystemLoad(systemId: String) {
+        pendingSystemId = systemId
         requestRender()
     }
 

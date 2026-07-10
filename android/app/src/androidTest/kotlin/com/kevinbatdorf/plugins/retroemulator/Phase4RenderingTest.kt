@@ -15,13 +15,9 @@ import java.io.File
  * Requirements:
  *   - A test ROM must be pushed to the device before running:
  *       adb push /path/to/game.sfc /data/local/tmp/test.sfc
- *   - An optional ipl.rom (64 bytes) may also be pushed:
- *       adb push /path/to/ipl.rom /data/local/tmp/ipl.rom
- *     Without ipl.rom the SMP boots from a zero stub, so the game will not
- *     progress past audio init — but the emulator will not crash.
  *
- * These paths are intentionally hard-coded for the test environment; change
- * them if your setup differs.
+ * System firmware (ipl.rom, boards.bml, …) is embedded in the native library
+ * since Phase 11 — no extra assets are needed.
  */
 @RunWith(AndroidJUnit4::class)
 class Phase4RenderingTest {
@@ -31,7 +27,6 @@ class Phase4RenderingTest {
     @Test
     fun emulatorActivityRunsWithoutCrash() {
         val romPath = "/data/local/tmp/test.sfc"
-        val iplPath = "/data/local/tmp/ipl.rom"
 
         // Skip rather than fail when no ROM is present (CI without ROM assets).
         val romFile = File(romPath)
@@ -43,14 +38,16 @@ class Phase4RenderingTest {
 
         val intent = Intent(context, EmulatorActivity::class.java).apply {
             putExtra(EmulatorActivity.EXTRA_ROM_PATH, romPath)
-            if (File(iplPath).exists()) {
-                putExtra(EmulatorActivity.EXTRA_IPL_PATH, iplPath)
-            }
         }
 
-        ActivityScenario.launch<EmulatorActivity>(intent).use {
+        ActivityScenario.launch<EmulatorActivity>(intent).use { scenario ->
             // Allow 3 seconds of emulation — confirms no crash during startup.
             Thread.sleep(3_000)
+            // Tear the core down on the GL thread while it is still alive —
+            // ares requires teardown on the thread that loaded the system,
+            // and later tests re-init the shared native core.
+            scenario.onActivity { it.renderer.stopEmulation() }
+            Thread.sleep(1_000)
         }
     }
 
@@ -64,11 +61,11 @@ class Phase4RenderingTest {
     }
 
     @Test
-    fun boardsBmlIsAccessible() {
-        // Verify the bundled boards.bml raw resource can be read.
-        val bytes = context.resources.openRawResource(R.raw.super_famicom_boards)
-            .use { it.readBytes() }
-        assert(bytes.isNotEmpty()) { "boards.bml raw resource must be non-empty" }
-        assert(bytes.size > 1_000) { "boards.bml should be at least 1 KB" }
+    fun supportedSystemsAreReported() {
+        // Verify the four Phase 11 systems are compiled into the native library.
+        val supported = AresCore().supportedSystems().split(",")
+        for (id in listOf("fc", "sfc", "gb", "md")) {
+            assert(id in supported) { "system '$id' must be supported, got: $supported" }
+        }
     }
 }

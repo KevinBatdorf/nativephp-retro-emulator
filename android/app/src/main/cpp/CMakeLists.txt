@@ -16,6 +16,25 @@ get_filename_component(ARES_ROOT
     ABSOLUTE
 )
 
+# Shared (platform-agnostic) native sources — pak builders, system registry.
+get_filename_component(NATIVE_ROOT
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../native"
+    ABSOLUTE
+)
+
+# ---------------------------------------------------------------------------
+# Embedded firmware — generated from blobs in the ares submodule
+# (GB boot ROM, MD TMSS/SVP, SFC ipl.rom + boards.bml).
+# ---------------------------------------------------------------------------
+set(FIRMWARE_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+add_custom_command(
+    OUTPUT "${FIRMWARE_DIR}/embedded_firmware.cpp" "${FIRMWARE_DIR}/embedded_firmware.hpp"
+    COMMAND python3 "${NATIVE_ROOT}/../scripts/generate_firmware.py"
+            "${ARES_ROOT}" "${FIRMWARE_DIR}"
+    DEPENDS "${NATIVE_ROOT}/../scripts/generate_firmware.py"
+    COMMENT "Generating embedded firmware from ares submodule"
+)
+
 # ---------------------------------------------------------------------------
 # sljit — JIT allocator used by nall
 # ---------------------------------------------------------------------------
@@ -114,19 +133,119 @@ target_compile_definitions(sfc_core PUBLIC
 )
 
 # ---------------------------------------------------------------------------
-# retro_emulator — JNI shared library + GL renderer + SFC pak builder
+# ymfm — Yamaha FM synthesis library (thirdparty), used by the FC core (EPSM).
+# ---------------------------------------------------------------------------
+add_library(ymfm STATIC
+    "${ARES_ROOT}/thirdparty/ymfm/src/ymfm_adpcm.cpp"
+    "${ARES_ROOT}/thirdparty/ymfm/src/ymfm_misc.cpp"
+    "${ARES_ROOT}/thirdparty/ymfm/src/ymfm_opl.cpp"
+    "${ARES_ROOT}/thirdparty/ymfm/src/ymfm_opm.cpp"
+    "${ARES_ROOT}/thirdparty/ymfm/src/ymfm_opn.cpp"
+    "${ARES_ROOT}/thirdparty/ymfm/src/ymfm_opq.cpp"
+    "${ARES_ROOT}/thirdparty/ymfm/src/ymfm_opz.cpp"
+    "${ARES_ROOT}/thirdparty/ymfm/src/ymfm_pcm.cpp"
+    "${ARES_ROOT}/thirdparty/ymfm/src/ymfm_ssg.cpp"
+)
+target_include_directories(ymfm PUBLIC "${ARES_ROOT}/thirdparty/ymfm/src")
+
+# ---------------------------------------------------------------------------
+# fc_core — Famicom / NES system (unity build via fc.cpp)
+#   mos6502 — main CPU
+# ---------------------------------------------------------------------------
+add_library(fc_core STATIC
+    "${ARES_ROOT}/ares/fc/fc.cpp"
+    "${PROC}/mos6502/mos6502.cpp"
+)
+target_include_directories(fc_core PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/stubs"
+    "${ARES_ROOT}/ares"
+)
+target_link_libraries(fc_core PUBLIC ares_core ymfm)
+target_compile_definitions(fc_core PUBLIC
+    PROFILE_PERFORMANCE
+    BUILD_RELEASE
+    CORE_FC
+)
+
+# ---------------------------------------------------------------------------
+# gb_core — Game Boy system (unity build via gb.cpp)
+#   sm83     — main CPU
+#   m93lcx6  — EEPROM used by some cartridges
+# ---------------------------------------------------------------------------
+add_library(gb_core STATIC
+    "${ARES_ROOT}/ares/gb/gb.cpp"
+    "${PROC}/sm83/sm83.cpp"
+    "${ARES_ROOT}/ares/component/eeprom/m93lcx6/m93lcx6.cpp"
+)
+target_include_directories(gb_core PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/stubs"
+    "${ARES_ROOT}/ares"
+)
+target_link_libraries(gb_core PUBLIC ares_core)
+target_compile_definitions(gb_core PUBLIC
+    PROFILE_PERFORMANCE
+    BUILD_RELEASE
+    CORE_GB
+)
+
+# ---------------------------------------------------------------------------
+# md_core — Mega Drive / Genesis system (unity build via md.cpp)
+#   m68000  — main CPU
+#   z80     — audio CPU
+#   sh2     — 32X coprocessor (compiled in via m32x.cpp)
+#   ssp1601 — SVP coprocessor (Virtua Racing)
+#   sn76489 / ym2612 — audio chips
+#   m24c    — EEPROM used by some cartridges
+# ---------------------------------------------------------------------------
+add_library(md_core STATIC
+    "${ARES_ROOT}/ares/md/md.cpp"
+    "${PROC}/m68000/m68000.cpp"
+    "${PROC}/z80/z80.cpp"
+    "${PROC}/sh2/sh2.cpp"
+    "${PROC}/ssp1601/ssp1601.cpp"
+    "${ARES_ROOT}/ares/component/audio/sn76489/sn76489.cpp"
+    "${ARES_ROOT}/ares/component/audio/ym2413/ym2413.cpp"
+    "${ARES_ROOT}/ares/component/audio/ym2149/ym2149.cpp"
+    "${ARES_ROOT}/ares/component/audio/ym2612/ym2612.cpp"
+    "${ARES_ROOT}/ares/component/eeprom/m24c/m24c.cpp"
+    "${ARES_ROOT}/ares/component/flash/sst39sf0x0/sst39sf0x0.cpp"
+    "${ARES_ROOT}/thirdparty/qon/qon.cpp"
+)
+target_include_directories(md_core PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/stubs"
+    "${ARES_ROOT}/ares"
+)
+target_link_libraries(md_core PUBLIC ares_core)
+target_compile_definitions(md_core PUBLIC
+    PROFILE_PERFORMANCE
+    BUILD_RELEASE
+    CORE_MD
+)
+
+# ---------------------------------------------------------------------------
+# retro_emulator — JNI shared library + GL renderer + pak builders
 # ---------------------------------------------------------------------------
 add_library(retro_emulator SHARED
     "${CMAKE_CURRENT_SOURCE_DIR}/ares_jni.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/sfc_pak.cpp"
+    "${NATIVE_ROOT}/system_registry.cpp"
+    "${NATIVE_ROOT}/pak/sfc_pak.cpp"
+    "${NATIVE_ROOT}/pak/multi_pak.cpp"
+    "${NATIVE_ROOT}/pak/mia_mediums.cpp"
+    "${FIRMWARE_DIR}/embedded_firmware.cpp"
 )
 target_include_directories(retro_emulator PRIVATE
     "${ARES_ROOT}"
     "${ARES_ROOT}/ares"
+    "${NATIVE_ROOT}"
+    "${NATIVE_ROOT}/pak"
+    "${FIRMWARE_DIR}"
     "${CMAKE_CURRENT_SOURCE_DIR}"
 )
 target_link_libraries(retro_emulator PRIVATE
     sfc_core
+    fc_core
+    gb_core
+    md_core
     android
     log
     GLESv2

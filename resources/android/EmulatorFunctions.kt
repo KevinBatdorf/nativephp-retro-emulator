@@ -159,7 +159,10 @@ object EmulatorFunctions {
 
     /**
      * Initialise the ares core for a system and queue a system load.
-     * Only "sfc" (Super Famicom) is implemented in the Android layer today.
+     * Supported systems are the ones compiled into the native library —
+     * reported by [GetSystems] with `supported: true`. System firmware
+     * (SFC ipl.rom + boards.bml, GB boot ROM, MD TMSS) is embedded; no
+     * biosPath is needed for these systems.
      * config keys: biosPath (String?), autoSave (Bool), speed (Float), runAhead (Int),
      *              rewind (Bool), rewindBufferSeconds (Int).
      */
@@ -169,31 +172,17 @@ object EmulatorFunctions {
             if (err != null) return err
 
             val system = parameters["system"] as? String ?: "sfc"
-            if (system != "sfc") {
+            val supported = AresCore().supportedSystems().split(",")
+            if (system !in supported) {
                 return BridgeResponse.error(
                     "UNSUPPORTED_SYSTEM",
-                    "System '$system' is not yet supported on Android — only 'sfc' is available in this build",
+                    "System '$system' is not supported in this build — available: ${supported.joinToString(", ")}",
                 )
             }
 
-            @Suppress("UNCHECKED_CAST")
-            val config = parameters["config"] as? Map<String, Any> ?: emptyMap()
-            val biosPath = config["biosPath"] as? String
             val renderer = entry!!.renderer
-
-            val boardsBml = activity.resources
-                .openRawResource(R.raw.super_famicom_boards)
-                .use { it.readBytes() }
-
-            val iplRom: ByteArray? = biosPath?.let { path ->
-                val file = File(path)
-                if (file.exists()) file.readBytes() else null.also {
-                    Log.w(TAG, "LoadSystem: biosPath not found — $path")
-                }
-            }
-
             renderer.fastForward = false
-            renderer.queueSystemLoad(iplRom, boardsBml)
+            renderer.queueSystemLoad(system)
 
             Log.d(TAG, "LoadSystem: queued system=$system")
             return BridgeResponse.success(mapOf("status" to "loading", "system" to system))
@@ -668,33 +657,38 @@ object EmulatorFunctions {
     }
 
     /**
-     * Return all supported ares systems as rich objects.
-     * This is a static list — no native call required.
+     * Return all ares systems as rich objects. `supported` reflects whether the
+     * system's core is compiled into this build's native library — only those
+     * systems can be passed to [LoadSystem].
      */
     class GetSystems(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
+            val compiled = AresCore().supportedSystems().split(",").toSet()
             val systems = listOf(
-                system("fc",  "NES / Famicom",               biosRequired = false, stable = true),
-                system("sfc", "SNES / Super Famicom",         biosRequired = false, stable = true),
-                system("n64", "Nintendo 64",                  biosRequired = false, stable = true),
-                system("gb",  "Game Boy",                     biosRequired = false, stable = true),
-                system("gbc", "Game Boy Color",               biosRequired = false, stable = true),
-                system("gba", "Game Boy Advance",             biosRequired = false, stable = true),
-                system("sg",  "Sega SG-1000",                 biosRequired = false, stable = true),
-                system("ms",  "Sega Master System",           biosRequired = false, stable = true),
-                system("md",  "Sega Mega Drive / Genesis",    biosRequired = false, stable = true),
-                system("pce", "PC Engine / TurboGrafx-16",    biosRequired = false, stable = true),
-                system("ngp", "Neo Geo Pocket",               biosRequired = false, stable = true),
-                system("ws",  "WonderSwan",                   biosRequired = false, stable = true),
-                system("ps1", "PlayStation",                  biosRequired = true,  stable = false),
-                system("ng",  "Neo Geo AES / MVS",            biosRequired = true,  stable = false),
-                system("a26", "Atari 2600",                   biosRequired = false, stable = false),
-                system("msx", "MSX / MSX2",                   biosRequired = true,  stable = false),
+                system("fc",  "NES / Famicom",               biosRequired = false, stable = true,  compiled),
+                system("sfc", "SNES / Super Famicom",         biosRequired = false, stable = true,  compiled),
+                system("n64", "Nintendo 64",                  biosRequired = false, stable = true,  compiled),
+                system("gb",  "Game Boy",                     biosRequired = false, stable = true,  compiled),
+                system("gbc", "Game Boy Color",               biosRequired = false, stable = true,  compiled),
+                system("gba", "Game Boy Advance",             biosRequired = false, stable = true,  compiled),
+                system("sg",  "Sega SG-1000",                 biosRequired = false, stable = true,  compiled),
+                system("ms",  "Sega Master System",           biosRequired = false, stable = true,  compiled),
+                system("md",  "Sega Mega Drive / Genesis",    biosRequired = false, stable = true,  compiled),
+                system("pce", "PC Engine / TurboGrafx-16",    biosRequired = false, stable = true,  compiled),
+                system("ngp", "Neo Geo Pocket",               biosRequired = false, stable = true,  compiled),
+                system("ws",  "WonderSwan",                   biosRequired = false, stable = true,  compiled),
+                system("ps1", "PlayStation",                  biosRequired = true,  stable = false, compiled),
+                system("ng",  "Neo Geo AES / MVS",            biosRequired = true,  stable = false, compiled),
+                system("a26", "Atari 2600",                   biosRequired = false, stable = false, compiled),
+                system("msx", "MSX / MSX2",                   biosRequired = true,  stable = false, compiled),
             )
             return BridgeResponse.success(mapOf("systems" to systems))
         }
 
-        private fun system(id: String, name: String, biosRequired: Boolean, stable: Boolean) =
-            mapOf("id" to id, "name" to name, "biosRequired" to biosRequired, "stable" to stable)
+        private fun system(id: String, name: String, biosRequired: Boolean, stable: Boolean, compiled: Set<String>) =
+            mapOf(
+                "id" to id, "name" to name, "biosRequired" to biosRequired,
+                "stable" to stable, "supported" to (id in compiled),
+            )
     }
 }

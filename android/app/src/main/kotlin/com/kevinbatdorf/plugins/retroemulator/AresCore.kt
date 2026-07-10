@@ -44,17 +44,19 @@ class AresCore {
     // -------------------------------------------------------------------------
 
     /**
-     * Initialise the SFC (SNES) system node tree. Must be called from the GL
-     * thread because it primes the libco scheduler context for this thread.
+     * Initialise the system node tree for the given ares system ID. Must be
+     * called from the GL thread because it primes the libco scheduler context
+     * for this thread.
      *
-     * @param iplRomBytes  64-byte SPC700 boot ROM from the user's hardware.
-     *                     Pass null to use a zero-filled stub (SMP will hang
-     *                     at audio init but the emulator will not crash).
-     * @param boardsBmlBytes  Content of Super Famicom Boards.bml from the mia
-     *                        database — loaded from R.raw.super_famicom_boards.
+     * System firmware (SFC ipl.rom + boards.bml, GB boot ROM, MD TMSS) is
+     * embedded in the native library — no assets need to be provided.
+     *
+     * @param systemId One of [supportedSystems] (e.g. "sfc", "fc", "gb", "md").
      */
-    fun loadSystem(iplRomBytes: ByteArray?, boardsBmlBytes: ByteArray): Boolean =
-        nativeLoadSystem(iplRomBytes, boardsBmlBytes)
+    fun loadSystem(systemId: String): Boolean = nativeLoadSystem(systemId)
+
+    /** Comma-separated ares system IDs compiled into this build (e.g. "fc,sfc,gb,md"). */
+    fun supportedSystems(): String = nativeGetSupportedSystems()
 
     /**
      * Load a ROM image and power on the emulator. Must be called after
@@ -129,18 +131,20 @@ class AresCore {
     fun stateLoad(path: String): Boolean = nativeStateLoad(path)
 
     // -------------------------------------------------------------------------
-    // Phase 7 — WRAM memory access (GL thread only — avoids data race with tick)
+    // Phase 7 — work-RAM access (GL thread only — avoids data race with tick)
     // -------------------------------------------------------------------------
 
     /**
-     * Read [length] bytes from WRAM at bus address [address] (0x7E0000–0x7FFFFF).
+     * Read [length] bytes of work RAM at bus address [address]. The valid
+     * window is system-specific (SFC 0x7E0000–0x7FFFFF, FC 0x0000–0x07FF,
+     * GB 0xC000–0xDFFF, MD 0xFF0000–0xFFFFFF).
      * Returns null if the address is out of range or the emulator is not running.
      */
     fun readMemory(address: Int, length: Int): ByteArray? = nativeReadMemory(address, length)
 
     /**
-     * Write [bytes] into WRAM at bus address [address] (0x7E0000–0x7FFFFF).
-     * Out-of-range writes are silently ignored.
+     * Write [bytes] into work RAM at bus address [address] (see [readMemory]
+     * for the per-system windows). Out-of-range writes are silently ignored.
      */
     fun writeMemory(address: Int, bytes: ByteArray) = nativeWriteMemory(address, bytes)
 
@@ -168,10 +172,8 @@ class AresCore {
 
     private external fun nativeSetupRenderer(textureId: Int)
 
-    private external fun nativeLoadSystem(
-        iplRomBytes: ByteArray?,
-        boardsBmlBytes: ByteArray
-    ): Boolean
+    private external fun nativeLoadSystem(systemId: String): Boolean
+    private external fun nativeGetSupportedSystems(): String
 
     private external fun nativeLoadRom(romBytes: ByteArray): Boolean
 
