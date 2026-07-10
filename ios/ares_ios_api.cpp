@@ -32,10 +32,12 @@ struct AresContext {
     uint32_t frameHeight = 0;
 
     // Audio — mixed stereo floats, written by Platform::audio().
+    // ~125 ms cap; overflow drops the OLDEST samples so backlog (audio lag)
+    // self-heals instead of persisting (see the Android counterpart).
     std::mutex    audioMutex;
     std::vector<float> audioRingBuffer;
     std::vector<ares::Node::Audio::Stream> audioStreams;
-    static constexpr size_t kAudioCap = 48000u;
+    static constexpr size_t kAudioCap = 12000u;
 
     // Input — written from any thread, read from the emulation thread.
     std::atomic<uint32_t> inputMaskPort1 {0};
@@ -121,9 +123,13 @@ struct IosPlatform : ares::Platform {
             float l = (float)std::max(-1.0, std::min(+1.0, samples[0]));
             float r = (float)std::max(-1.0, std::min(+1.0, samples[1]));
             std::lock_guard<std::mutex> lock(g_ctx->audioMutex);
-            if (g_ctx->audioRingBuffer.size() < AresContext::kAudioCap) {
-                g_ctx->audioRingBuffer.push_back(l);
-                g_ctx->audioRingBuffer.push_back(r);
+            g_ctx->audioRingBuffer.push_back(l);
+            g_ctx->audioRingBuffer.push_back(r);
+            if (g_ctx->audioRingBuffer.size() > AresContext::kAudioCap) {
+                g_ctx->audioRingBuffer.erase(
+                    g_ctx->audioRingBuffer.begin(),
+                    g_ctx->audioRingBuffer.begin() +
+                        (g_ctx->audioRingBuffer.size() - AresContext::kAudioCap));
             }
         }
     }

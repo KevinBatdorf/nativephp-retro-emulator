@@ -42,12 +42,15 @@ struct EmulatorState {
     bool systemLoaded = false;
     bool romLoaded    = false;
 
-    // Audio — written by GL thread, read by audio drain thread.
+    // Audio — written by the emu thread, read by the audio drain thread.
     std::vector<ares::Node::Audio::Stream> audioStreams;
     std::mutex    audioMutex;
     std::vector<float> audioRingBuffer;
-    // Cap at ~0.5 s of stereo PCM (48 kHz × 2 channels × 0.5 s).
-    static constexpr size_t kAudioCap = 48000u;
+    // Cap at ~125 ms of stereo PCM (48 kHz × 2 ch × 0.125 s). Anything the
+    // drain thread hasn't consumed by then is pure latency — on overflow the
+    // OLDEST samples are dropped so backlog (audio lag) self-heals instead of
+    // persisting for the rest of the session.
+    static constexpr size_t kAudioCap = 12000u;
 
     // Phase 6 — input.
     // Written by the main thread via nativeSetInputState; read by the GL thread
@@ -154,9 +157,15 @@ struct AndroidPlatform : ares::Platform {
             float r = (float)std::max(-1.0, std::min(+1.0, samples[1]));
 
             std::lock_guard<std::mutex> lock(g_state->audioMutex);
-            if (g_state->audioRingBuffer.size() < EmulatorState::kAudioCap) {
-                g_state->audioRingBuffer.push_back(l);
-                g_state->audioRingBuffer.push_back(r);
+            g_state->audioRingBuffer.push_back(l);
+            g_state->audioRingBuffer.push_back(r);
+            if (g_state->audioRingBuffer.size() > EmulatorState::kAudioCap) {
+                // Drop the oldest samples — carrying them would turn a burst
+                // of emulation (startup, fast-forward) into permanent lag.
+                g_state->audioRingBuffer.erase(
+                    g_state->audioRingBuffer.begin(),
+                    g_state->audioRingBuffer.begin() +
+                        (g_state->audioRingBuffer.size() - EmulatorState::kAudioCap));
             }
         }
     }

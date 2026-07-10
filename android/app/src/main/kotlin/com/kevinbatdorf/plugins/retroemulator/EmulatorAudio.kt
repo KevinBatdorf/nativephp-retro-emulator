@@ -38,9 +38,12 @@ class EmulatorAudio(private val core: AresCore) {
                 .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO)
                 .build()
         )
-        // 4× min so the drain thread rarely blocks on a full buffer.
-        .setBufferSizeInBytes(minBufBytes * 4)
+        // 2× min — the AudioTrack buffer is kept full by the blocking drain
+        // thread, so its size is direct output latency. LOW_LATENCY requests
+        // the fast mixer path where the device supports it.
+        .setBufferSizeInBytes(minBufBytes * 2)
         .setTransferMode(AudioTrack.MODE_STREAM)
+        .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
         .build()
 
     // Drain buffer holds enough frames for one AudioTrack write at a time.
@@ -77,7 +80,7 @@ class EmulatorAudio(private val core: AresCore) {
             name = "emu-audio"
             start()
         }
-        Log.i(TAG, "started — sampleRate=$SAMPLE_RATE bufferBytes=${minBufBytes * 4}")
+        Log.i(TAG, "started — sampleRate=$SAMPLE_RATE bufferBytes=${audioTrack.bufferSizeInFrames * 8}")
     }
 
     fun stop() {
