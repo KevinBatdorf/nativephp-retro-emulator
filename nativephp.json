@@ -3,7 +3,14 @@
     "version": "0.1.0",
     "description": "Native retro emulation for NativePHP Mobile apps via the ares emulator core",
     "namespace": "Emulator",
-    "keywords": ["emulator", "retro", "gaming", "ares", "snes", "nes"],
+    "keywords": [
+        "emulator",
+        "retro",
+        "gaming",
+        "ares",
+        "snes",
+        "nes"
+    ],
     "category": "utilities",
     "license": "MIT",
     "author": {
@@ -13,18 +20,19 @@
     },
     "homepage": "https://github.com/kevinbatdorf/nativephp-retro-emulator",
     "repository": "https://github.com/kevinbatdorf/nativephp-retro-emulator",
-    "platforms": ["android", "ios"],
-
+    "platforms": [
+        "android",
+        "ios"
+    ],
     "components": [
         {
             "type": "emulator",
             "element": "KevinBatdorf\\RetroEmulator\\Elements\\Emulator",
             "blade": "KevinBatdorf\\RetroEmulator\\Components\\Emulator",
-            "android_renderer": "com.kevinbatdorf.plugins.retroemulator.EmulatorRenderer",
+            "android_renderer": "com.kevinbatdorf.plugins.retroemulator.EmulatorSurface",
             "ios_renderer": "EmulatorRenderer"
         }
     ],
-
     "bridge_functions": [
         {
             "name": "Emulator.Boot",
@@ -90,13 +98,13 @@
             "name": "Emulator.ReadMemory",
             "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.ReadMemory",
             "ios": "EmulatorFunctions.ReadMemory",
-            "description": "Sync RAM read — returns bytes directly"
+            "description": "Sync RAM read \u2014 returns bytes directly"
         },
         {
             "name": "Emulator.ReadMemoryAsync",
             "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.ReadMemoryAsync",
             "ios": "EmulatorFunctions.ReadMemoryAsync",
-            "description": "Async RAM read — dispatches MemoryRead event"
+            "description": "Async RAM read \u2014 dispatches MemoryRead event"
         },
         {
             "name": "Emulator.WriteMemory",
@@ -237,7 +245,6 @@
             "description": "Return all supported systems as rich objects"
         }
     ],
-
     "events": [
         "KevinBatdorf\\RetroEmulator\\Events\\EmulatorStarted",
         "KevinBatdorf\\RetroEmulator\\Events\\EmulatorStopped",
@@ -247,9 +254,7 @@
         "KevinBatdorf\\RetroEmulator\\Events\\MemoryChanged",
         "KevinBatdorf\\RetroEmulator\\Events\\EmulatorError"
     ],
-
     "service_provider": "KevinBatdorf\\RetroEmulator\\RetroEmulatorServiceProvider",
-
     "android": {
         "min_version": 21,
         "permissions": [],
@@ -262,7 +267,6 @@
         "receivers": [],
         "providers": []
     },
-
     "ios": {
         "min_version": "15.0",
         "permissions": [],
@@ -272,12 +276,10 @@
             "pods": []
         }
     },
-
     "assets": {
         "android": [],
         "ios": []
     },
-
     "hooks": {
         "copy_assets": "nativephp:retro-emulator:copy-assets"
     }

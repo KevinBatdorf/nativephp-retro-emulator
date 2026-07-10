@@ -80,4 +80,5 @@ dependencies {
 // inside a host build — exclude it from the plugin's own test app.
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
     exclude("**/EmulatorFunctions.kt")
+    exclude("**/EmulatorSurface.kt")
 }

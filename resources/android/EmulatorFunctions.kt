@@ -66,9 +66,22 @@ object EmulatorFunctions {
 
     private fun entry(parameters: Map<String, Any>): Pair<SurfaceEntry?, Map<String, Any>?> {
         val name = surface(parameters)
-        val entry = surfaces[name]
-            ?: return null to BridgeResponse.error("SURFACE_NOT_FOUND", "No surface '$name' registered")
-        return entry to null
+
+        // A screen's mount() runs before Compose has rendered the emulator
+        // node, so the first Boot/LoadSystem arrives just ahead of
+        // registerSurface. Briefly await registration instead of failing.
+        val deadline = System.currentTimeMillis() + 3_000
+        var entry = surfaces[name]
+        while (entry == null && System.currentTimeMillis() < deadline) {
+            Thread.sleep(25)
+            entry = surfaces[name]
+        }
+
+        return if (entry != null) {
+            entry to null
+        } else {
+            null to BridgeResponse.error("SURFACE_NOT_FOUND", "No surface '$name' registered")
+        }
     }
 
     private fun dispatchEvent(activity: FragmentActivity, fqcn: String, payload: JSONObject) {
