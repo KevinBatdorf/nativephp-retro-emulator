@@ -5,6 +5,17 @@ plugins {
 
 android {
     namespace = "com.kevinbatdorf.plugins.retroemulator"
+
+    sourceSets {
+        getByName("main") {
+            // Runtime classes live in resources/android/ — the canonical copy
+            // that AndroidPluginCompiler ships into host apps. Compiling them
+            // here keeps the plugin's own test app and hosts on one source.
+            // EmulatorFunctions.kt depends on host-app NativePHP types and
+            // only compiles inside a host build.
+            kotlin.srcDir("../../resources/android")
+        }
+    }
     compileSdk = 35
     ndkVersion = "27.0.12077973"
 
@@ -63,4 +74,10 @@ dependencies {
     androidTestImplementation(libs.androidx.espresso.core)
     // ActivityScenario for Phase 4 rendering test
     androidTestImplementation("androidx.test:core:1.6.1")
+}
+
+// EmulatorFunctions.kt depends on host-app NativePHP types and only compiles
+// inside a host build — exclude it from the plugin's own test app.
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    exclude("**/EmulatorFunctions.kt")
 }

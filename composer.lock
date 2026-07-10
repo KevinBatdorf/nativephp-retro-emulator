@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "39d224a804c8a7e11225c8d59d280b25",
+    "content-hash": "bd3147ec09e3c2015916ef143e495861",
     "packages": [
         {
             "name": "bacon/bacon-qr-code",
@@ -1781,16 +1781,16 @@
         },
         {
             "name": "nativephp/mobile",
-            "version": "3.3.6",
+            "version": "dev-element",
             "source": {
                 "type": "git",
                 "url": "https://github.com/NativePHP/mobile-air.git",
-                "reference": "045bebc999463a351827d7bb7e6087e592e5defe"
+                "reference": "0784ade3bc30a668b6e2c371737c85b5237e8af8"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/NativePHP/mobile-air/zipball/045bebc999463a351827d7bb7e6087e592e5defe",
-                "reference": "045bebc999463a351827d7bb7e6087e592e5defe",
+                "url": "https://api.github.com/repos/NativePHP/mobile-air/zipball/0784ade3bc30a668b6e2c371737c85b5237e8af8",
+                "reference": "0784ade3bc30a668b6e2c371737c85b5237e8af8",
                 "shasum": ""
             },
             "require": {
@@ -1801,10 +1801,16 @@
                 "illuminate/contracts": "^10.0|^11.0|^12.0|^13.0",
                 "illuminate/support": "^10.0|^11.0|^12.0|^13.0",
                 "laravel/prompts": "^0.1.1|^0.2|^0.3",
-                "php": "^8.3",
+                "php": "^8.4",
                 "react/datagram": "^1.10",
                 "spatie/laravel-package-tools": "^1.14.0",
                 "workerman/workerman": "^4.1"
+            },
+            "conflict": {
+                "nativephp/mobile-device": "*",
+                "nativephp/mobile-dialog": "*",
+                "nativephp/mobile-file": "*",
+                "nativephp/mobile-system": "*"
             },
             "require-dev": {
                 "larastan/larastan": "^2.0",
@@ -1828,6 +1834,9 @@
                 }
             },
             "autoload": {
+                "files": [
+                    "src/helpers.php"
+                ],
                 "psr-4": {
                     "Native\\Mobile\\": "src/"
                 }
@@ -1858,9 +1867,9 @@
             ],
             "support": {
                 "issues": "https://github.com/NativePHP/mobile-air/issues",
-                "source": "https://github.com/NativePHP/mobile-air/tree/3.3.6"
+                "source": "https://github.com/NativePHP/mobile-air/tree/element"
             },
-            "time": "2026-06-05T17:27:23+00:00"
+            "time": "2026-07-10T01:34:51+00:00"
         },
         {
             "name": "nesbot/carbon",

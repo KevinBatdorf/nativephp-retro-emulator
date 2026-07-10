@@ -241,12 +241,11 @@ describe('Events', function () {
 // ---------------------------------------------------------------------------
 
 describe('Component registry', function () {
-    it('EmulatorElement exists with correct properties', function () {
+    it('EmulatorElement exists with the emulator type', function () {
         expect(class_exists(EmulatorElement::class))->toBeTrue();
 
-        $element = new EmulatorElement('main', 0);
-        expect($element->name)->toBe('main');
-        expect($element->zIndex)->toBe(0);
+        // Full EDGE contract coverage lives in EdgeElementTest.php.
+        expect((new EmulatorElement)->getType())->toBe('emulator');
     });
 
     it('EmulatorComponent exists', function () {

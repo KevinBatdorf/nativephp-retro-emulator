@@ -12,7 +12,7 @@
     ],
     "require": {
         "php": "^8.2",
-        "nativephp/mobile": "^3.0 || dev-element",
+        "nativephp/mobile": "dev-element",
         "illuminate/events": "^10.0|^11.0|^12.0|^13.0",
         "illuminate/queue": "^10.0|^11.0|^12.0|^13.0",
         "illuminate/view": "^10.0|^11.0|^12.0|^13.0"

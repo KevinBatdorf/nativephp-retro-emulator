@@ -3,6 +3,10 @@
 
 # Test ROMs — fetched via scripts/fetch_test_roms.sh, never committed
 /tests/roms/
+
+# Prebuilt native libs SHIP with the plugin (hosts don't compile ares) —
+# override the global *.so ignore. Refresh via scripts/build_android_libs.sh.
+!resources/android/jniLibs/**/*.so
 .DS_Store
 *.log
 
