@@ -118,7 +118,7 @@ describe('Plugin Manifest', function () {
         $emulator = current(array_filter($components, fn ($c) => $c['type'] === 'emulator'));
         expect($emulator['element'])->toBe('KevinBatdorf\\RetroEmulator\\Elements\\Emulator');
         expect($emulator['blade'])->toBe('KevinBatdorf\\RetroEmulator\\Components\\Emulator');
-        expect($emulator['android_renderer'])->toBe('com.kevinbatdorf.plugins.retroemulator.EmulatorRenderer');
+        expect($emulator['android_renderer'])->toBe('com.kevinbatdorf.plugins.retroemulator.EmulatorSurface');
         expect($emulator['ios_renderer'])->toBe('EmulatorRenderer');
     });
 });

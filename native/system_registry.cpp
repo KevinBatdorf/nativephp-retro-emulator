@@ -91,7 +91,7 @@ static constexpr char kMd[] = "md";
 
 // --- the registry --------------------------------------------------------------
 
-static const SystemDef kSfc = {
+static const SystemDef kSfcDef = {
     .id            = "sfc",
     .name          = "SNES / Super Famicom",
     .loadName      = "[Nintendo] Super Famicom (NTSC)",
@@ -186,7 +186,7 @@ static const SystemDef kMdDef = {
 };
 
 auto all() -> const std::vector<const SystemDef*>& {
-    static const std::vector<const SystemDef*> systems = {&kFcDef, &kSfc, &kGbDef, &kMdDef};
+    static const std::vector<const SystemDef*> systems = {&kFcDef, &kSfcDef, &kGbDef, &kMdDef};
     return systems;
 }
 

@@ -327,8 +327,9 @@ final class EmulatorRenderer: UIView {
 
         input.startObserving()
 
-        // Phase 10: self-register under the default surface so bridge calls resolve.
-        // Phase 12 will register under the real `name` prop from <native-emulator name="…" />.
+        // Self-register under the default surface so bridge calls resolve.
+        // The iOS EDGE renderer entry point (the EmulatorSurface counterpart)
+        // will register under the node's real `name` prop once it exists.
         EmulatorFunctions.register(name: "main", renderer: self)
     }
 
