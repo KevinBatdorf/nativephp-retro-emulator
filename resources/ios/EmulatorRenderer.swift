@@ -47,21 +47,23 @@ final class EmulatorRenderer: UIView {
 
     // MARK: - System / ROM loading
 
-    func loadSystem(_ iplRom: Data, boardsBml: Data, system: String) -> Bool {
+    /// Initialise the ares core for `system` (an ares id such as "sfc", "fc",
+    /// "gb", "md"). System firmware is embedded in the native library — no
+    /// assets are required.
+    func loadSystem(_ system: String) -> Bool {
         emuLock.lock()
-        let ok = iplRom.withUnsafeBytes { ipl in
-            boardsBml.withUnsafeBytes { bml in
-                ares_load_system(ctx,
-                                 ipl.bindMemory(to: UInt8.self).baseAddress, ipl.count,
-                                 bml.bindMemory(to: UInt8.self).baseAddress, bml.count)
-            }
-        }
+        let ok = ares_load_system(ctx, system)
         emuLock.unlock()
         if ok {
             loadedSystem = system
             currentStatus = "loading"
         }
         return ok
+    }
+
+    /// ares ids compiled into this build (e.g. ["fc", "sfc", "gb", "md"]).
+    static var supportedSystems: [String] {
+        String(cString: ares_supported_systems()).components(separatedBy: ",")
     }
 
     func loadRom(_ romData: Data, path: String) -> Bool {

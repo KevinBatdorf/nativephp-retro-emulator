@@ -19,14 +19,16 @@ void         ares_destroy(AresContext* ctx);
 
 // System / ROM loading --------------------------------------------------------
 
-// Load the SFC system core.
-// ipl_rom: 64-byte SPC700 boot ROM (may be NULL — SMP won't boot, audio hangs).
-// boards_bml: required BML database for memory-map lookup.
-bool ares_load_system(AresContext* ctx,
-                      const uint8_t* ipl_rom, size_t ipl_size,
-                      const uint8_t* boards_bml, size_t bml_size);
+// Load a system core by ares id ("fc", "sfc", "gb", "md").  System firmware
+// (SFC ipl.rom + boards.bml, GB boot ROM, MD TMSS) is embedded in the library
+// — no assets required.  Returns false for ids not compiled into this build.
+bool ares_load_system(AresContext* ctx, const char* system_id);
 
-// Load and power a Super Famicom ROM image.  Returns false on bad header.
+// Comma-separated ids of the systems compiled into this build, e.g.
+// "fc,sfc,gb,md".  Static storage — do not free.
+const char* ares_supported_systems(void);
+
+// Load and power a ROM image for the loaded system.  Returns false on bad header.
 bool ares_load_rom(AresContext* ctx, const uint8_t* rom, size_t rom_size);
 
 // Emulation control -----------------------------------------------------------
@@ -60,7 +62,9 @@ size_t ares_read_audio(AresContext* ctx, float* out, size_t capacity);
 bool ares_state_save(AresContext* ctx, const char* path);
 bool ares_state_load(AresContext* ctx, const char* path);
 
-// Memory access (WRAM bus addresses 0x7E0000–0x7FFFFF only) ------------------
+// Memory access — the work-RAM bus window is system-specific:
+// SFC 0x7E0000–0x7FFFFF, FC 0x0000–0x07FF, GB 0xC000–0xDFFF,
+// MD 0xFF0000–0xFFFFFF. ----------------------------------------------------
 
 // Returns bytes written, or -1 on error.
 int  ares_read_memory(AresContext* ctx, uint32_t address, uint8_t* out, int length);

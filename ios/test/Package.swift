@@ -14,7 +14,6 @@ let package = Package(
             name: "AresCoreTests",
             dependencies: ["RetroEmulator"],
             path: "Tests/AresCoreTests",
-            resources: [.copy("Fixtures")],
             linkerSettings: [.linkedLibrary("c++")]
         ),
     ]

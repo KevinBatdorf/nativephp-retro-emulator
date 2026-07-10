@@ -1,8 +1,8 @@
 #include "ares_ios_api.h"
-#include "sfc_pak.hpp"
 
 #include <ares/ares.hpp>
-#include <sfc/sfc.hpp>
+
+#include "system_registry.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -10,7 +10,6 @@
 #include <cstring>
 #include <mutex>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 // ---------------------------------------------------------------------------
@@ -18,6 +17,8 @@
 // Video frames are stored in a heap buffer instead of a GL texture.
 // ---------------------------------------------------------------------------
 struct AresContext {
+    const SystemRegistry::SystemDef* system = nullptr;
+
     std::shared_ptr<vfs::directory> systemPak;
     std::shared_ptr<vfs::directory> cartridgePak;
 
@@ -78,10 +79,10 @@ struct IosPlatform : ares::Platform {
     }
 
     auto pak(ares::Node::Object node) -> std::shared_ptr<vfs::directory> override {
-        if (!g_ctx) return {};
+        if (!g_ctx || !g_ctx->system) return {};
         auto name = node->name();
-        if (name == "Super Famicom")           return g_ctx->systemPak;
-        if (name == "Super Famicom Cartridge") return g_ctx->cartridgePak;
+        if (name == g_ctx->system->systemNode.c_str())    return g_ctx->systemPak;
+        if (name == g_ctx->system->cartridgeNode.c_str()) return g_ctx->cartridgePak;
         return {};
     }
 
@@ -141,17 +142,32 @@ struct IosPlatform : ares::Platform {
 
 static IosPlatform* g_platform = nullptr;
 
-// ---------------------------------------------------------------------------
-// SNES button name → bitmask (matches iOS EmulatorInput bit positions).
-// ---------------------------------------------------------------------------
-static const std::unordered_map<std::string, uint32_t> kSnesButtons = {
-    {"B",      1u <<  0}, {"Y",      1u <<  1},
-    {"Select", 1u <<  2}, {"Start",  1u <<  3},
-    {"Up",     1u <<  4}, {"Down",   1u <<  5},
-    {"Left",   1u <<  6}, {"Right",  1u <<  7},
-    {"A",      1u <<  8}, {"X",      1u <<  9},
-    {"L",      1u << 10}, {"R",      1u << 11},
-};
+// Cache button nodes under `parent` (a controller port or, for systems with
+// built-in controls, the root node) into the given port bitmask.
+static void cacheButtons(ares::Node::Object parent,
+                         const SystemRegistry::SystemDef& def,
+                         std::atomic<uint32_t>& mask) {
+    for (auto& btn : parent->find<ares::Node::Input::Button>()) {
+        auto it = def.buttons.find(std::string((const char*)btn->name()));
+        if (it != def.buttons.end()) {
+            g_ctx->inputCache.push_back({btn, &mask, it->second});
+        }
+    }
+}
+
+static std::string buttonsJson(ares::Node::Object parent) {
+    std::string json = "[";
+    bool first = true;
+    for (auto& btn : parent->find<ares::Node::Input::Button>()) {
+        if (!first) json += ",";
+        first = false;
+        json += "\"";
+        json += std::string((const char*)btn->name());
+        json += "\"";
+    }
+    json += "]";
+    return json;
+}
 
 // ---------------------------------------------------------------------------
 // C API implementation
@@ -169,7 +185,11 @@ AresContext* ares_create(void) {
 
 void ares_destroy(AresContext* ctx) {
     if (!ctx || ctx != g_ctx) return;
-    if (g_ctx->systemLoaded) {
+    if (g_ctx->systemLoaded && g_ctx->root) {
+        // unload() joins worker threads (e.g. the video screen thread) before
+        // the node tree is torn down — dropping root without it lets those
+        // threads race into freed state and crash.
+        g_ctx->root->unload();
         g_ctx->root.reset();
     }
     ares::platform = nullptr;
@@ -177,67 +197,60 @@ void ares_destroy(AresContext* ctx) {
     delete g_ctx;      g_ctx      = nullptr;
 }
 
-bool ares_load_system(AresContext* ctx,
-                      const uint8_t* ipl_rom, size_t ipl_size,
-                      const uint8_t* boards_bml, size_t bml_size)
-{
-    if (!ctx) return false;
+const char* ares_supported_systems(void) {
+    static std::string ids = [] {
+        std::string s;
+        for (auto* def : SystemRegistry::all()) {
+            if (!s.empty()) s += ",";
+            s += def->id;
+        }
+        return s;
+    }();
+    return ids.c_str();
+}
+
+bool ares_load_system(AresContext* ctx, const char* system_id) {
+    if (!ctx || !system_id) return false;
     if (ctx->systemLoaded) return true;
-    if (!boards_bml || bml_size == 0) return false;
 
-    ctx->systemPak = SfcPakBuilder::makeSystemPak(
-        ipl_rom, ipl_size, boards_bml, bml_size);
-
-    bool ok = ares::SuperFamicom::load(
-        ctx->root, "[Nintendo] Super Famicom (NTSC)");
-    if (!ok) {
-        ctx->systemPak.reset();
+    auto* def = SystemRegistry::find(system_id);
+    if (!def) {
+        fprintf(stderr, "ares_load_system: unsupported system '%s'\n", system_id);
         return false;
     }
 
-    if (auto port = ctx->root->find<ares::Node::Port>("Controller Port 1")) {
-        port->allocate("Gamepad");
-        port->connect();
-    }
-    if (auto port = ctx->root->find<ares::Node::Port>("Controller Port 2")) {
-        port->allocate("Gamepad");
-        port->connect();
+    ctx->system    = def;
+    ctx->systemPak = def->makeSystemPak(*def);
+
+    if (!def->load(ctx->root, *def)) {
+        ctx->systemPak.reset();
+        ctx->system = nullptr;
+        return false;
     }
 
-    auto cachePortButtons = [&](const char* portName, std::atomic<uint32_t>& mask) {
-        auto port = ctx->root->find<ares::Node::Port>(portName);
-        if (!port) return;
-        for (auto& btn : port->find<ares::Node::Input::Button>()) {
-            auto it = kSnesButtons.find(std::string((const char*)btn->name()));
-            if (it != kSnesButtons.end()) {
-                ctx->inputCache.push_back({btn, &mask, it->second});
-            }
-        }
+    // Wire controllers and build the button cache + ports JSON.
+    std::atomic<uint32_t>* masks[2] = {
+        &ctx->inputMaskPort1, &ctx->inputMaskPort2,
     };
-    cachePortButtons("Controller Port 1", ctx->inputMaskPort1);
-    cachePortButtons("Controller Port 2", ctx->inputMaskPort2);
-
-    // Build ports JSON.
-    {
+    if (def->ports == 0) {
+        // Built-in controls (e.g. Game Boy) — buttons live on the system node,
+        // reported as port 1.
+        cacheButtons(ctx->root, *def, ctx->inputMaskPort1);
+        ctx->portsJson =
+            std::string("[{\"port\":1,\"buttons\":") +
+            buttonsJson(ctx->root) + "}]";
+    } else {
         std::string json = "[";
-        bool firstPort = true;
-        const char* portNames[]  = {"Controller Port 1", "Controller Port 2"};
-        const char* portLabels[] = {"1", "2"};
-        for (int i = 0; i < 2; ++i) {
-            auto port = ctx->root->find<ares::Node::Port>(portNames[i]);
+        for (int i = 0; i < def->ports && i < 2; i++) {
+            auto portName = std::string("Controller Port ") + std::to_string(i + 1);
+            auto port = ctx->root->find<ares::Node::Port>(portName.c_str());
             if (!port) continue;
-            if (!firstPort) json += ",";
-            firstPort = false;
-            json += std::string("{\"port\":") + portLabels[i] + ",\"buttons\":[";
-            bool firstBtn = true;
-            for (auto& btn : port->find<ares::Node::Input::Button>()) {
-                if (!firstBtn) json += ",";
-                firstBtn = false;
-                json += "\"";
-                json += std::string((const char*)btn->name());
-                json += "\"";
-            }
-            json += "]}";
+            port->allocate(def->device);
+            port->connect();
+            cacheButtons(port, *def, *masks[i]);
+            if (json.size() > 1) json += ",";
+            json += "{\"port\":" + std::to_string(i + 1) +
+                    ",\"buttons\":" + buttonsJson(port) + "}";
         }
         json += "]";
         ctx->portsJson = json;
@@ -250,11 +263,14 @@ bool ares_load_system(AresContext* ctx,
 bool ares_load_rom(AresContext* ctx, const uint8_t* rom, size_t rom_size) {
     if (!ctx || !ctx->systemLoaded || !rom || rom_size == 0) return false;
 
-    auto info = SfcPakBuilder::detectHeader(rom, rom_size);
-    if (info.board.empty()) return false;
+    auto built = ctx->system->makeCartridgePak(rom, rom_size);
+    if (!built) {
+        fprintf(stderr, "ares_load_rom: %s\n", built.error.c_str());
+        return false;
+    }
 
-    ctx->cartridgePak = SfcPakBuilder::makeCartridgePak(info, rom, rom_size);
-    ctx->romRegion    = info.region;
+    ctx->cartridgePak = built.pak;
+    ctx->romRegion    = built.region;
 
     auto cartridgeSlot = ctx->root->find<ares::Node::Port>("Cartridge Slot");
     if (!cartridgeSlot) return false;
@@ -271,7 +287,7 @@ bool ares_load_rom(AresContext* ctx, const uint8_t* rom, size_t rom_size) {
 bool ares_tick(AresContext* ctx) {
     if (!ctx || !ctx->romLoaded) return false;
     if (ctx->paused.load(std::memory_order_relaxed)) return false;
-    ares::SuperFamicom::system.run();
+    ctx->root->run();
     return true;
 }
 
@@ -351,24 +367,30 @@ bool ares_state_load(AresContext* ctx, const char* path) {
 }
 
 int ares_read_memory(AresContext* ctx, uint32_t address, uint8_t* out, int length) {
-    if (!ctx || !ctx->romLoaded || !out || length <= 0) return -1;
+    if (!ctx || !ctx->romLoaded || !ctx->system || !out || length <= 0) return -1;
+
+    auto* def = ctx->system;
     uint32_t len = (uint32_t)length;
-    if (address < 0x7E0000u || address + len > 0x800000u) return -1;
-    uint32_t offset = address - 0x7E0000u;
-    if (offset + len > 0x20000u) return -1;
-    std::memcpy(out, &ares::SuperFamicom::cpu.wram[offset], len);
+    if (address < def->memBase) return -1;
+    uint32_t offset = address - def->memBase;
+    if (offset + len > def->memSize) return -1;
+
+    for (uint32_t i = 0; i < len; i++) out[i] = def->memRead(offset + i);
     return (int)len;
 }
 
 void ares_write_memory(AresContext* ctx, uint32_t address,
                        const uint8_t* bytes, int length)
 {
-    if (!ctx || !ctx->romLoaded || !bytes || length <= 0) return;
+    if (!ctx || !ctx->romLoaded || !ctx->system || !bytes || length <= 0) return;
+
+    auto* def = ctx->system;
     uint32_t len = (uint32_t)length;
-    if (address < 0x7E0000u || address + len > 0x800000u) return;
-    uint32_t offset = address - 0x7E0000u;
-    if (offset + len > 0x20000u) return;
-    std::memcpy(&ares::SuperFamicom::cpu.wram[offset], bytes, len);
+    if (address < def->memBase) return;
+    uint32_t offset = address - def->memBase;
+    if (offset + len > def->memSize) return;
+
+    for (uint32_t i = 0; i < len; i++) def->memWrite(offset + i, bytes[i]);
 }
 
 const char* ares_get_region(AresContext* ctx) {

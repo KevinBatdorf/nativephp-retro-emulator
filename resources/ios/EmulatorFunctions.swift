@@ -137,40 +137,26 @@ enum EmulatorFunctions {
         }
     }
 
-    /// Initialise the ares core for a system. Only "sfc" is implemented today.
+    /// Initialise the ares core for a system. Supported systems are the ones
+    /// compiled into the native library — reported by GetSystems with
+    /// `supported: true`. System firmware (SFC ipl.rom + boards.bml, GB boot
+    /// ROM, MD TMSS) is embedded; no biosPath is needed for these systems.
     /// config keys: biosPath (String?), autoSave, speed, runAhead, rewind, rewindBufferSeconds.
-    /// `boards.bml` is loaded from the app bundle (mirrors Android's bundled raw resource);
-    /// the physical bundling is wired by the asset pipeline in a later phase.
     class LoadSystem: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
 
             let system = parameters["system"] as? String ?? "sfc"
-            guard system == "sfc" else {
+            let supported = EmulatorRenderer.supportedSystems
+            guard supported.contains(system) else {
                 return BridgeResponse.error(
                     code: "UNSUPPORTED_SYSTEM",
-                    message: "System '\(system)' is not yet supported on iOS — only 'sfc' is available in this build"
+                    message: "System '\(system)' is not supported in this build — available: \(supported.joined(separator: ", "))"
                 )
-            }
-
-            guard let boardsURL = Bundle.main.url(forResource: "boards", withExtension: "bml"),
-                  let boardsBml = try? Data(contentsOf: boardsURL) else {
-                return BridgeResponse.error(
-                    code: "BOARDS_NOT_FOUND",
-                    message: "boards.bml not found in the app bundle"
-                )
-            }
-
-            let config = parameters["config"] as? [String: Any] ?? [:]
-            let iplRom: Data
-            if let biosPath = config["biosPath"] as? String, let bios = try? Data(contentsOf: URL(fileURLWithPath: biosPath)) {
-                iplRom = bios
-            } else {
-                iplRom = Data(count: 64) // zero-filled — SPC700 audio won't boot, CPU/PPU run
             }
 
             renderer.fastForward = false
-            guard renderer.loadSystem(iplRom, boardsBml: boardsBml, system: system) else {
+            guard renderer.loadSystem(system) else {
                 return BridgeResponse.error(code: "LOAD_FAILED", message: "ares_load_system failed for '\(system)'")
             }
 
@@ -555,8 +541,10 @@ enum EmulatorFunctions {
     /// Return all supported ares systems as rich objects (static list — no native call).
     class GetSystems: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
+            let compiled = Set(EmulatorRenderer.supportedSystems)
             func system(_ id: String, _ name: String, biosRequired: Bool, stable: Bool) -> [String: Any] {
-                ["id": id, "name": name, "biosRequired": biosRequired, "stable": stable]
+                ["id": id, "name": name, "biosRequired": biosRequired, "stable": stable,
+                 "supported": compiled.contains(id)]
             }
             let systems: [[String: Any]] = [
                 system("fc",  "NES / Famicom",            biosRequired: false, stable: true),

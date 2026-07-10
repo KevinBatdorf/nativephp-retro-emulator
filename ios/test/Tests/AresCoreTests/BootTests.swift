@@ -1,13 +1,14 @@
 import XCTest
 import RetroEmulator
 
-/// Phase 9 boot tests — the first tests that exercise the full emulation path:
+/// Boot tests — exercise the full emulation path:
 /// ares_load_system → ares_load_rom → ares_tick → ares_get_frame.
+///
+/// System firmware (SFC ipl.rom + boards.bml, GB boot ROM, MD TMSS) is
+/// embedded in the native library since Phase 11 — no fixtures needed.
 ///
 /// ROM: synthetic 32 KB LoROM with a valid header and checksum.
 ///      No Nintendo IP — just an infinite SEI/BRA loop so the CPU keeps running.
-/// IPL: zero-filled. SPC700 audio won't boot, but CPU + PPU run fine.
-/// BML: boards.bml from the ares submodule (open-source, bundled as a test fixture).
 final class BootTests: XCTestCase {
 
     private var ctx: OpaquePointer!
@@ -25,47 +26,49 @@ final class BootTests: XCTestCase {
 
     // MARK: - System load
 
-    func testLoadSystemSucceedsWithBoardsBml() throws {
-        let bml = try boardsBml()
-        let ipl = Data(count: 64)   // zero-filled — SPC700 won't execute, CPU/PPU will
-
-        let ok = bml.withUnsafeBytes { bmlPtr in
-            ipl.withUnsafeBytes { iplPtr in
-                ares_load_system(
-                    ctx,
-                    iplPtr.bindMemory(to: UInt8.self).baseAddress, ipl.count,
-                    bmlPtr.bindMemory(to: UInt8.self).baseAddress, bml.count
-                )
-            }
-        }
-        XCTAssertTrue(ok, "ares_load_system() must return true with valid boards.bml")
+    func testLoadSystemSucceeds() {
+        XCTAssertTrue(ares_load_system(ctx, "sfc"),
+                      "ares_load_system(\"sfc\") must return true")
     }
 
-    func testLoadSystemIsIdempotent() throws {
-        let (ipl, bml) = try fixtures()
-        XCTAssertTrue(loadSystem(ipl: ipl, bml: bml))
+    func testLoadSystemIsIdempotent() {
+        XCTAssertTrue(ares_load_system(ctx, "sfc"))
         // Second call should be a no-op and return true.
-        XCTAssertTrue(loadSystem(ipl: ipl, bml: bml))
+        XCTAssertTrue(ares_load_system(ctx, "sfc"))
     }
 
-    func testLoadSystemFailsWithEmptyBml() {
-        let ipl  = Data(count: 64)
-        let bml  = Data()
-        let ok   = bml.withUnsafeBytes { bmlPtr in
-            ipl.withUnsafeBytes { iplPtr in
-                ares_load_system(ctx,
-                    iplPtr.bindMemory(to: UInt8.self).baseAddress, ipl.count,
-                    bmlPtr.bindMemory(to: UInt8.self).baseAddress, bml.count)
-            }
+    func testLoadSystemFailsWithUnknownId() {
+        XCTAssertFalse(ares_load_system(ctx, "n64"),
+                       "systems not compiled into this build must be rejected")
+    }
+
+    func testSupportedSystemsAreReported() {
+        let ids = String(cString: ares_supported_systems()).components(separatedBy: ",")
+        for id in ["fc", "sfc", "gb", "md"] {
+            XCTAssertTrue(ids.contains(id), "'\(id)' must be supported, got \(ids)")
         }
-        XCTAssertFalse(ok)
+    }
+
+    // MARK: - Multi-system load (Phase 11)
+
+    func testEveryCompiledSystemLoads() {
+        // Each system loads its core and reports controller buttons. Sequential
+        // load/teardown in one process mirrors the Android Phase 11 test.
+        for id in ["fc", "sfc", "gb", "md"] {
+            let localCtx = ares_create()
+            XCTAssertTrue(ares_load_system(localCtx, id), "\(id): loadSystem failed")
+            let json = String(cString: ares_get_ports_json(localCtx))
+            XCTAssertTrue(json.contains("buttons"), "\(id): unexpected ports JSON \(json)")
+            ares_destroy(localCtx)
+        }
+        // Re-create for tearDown symmetry.
+        ctx = ares_create()
     }
 
     // MARK: - ROM load
 
-    func testLoadRomSucceedsWithSyntheticLoRom() throws {
-        let (ipl, bml) = try fixtures()
-        XCTAssertTrue(loadSystem(ipl: ipl, bml: bml))
+    func testLoadRomSucceedsWithSyntheticLoRom() {
+        XCTAssertTrue(ares_load_system(ctx, "sfc"))
 
         let rom = Self.makeMinimalLoRom()
         let ok  = rom.withUnsafeBytes {
@@ -82,9 +85,8 @@ final class BootTests: XCTestCase {
         XCTAssertFalse(ok, "ares_load_rom() must fail when no system is loaded")
     }
 
-    func testLoadRomFailsWithTooSmallData() throws {
-        let (ipl, bml) = try fixtures()
-        XCTAssertTrue(loadSystem(ipl: ipl, bml: bml))
+    func testLoadRomFailsWithTooSmallData() {
+        XCTAssertTrue(ares_load_system(ctx, "sfc"))
 
         let tiny = Data(count: 100)
         let ok   = tiny.withUnsafeBytes {
@@ -95,39 +97,31 @@ final class BootTests: XCTestCase {
 
     // MARK: - Tick + frame
 
-    func testTickReturnsTrueAfterBoot() throws {
-        try boot()
+    func testTickReturnsTrueAfterBoot() {
+        boot()
         XCTAssertTrue(ares_tick(ctx), "ares_tick() must return true when a ROM is running")
     }
 
-    func testFrameIsProducedAfterOneTick() throws {
-        try boot()
-        _ = ares_tick(ctx)
-
-        var w: UInt32 = 0, h: UInt32 = 0
-        let hasFrame = ares_get_frame(ctx, nil, 0, &w, &h)
-        XCTAssertTrue(hasFrame, "ares_get_frame() must return true after one tick")
+    func testFrameIsProduced() {
+        boot()
+        let (w, h) = tickUntilFrame()
         XCTAssertGreaterThan(w, 0, "frame width must be > 0")
         XCTAssertGreaterThan(h, 0, "frame height must be > 0")
     }
 
-    func testFrameDimensionsAreSnesNative() throws {
-        try boot()
-        _ = ares_tick(ctx)
-
-        var w: UInt32 = 0, h: UInt32 = 0
-        _ = ares_get_frame(ctx, nil, 0, &w, &h)
-        // SNES outputs 256 or 512 wide, 224 or 239 tall depending on display mode.
-        XCTAssertTrue(w == 256 || w == 512, "width must be 256 or 512, got \(w)")
-        XCTAssertTrue(h == 224 || h == 239, "height must be 224 or 239, got \(h)")
+    func testFrameDimensionsAreSnesNative() {
+        boot()
+        let (w, h) = tickUntilFrame()
+        // The performance PPU renders the full 564×242 canvas (incl. overscan
+        // borders); the accuracy PPU crops to 256/512 × 224/239.
+        XCTAssertTrue(w == 256 || w == 512 || w == 564, "unexpected width \(w)")
+        XCTAssertTrue(h == 224 || h == 239 || h == 242, "unexpected height \(h)")
     }
 
-    func testFramePixelsAreCopiedToBuffer() throws {
-        try boot()
-        _ = ares_tick(ctx)
-
-        var w: UInt32 = 0, h: UInt32 = 0
-        _ = ares_get_frame(ctx, nil, 0, &w, &h)
+    func testFramePixelsAreCopiedToBuffer() {
+        boot()
+        var (w, h) = tickUntilFrame()
+        XCTAssertGreaterThan(w * h, 0, "no frame produced")
 
         var pixels = [UInt32](repeating: 0xDEADBEEF, count: Int(w * h))
         pixels.withUnsafeMutableBufferPointer {
@@ -138,8 +132,20 @@ final class BootTests: XCTestCase {
                        "ares_get_frame() must overwrite all pixel slots")
     }
 
-    func testMultipleTicksDoNotCrash() throws {
-        try boot()
+    /// The screen node delivers frames from its own worker thread, so the first
+    /// frame lands asynchronously — tick and poll like a real frontend would.
+    private func tickUntilFrame(_ maxTicks: Int = 120) -> (w: UInt32, h: UInt32) {
+        var w: UInt32 = 0, h: UInt32 = 0
+        for _ in 0..<maxTicks {
+            _ = ares_tick(ctx)
+            if ares_get_frame(ctx, nil, 0, &w, &h), w > 0 { return (w, h) }
+            usleep(2_000)
+        }
+        return (w, h)
+    }
+
+    func testMultipleTicksDoNotCrash() {
+        boot()
         for _ in 0..<10 {
             XCTAssertTrue(ares_tick(ctx))
         }
@@ -147,8 +153,8 @@ final class BootTests: XCTestCase {
 
     // MARK: - Region
 
-    func testGetRegionAfterRomLoad() throws {
-        try boot()
+    func testGetRegionAfterRomLoad() {
+        boot()
         let region = String(cString: ares_get_region(ctx))
         // Our synthetic ROM declares country $01 (USA → NTSC).
         XCTAssertFalse(region.isEmpty, "region must not be empty after ROM load")
@@ -156,46 +162,21 @@ final class BootTests: XCTestCase {
 
     // MARK: - Ports JSON
 
-    func testGetPortsJsonAfterSystemLoad() throws {
-        let (ipl, bml) = try fixtures()
-        XCTAssertTrue(loadSystem(ipl: ipl, bml: bml))
+    func testGetPortsJsonAfterSystemLoad() {
+        XCTAssertTrue(ares_load_system(ctx, "sfc"))
         let json = String(cString: ares_get_ports_json(ctx))
-        XCTAssertTrue(json.contains("Controller Port"), "ports JSON must list controller ports")
+        XCTAssertTrue(json.contains("buttons"), "ports JSON must list buttons")
     }
 
     // MARK: - Helpers
 
-    private func fixtures() throws -> (ipl: Data, bml: Data) {
-        (Data(count: 64), try boardsBml())
-    }
-
-    @discardableResult
-    private func loadSystem(ipl: Data, bml: Data) -> Bool {
-        bml.withUnsafeBytes { bmlPtr in
-            ipl.withUnsafeBytes { iplPtr in
-                ares_load_system(ctx,
-                    iplPtr.bindMemory(to: UInt8.self).baseAddress, ipl.count,
-                    bmlPtr.bindMemory(to: UInt8.self).baseAddress, bml.count)
-            }
-        }
-    }
-
-    private func boot() throws {
-        let (ipl, bml) = try fixtures()
+    private func boot() {
         let rom = Self.makeMinimalLoRom()
-        XCTAssertTrue(loadSystem(ipl: ipl, bml: bml))
+        XCTAssertTrue(ares_load_system(ctx, "sfc"))
         let ok = rom.withUnsafeBytes {
             ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count)
         }
         XCTAssertTrue(ok, "boot() failed at ares_load_rom()")
-    }
-
-    private func boardsBml() throws -> Data {
-        guard let url = Bundle.module.url(forResource: "boards", withExtension: "bml",
-                                          subdirectory: "Fixtures") else {
-            throw XCTSkip("boards.bml fixture not found in test bundle")
-        }
-        return try Data(contentsOf: url)
     }
 
     // MARK: - Minimal synthetic LoROM
