@@ -22,6 +22,12 @@ private const val TAG = "EmulatorRenderer"
 private const val TEX_W = 1024
 private const val TEX_H = 512
 
+// Emulation pacing. 60.0988 is NTSC SNES/NES; GB (59.73) and MD (59.92) are
+// close enough that the audio resampler absorbs the drift. Refined per-system
+// (and for PAL) in the feature-audit phase.
+private const val TARGET_FPS = 60.0988
+private const val MAX_TICKS_PER_FRAME = 8
+
 /**
  * A [GLSurfaceView] that drives the ares emulator and blits each frame via a
  * full-screen textured quad. All ares calls happen on the GL thread so libco
@@ -94,6 +100,12 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
 
     // Phase 7 — fast-forward / speed.
     @Volatile var fastForward: Boolean = false
+
+    // Frame pacing — the GL thread draws at the display's refresh rate (120 Hz
+    // on some devices) and GLSurfaceView redraws opportunistically, so ticks
+    // are budgeted by wall clock against the console's native frame rate.
+    private var lastTickNanos = 0L
+    private var tickAccumulator = 0.0
 
     // Current UV extents for the content region within the 1024×512 texture.
     private var uvW = 1f
@@ -203,8 +215,23 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
                 core.writeMemory(req.address, req.bytes)
             }
 
-            // --- Tick the emulator (fast-forward = 4 ticks/frame) ---
-            val ticks = if (fastForward) 4 else 1
+            // --- Tick the emulator, paced to the console's frame rate ---
+            val now = System.nanoTime()
+            if (lastTickNanos == 0L) lastTickNanos = now
+            // Clamp long gaps (pause/resume, app switch) so we don't fast-run.
+            val elapsed = ((now - lastTickNanos) / 1e9).coerceAtMost(0.25)
+            lastTickNanos = now
+
+            val speed = if (fastForward) 4.0 else 1.0
+            tickAccumulator += elapsed * TARGET_FPS * speed
+            var ticks = tickAccumulator.toInt()
+            if (ticks > MAX_TICKS_PER_FRAME) {
+                // Can't keep up — drop the debt instead of spiraling.
+                ticks = MAX_TICKS_PER_FRAME
+                tickAccumulator = 0.0
+            } else {
+                tickAccumulator -= ticks
+            }
             repeat(ticks) { core.tick() }
 
             // --- Fire EmulatorStarted on the first rendered frame ---
@@ -275,6 +302,9 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
         setEGLContextClientVersion(2)
         setRenderer(renderer)
         renderMode = RENDERMODE_CONTINUOUSLY
+        // Gamepad input doesn't reset Android's idle timer — keep the display
+        // awake while the emulator view is showing.
+        keepScreenOn = true
     }
 
     // ---------------------------------------------------------------------------
