@@ -1,5 +1,8 @@
 /vendor/
 /node_modules/
+
+# Test ROMs — fetched via scripts/fetch_test_roms.sh, never committed
+/tests/roms/
 .DS_Store
 *.log
 
