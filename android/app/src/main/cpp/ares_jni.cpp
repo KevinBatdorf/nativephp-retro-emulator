@@ -31,6 +31,13 @@ struct EmulatorState {
     u32    frameWidth  = 0;
     u32    frameHeight = 0;
 
+    // Frame hand-off. ares' screen node delivers frames from its own worker
+    // thread ("dev.ares.screen"), where no GL context is current — video()
+    // buffers pixels here and the GL thread uploads on the next tick.
+    std::mutex        frameMutex;
+    std::vector<u32>  frameBuffer;
+    bool              frameDirty = false;
+
     ares::Node::System root;
     bool systemLoaded = false;
     bool romLoaded    = false;
@@ -104,26 +111,21 @@ struct AndroidPlatform : ares::Platform {
 
     auto video(ares::Node::Video::Screen node,
                const u32* data, u32 pitch, u32 width, u32 height) -> void override {
-        if (!g_state || !g_state->textureId) return;
+        if (!g_state) return;
 
+        // Runs on ares' screen worker thread — no GL context here. Buffer the
+        // pixels; the GL thread uploads them in nativeTick.
+        // NOTE: pitch is in BYTES (Screen::refresh passes width * sizeof(u32)).
+        const u32 stride = pitch / sizeof(u32);
+        std::lock_guard<std::mutex> lock(g_state->frameMutex);
         g_state->frameWidth  = width;
         g_state->frameHeight = height;
-
-        glBindTexture(GL_TEXTURE_2D, g_state->textureId);
-
-        // ares outputs ARGB8888 (little-endian BGRA in memory).
-        // We upload with GL_RGBA so each frame the fragment shader swizzles.
-        if (pitch == width) {
-            glTexSubImage2D(GL_TEXTURE_2D, 0,
-                            0, 0, (GLsizei)width, (GLsizei)height,
-                            GL_RGBA, GL_UNSIGNED_BYTE, data);
-        } else {
-            for (u32 y = 0; y < height; y++) {
-                glTexSubImage2D(GL_TEXTURE_2D, 0,
-                                0, (GLint)y, (GLsizei)width, 1,
-                                GL_RGBA, GL_UNSIGNED_BYTE, data + y * pitch);
-            }
+        g_state->frameBuffer.resize((size_t)width * height);
+        for (u32 y = 0; y < height; y++) {
+            std::memcpy(&g_state->frameBuffer[y * width],
+                        data + y * stride, width * sizeof(u32));
         }
+        g_state->frameDirty = true;
     }
 
     auto audio(ares::Node::Audio::Stream) -> void override {
@@ -393,8 +395,27 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeTick(
     JNIEnv*, jobject)
 {
     if (!g_state || !g_state->romLoaded) return;
-    if (g_state->paused.load(std::memory_order_relaxed)) return;
-    g_state->root->run();
+    if (!g_state->paused.load(std::memory_order_relaxed)) {
+        g_state->root->run();
+    }
+
+    // Upload the latest buffered frame — this runs on the GL thread; the
+    // frame itself arrived asynchronously from ares' screen worker thread.
+    if (g_state->textureId) {
+        std::lock_guard<std::mutex> lock(g_state->frameMutex);
+        if (g_state->frameDirty) {
+            g_state->frameDirty = false;
+            glBindTexture(GL_TEXTURE_2D, g_state->textureId);
+            // ares outputs ARGB8888 (little-endian BGRA in memory).
+            // We upload with GL_RGBA; the fragment shader swizzles.
+            glTexSubImage2D(GL_TEXTURE_2D, 0,
+                            0, 0,
+                            (GLsizei)g_state->frameWidth,
+                            (GLsizei)g_state->frameHeight,
+                            GL_RGBA, GL_UNSIGNED_BYTE,
+                            g_state->frameBuffer.data());
+        }
+    }
 }
 
 // Phase 4 — frame dimensions ------------------------------------------------

@@ -89,12 +89,14 @@ struct IosPlatform : ares::Platform {
     auto video(ares::Node::Video::Screen node,
                const u32* data, u32 pitch, u32 width, u32 height) -> void override {
         if (!g_ctx) return;
+        // NOTE: pitch is in BYTES (Screen::refresh passes width * sizeof(u32)).
+        const u32 stride = pitch / sizeof(u32);
         g_ctx->frameWidth  = width;
         g_ctx->frameHeight = height;
         g_ctx->frameBuffer.resize((size_t)width * height);
         for (u32 y = 0; y < height; y++) {
             std::memcpy(&g_ctx->frameBuffer[y * width],
-                        data + y * pitch, width * sizeof(u32));
+                        data + y * stride, width * sizeof(u32));
         }
     }
 
