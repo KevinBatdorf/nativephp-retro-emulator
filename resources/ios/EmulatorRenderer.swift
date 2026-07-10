@@ -48,6 +48,10 @@ final class EmulatorRenderer: UIView {
     /// Periodic battery-save flush toggle (LoadSystem config { autoSave }).
     var autoSave: Bool = true
 
+    /// Speed multiplier (0.25–4.0) applied to the tick budget; fastForward
+    /// takes precedence at 4×.
+    var speedMultiplier: Double = 1.0
+
     // MARK: - System / ROM loading
 
     /// Initialise the ares core for `system` (an ares id such as "sfc", "fc",
@@ -119,6 +123,21 @@ final class EmulatorRenderer: UIView {
     func flushSaves() {
         emuLock.lock()
         _ = ares_flush_saves(ctx)
+        emuLock.unlock()
+    }
+
+    /// Master volume (0–1) and stereo balance (−1 … +1). Safe from any thread.
+    func setAudioOptions(volume: Float, balance: Float) {
+        ares_set_audio(ctx, volume, balance)
+    }
+
+    /// Video post-processing options, serialised on emuLock.
+    func setVideoOptions(
+        luminance: Float, saturation: Float, gamma: Float,
+        colorBleed: Bool, interframeBlending: Bool
+    ) {
+        emuLock.lock()
+        ares_set_video(ctx, luminance, saturation, gamma, colorBleed, interframeBlending)
         emuLock.unlock()
     }
 
@@ -342,30 +361,53 @@ final class EmulatorRenderer: UIView {
     }
 
     private func emulationLoop() {
+        // Ticks are budgeted by wall clock against the console frame rate —
+        // an unpaced loop runs as fast as the CPU allows. 60.0988 is NTSC
+        // SNES/NES; GB/MD are within 0.6% and the resampler absorbs it.
+        let targetFps = 60.0988
+        var lastTick = DispatchTime.now()
+        var accumulator = 0.0
         var lastAutoSave = DispatchTime.now()
         while running {
-            emuLock.lock()
-            ares_tick(ctx)
-
-            // Periodic battery-save flush (30 s, ares' desktop cadence).
-            if autoSave,
-               DispatchTime.now().uptimeNanoseconds - lastAutoSave.uptimeNanoseconds
-                   >= 30_000_000_000 {
-                lastAutoSave = DispatchTime.now()
-                _ = ares_flush_saves(ctx)
+            let now = DispatchTime.now()
+            // Clamp long gaps (suspend/resume) so we don't fast-run the debt.
+            let elapsed = min(
+                Double(now.uptimeNanoseconds - lastTick.uptimeNanoseconds) / 1e9, 0.25)
+            lastTick = now
+            let speed = fastForward ? 4.0 : speedMultiplier
+            accumulator += elapsed * targetFps * speed
+            var ticks = Int(accumulator)
+            if ticks > 8 {
+                ticks = 8          // can't keep up — drop the debt, don't spiral
+                accumulator = 0
+            } else {
+                accumulator -= Double(ticks)
             }
 
-            // Copy latest frame while holding the lock — ares_get_frame reads ctx.
             var w: UInt32 = 0, h: UInt32 = 0
-            ares_get_frame(ctx, nil, 0, &w, &h)
             var pixels: [UInt32] = []
-            if w > 0 && h > 0 {
-                pixels = [UInt32](repeating: 0, count: Int(w * h))
-                pixels.withUnsafeMutableBufferPointer {
-                    _ = ares_get_frame(ctx, $0.baseAddress, $0.count, &w, &h)
+            if ticks > 0 {
+                emuLock.lock()
+                for _ in 0..<ticks { ares_tick(ctx) }
+
+                // Periodic battery-save flush (30 s, ares' desktop cadence).
+                if autoSave,
+                   DispatchTime.now().uptimeNanoseconds - lastAutoSave.uptimeNanoseconds
+                       >= 30_000_000_000 {
+                    lastAutoSave = DispatchTime.now()
+                    _ = ares_flush_saves(ctx)
                 }
+
+                // Copy latest frame while holding the lock — ares_get_frame reads ctx.
+                ares_get_frame(ctx, nil, 0, &w, &h)
+                if w > 0 && h > 0 {
+                    pixels = [UInt32](repeating: 0, count: Int(w * h))
+                    pixels.withUnsafeMutableBufferPointer {
+                        _ = ares_get_frame(ctx, $0.baseAddress, $0.count, &w, &h)
+                    }
+                }
+                emuLock.unlock()
             }
-            emuLock.unlock()
 
             if w > 0 && h > 0 {
                 metalRenderer.submitFrame(pixels, width: Int(w), height: Int(h))
@@ -380,6 +422,7 @@ final class EmulatorRenderer: UIView {
             }
 
             pollWatches()
+            usleep(2_000)  // yield — the accumulator absorbs the jitter
         }
     }
 

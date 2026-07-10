@@ -79,6 +79,25 @@ class AresCore {
     fun flushSaves(): Boolean = nativeFlushSaves()
 
     // -------------------------------------------------------------------------
+    // Phase 14 — audio / video options
+    // -------------------------------------------------------------------------
+
+    /** Master volume (0–1) and stereo balance (−1 left … +1 right). Any thread. */
+    fun setAudio(volume: Float, balance: Float) = nativeSetAudio(volume, balance)
+
+    /**
+     * Video post-processing on the ares screen node. Ranges follow ares:
+     * luminance/saturation 0–1, gamma 1.0–2.0. GL thread only.
+     */
+    fun setVideo(
+        luminance: Float,
+        saturation: Float,
+        gamma: Float,
+        colorBleed: Boolean,
+        interframeBlending: Boolean,
+    ) = nativeSetVideo(luminance, saturation, gamma, colorBleed, interframeBlending)
+
+    // -------------------------------------------------------------------------
     // Phase 4 — per-frame operations (GL thread only)
     // -------------------------------------------------------------------------
 
@@ -188,6 +207,11 @@ class AresCore {
 
     private external fun nativeLoadRom(romBytes: ByteArray, savePrefix: String?): Boolean
     private external fun nativeFlushSaves(): Boolean
+    private external fun nativeSetAudio(volume: Float, balance: Float)
+    private external fun nativeSetVideo(
+        luminance: Float, saturation: Float, gamma: Float,
+        colorBleed: Boolean, interframeBlending: Boolean,
+    )
 
     private external fun nativeTick()
     private external fun nativeGetFrameWidth(): Int

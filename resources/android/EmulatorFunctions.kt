@@ -448,19 +448,57 @@ object EmulatorFunctions {
         }
     }
 
-    /** Merge audio options (volume, balance). Stubbed — full audio control is a future phase. */
+    /**
+     * Merge audio options. volume 0–100 (default 100), balance −100 (left) …
+     * +100 (right, default 0). Applied in the native mixer.
+     */
     class SetAudio(private val activity: FragmentActivity) : BridgeFunction {
-        override fun execute(parameters: Map<String, Any>): Map<String, Any> =
-            BridgeResponse.success(mapOf("status" to "ok"))
+        override fun execute(parameters: Map<String, Any>): Map<String, Any> {
+            val (entry, err) = entry(parameters)
+            if (err != null) return err
+            @Suppress("UNCHECKED_CAST")
+            val options = parameters["options"] as? Map<String, Any> ?: emptyMap()
+            val volume  = ((options["volume"]  as? Number)?.toFloat() ?: 100f) / 100f
+            val balance = ((options["balance"] as? Number)?.toFloat() ?: 0f) / 100f
+            entry!!.renderer.setAudioOptions(volume, balance)
+            return BridgeResponse.success(mapOf("status" to "ok"))
+        }
     }
 
-    /** Merge video options (luminance, saturation, gamma, etc.). Stubbed — requires shader support. */
+    /**
+     * Merge video options — luminance/saturation 0–100, gamma 1.0–2.0,
+     * colorBleed/interframeBlending booleans, applied on the ares screen node.
+     * Options ares has no post-processing hook for (colorEmulation,
+     * deepBlackBoost, overscan, pixelAccuracy) are reported back as ignored.
+     */
     class SetVideo(private val activity: FragmentActivity) : BridgeFunction {
-        override fun execute(parameters: Map<String, Any>): Map<String, Any> =
-            BridgeResponse.success(mapOf("status" to "ok"))
+        override fun execute(parameters: Map<String, Any>): Map<String, Any> {
+            val (entry, err) = entry(parameters)
+            if (err != null) return err
+            @Suppress("UNCHECKED_CAST")
+            val options = parameters["options"] as? Map<String, Any> ?: emptyMap()
+            entry!!.renderer.queueVideoOptions(
+                luminance  = ((options["luminance"]  as? Number)?.toFloat() ?: 100f) / 100f,
+                saturation = ((options["saturation"] as? Number)?.toFloat() ?: 100f) / 100f,
+                gamma      = (options["gamma"] as? Number)?.toFloat() ?: 1.0f,
+                colorBleed = options["colorBleed"] as? Boolean ?: false,
+                interframeBlending = options["interframeBlending"] as? Boolean ?: false,
+            )
+            val ignored = options.keys.filter {
+                it in setOf("colorEmulation", "deepBlackBoost", "overscan", "pixelAccuracy")
+            }
+            return BridgeResponse.success(
+                if (ignored.isEmpty()) mapOf("status" to "ok")
+                else mapOf("status" to "ok", "ignored" to ignored)
+            )
+        }
     }
 
-    /** Merge general live options (speed, runAhead, rewind, rewindBufferSeconds). */
+    /**
+     * Merge general live options. speed (0.25–4.0) scales the tick budget.
+     * runAhead and rewind are NOT implemented in v1 — requesting a
+     * non-default value returns NOT_IMPLEMENTED rather than silently no-oping.
+     */
     class Configure(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
             val (entry, err) = entry(parameters)
@@ -468,9 +506,16 @@ object EmulatorFunctions {
 
             @Suppress("UNCHECKED_CAST")
             val options = parameters["options"] as? Map<String, Any> ?: emptyMap()
-            val speed = (options["speed"] as? Number)?.toFloat()
-            if (speed != null) {
-                entry!!.renderer.fastForward = speed >= 1.5f
+
+            if ((options["runAhead"] as? Number)?.toInt()?.takeIf { it != 0 } != null) {
+                return BridgeResponse.error("NOT_IMPLEMENTED", "runAhead is not supported in v1")
+            }
+            if (options["rewind"] as? Boolean == true) {
+                return BridgeResponse.error("NOT_IMPLEMENTED", "rewind is not supported in v1")
+            }
+
+            (options["speed"] as? Number)?.toDouble()?.let { speed ->
+                entry!!.renderer.speedMultiplier = speed.coerceIn(0.25, 4.0)
             }
 
             return BridgeResponse.success(mapOf("status" to "ok"))
@@ -494,45 +539,50 @@ object EmulatorFunctions {
         }
     }
 
-    /** Merge controller input mappings. Stubbed — hardware mappings are hardwired in EmulatorInput. */
+    /** Custom controller mappings are NOT implemented in v1 — hardware mappings are hardwired in EmulatorInput. */
     class SetInputMapping(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> =
-            BridgeResponse.success(mapOf("status" to "ok"))
+            BridgeResponse.error("NOT_IMPLEMENTED", "custom input mappings are not supported in v1")
     }
 
-    /** Enable/disable controller rumble. Stubbed. */
+    /** Rumble is NOT implemented in v1. */
     class SetRumble(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> =
-            BridgeResponse.success(mapOf("status" to "ok"))
+            BridgeResponse.error("NOT_IMPLEMENTED", "rumble is not supported in v1")
     }
 
     /**
-     * Load a librashader-compatible shader preset. Stubbed — librashader integration
-     * is a future phase. Passing null clears any active shader.
+     * Shaders (librashader) are NOT implemented in v1. Passing null/"none"
+     * (a clear) succeeds — there is never an active shader to remove.
      */
     class SetShader(private val activity: FragmentActivity) : BridgeFunction {
-        override fun execute(parameters: Map<String, Any>): Map<String, Any> =
-            BridgeResponse.success(mapOf("status" to "ok"))
-    }
-
-    /** Add a cheat code. Stubbed — ares cheat injection is a future phase. */
-    class AddCheat(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
-            val code = parameters["code"] as? String
-                ?: return BridgeResponse.error("INVALID_PARAMETERS", "code is required")
-            Log.d(TAG, "AddCheat: $code (stub — not applied to ares yet)")
-            return BridgeResponse.success(mapOf("status" to "ok", "code" to code))
+            val path = parameters["path"] as? String
+            if (path == null || path == "none") {
+                return BridgeResponse.success(mapOf("status" to "cleared"))
+            }
+            return BridgeResponse.error("NOT_IMPLEMENTED", "shaders are not supported in v1")
         }
     }
 
-    /** Remove a cheat code. Stubbed. */
+    /** Cheats are NOT implemented in v1. */
+    class AddCheat(private val activity: FragmentActivity) : BridgeFunction {
+        override fun execute(parameters: Map<String, Any>): Map<String, Any> {
+            parameters["code"] as? String
+                ?: return BridgeResponse.error("INVALID_PARAMETERS", "code is required")
+            return BridgeResponse.error("NOT_IMPLEMENTED", "cheats are not supported in v1")
+        }
+    }
+
+    /** Cheats are NOT implemented in v1. */
     class RemoveCheat(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> =
-            BridgeResponse.success(mapOf("status" to "ok"))
+            BridgeResponse.error("NOT_IMPLEMENTED", "cheats are not supported in v1")
     }
 
     /** Clear all cheat codes. Stubbed. */
     class ClearCheats(private val activity: FragmentActivity) : BridgeFunction {
+        // Clearing is idempotent and there are never active cheats in v1.
         override fun execute(parameters: Map<String, Any>): Map<String, Any> =
             BridgeResponse.success(mapOf("status" to "cleared"))
     }

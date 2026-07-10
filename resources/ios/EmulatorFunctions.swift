@@ -373,27 +373,59 @@ enum EmulatorFunctions {
         }
     }
 
-    /// Merge audio options. Stubbed — full audio control is a future phase.
+    /// Merge audio options. volume 0–100 (default 100), balance −100 … +100
+    /// (default 0). Applied in the native mixer.
     class SetAudio: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
-            BridgeResponse.success(data: ["status": "ok"])
+            guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
+            let options = parameters["options"] as? [String: Any] ?? [:]
+            let volume  = ((options["volume"]  as? NSNumber)?.floatValue ?? 100) / 100
+            let balance = ((options["balance"] as? NSNumber)?.floatValue ?? 0) / 100
+            renderer.setAudioOptions(volume: volume, balance: balance)
+            return BridgeResponse.success(data: ["status": "ok"])
         }
     }
 
-    /// Merge video options. Stubbed — requires shader support.
+    /// Merge video options — luminance/saturation 0–100, gamma 1.0–2.0,
+    /// colorBleed/interframeBlending booleans, applied on the ares screen node.
+    /// Options ares has no post-processing hook for are reported back as ignored.
     class SetVideo: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
-            BridgeResponse.success(data: ["status": "ok"])
+            guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
+            let options = parameters["options"] as? [String: Any] ?? [:]
+            renderer.setVideoOptions(
+                luminance:  ((options["luminance"]  as? NSNumber)?.floatValue ?? 100) / 100,
+                saturation: ((options["saturation"] as? NSNumber)?.floatValue ?? 100) / 100,
+                gamma:      (options["gamma"] as? NSNumber)?.floatValue ?? 1.0,
+                colorBleed: options["colorBleed"] as? Bool ?? false,
+                interframeBlending: options["interframeBlending"] as? Bool ?? false
+            )
+            let ignored = options.keys.filter {
+                ["colorEmulation", "deepBlackBoost", "overscan", "pixelAccuracy"].contains($0)
+            }
+            return ignored.isEmpty
+                ? BridgeResponse.success(data: ["status": "ok"])
+                : BridgeResponse.success(data: ["status": "ok", "ignored": ignored])
         }
     }
 
-    /// Merge general live options (speed, runAhead, rewind, rewindBufferSeconds).
+    /// Merge general live options. speed (0.25–4.0) scales the tick budget.
+    /// runAhead and rewind are NOT implemented in v1 — requesting a
+    /// non-default value returns NOT_IMPLEMENTED rather than silently no-oping.
     class Configure: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
-            if let options = parameters["options"] as? [String: Any],
-               let speed = (options["speed"] as? NSNumber)?.doubleValue {
-                renderer.fastForward = speed >= 1.5
+            let options = parameters["options"] as? [String: Any] ?? [:]
+
+            if let runAhead = (options["runAhead"] as? NSNumber)?.intValue, runAhead != 0 {
+                return BridgeResponse.error(code: "NOT_IMPLEMENTED", message: "runAhead is not supported in v1")
+            }
+            if options["rewind"] as? Bool == true {
+                return BridgeResponse.error(code: "NOT_IMPLEMENTED", message: "rewind is not supported in v1")
+            }
+
+            if let speed = (options["speed"] as? NSNumber)?.doubleValue {
+                renderer.speedMultiplier = min(max(speed, 0.25), 4.0)
             }
             return BridgeResponse.success(data: ["status": "ok"])
         }
@@ -416,45 +448,51 @@ enum EmulatorFunctions {
         }
     }
 
-    /// Merge controller input mappings. Stubbed — hardware mappings are hardwired.
+    /// Custom controller mappings are NOT implemented in v1 — hardware
+    /// mappings are hardwired in EmulatorInput.
     class SetInputMapping: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
-            BridgeResponse.success(data: ["status": "ok"])
+            BridgeResponse.error(code: "NOT_IMPLEMENTED", message: "custom input mappings are not supported in v1")
         }
     }
 
-    /// Enable/disable rumble. Stubbed.
+    /// Rumble is NOT implemented in v1.
     class SetRumble: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
-            BridgeResponse.success(data: ["status": "ok"])
+            BridgeResponse.error(code: "NOT_IMPLEMENTED", message: "rumble is not supported in v1")
         }
     }
 
-    /// Load a librashader shader preset. Stubbed — librashader integration is a future phase.
+    /// Shaders (librashader) are NOT implemented in v1. Passing nil/"none"
+    /// (a clear) succeeds — there is never an active shader to remove.
     class SetShader: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
-            BridgeResponse.success(data: ["status": "ok"])
+            let path = parameters["path"] as? String
+            if path == nil || path == "none" {
+                return BridgeResponse.success(data: ["status": "cleared"])
+            }
+            return BridgeResponse.error(code: "NOT_IMPLEMENTED", message: "shaders are not supported in v1")
         }
     }
 
-    /// Add a cheat code. Stubbed — ares cheat injection is a future phase.
+    /// Cheats are NOT implemented in v1.
     class AddCheat: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
-            guard let code = parameters["code"] as? String else {
+            guard parameters["code"] as? String != nil else {
                 return BridgeResponse.error(code: "INVALID_PARAMETERS", message: "code is required")
             }
-            return BridgeResponse.success(data: ["status": "ok", "code": code])
+            return BridgeResponse.error(code: "NOT_IMPLEMENTED", message: "cheats are not supported in v1")
         }
     }
 
-    /// Remove a cheat code. Stubbed.
+    /// Cheats are NOT implemented in v1.
     class RemoveCheat: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
-            BridgeResponse.success(data: ["status": "ok"])
+            BridgeResponse.error(code: "NOT_IMPLEMENTED", message: "cheats are not supported in v1")
         }
     }
 
-    /// Clear all cheat codes. Stubbed.
+    /// Clearing is idempotent and there are never active cheats in v1.
     class ClearCheats: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             BridgeResponse.success(data: ["status": "cleared"])

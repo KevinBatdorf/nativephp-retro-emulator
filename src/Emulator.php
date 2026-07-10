@@ -277,6 +277,10 @@ class Emulator
     /**
      * Merge general live options. All keys merge into current state.
      *
+     * speed (0.25–4.0) is live. runAhead and rewind are NOT implemented in
+     * v1 — requesting a non-default value returns a NOT_IMPLEMENTED bridge
+     * error.
+     *
      * @param  array{speed?: float, runAhead?: int, rewind?: bool, rewindBufferSeconds?: int}  $options
      */
     public function configure(array $options): static
@@ -323,6 +327,9 @@ class Emulator
     /**
      * Merge controller input mappings for a port.
      *
+     * NOT implemented in v1 — hardware mappings are fixed per system; the
+     * bridge returns a NOT_IMPLEMENTED error.
+     *
      * @param  array<string, string>  $mappings
      */
     public function setInputMapping(int $port, array $mappings): static
@@ -338,6 +345,7 @@ class Emulator
         return $this;
     }
 
+    /** NOT implemented in v1 — the bridge returns a NOT_IMPLEMENTED error. */
     public function setRumble(bool $enabled): static
     {
         if (function_exists('nativephp_call')) {
@@ -352,7 +360,9 @@ class Emulator
 
     /**
      * Load a librashader-compatible shader preset by path. Pass null to clear.
-     * The same .slangp file compiles to GLSL on Android and Metal on iOS.
+     *
+     * NOT implemented in v1 — loading a shader returns a NOT_IMPLEMENTED
+     * bridge error (clearing succeeds; there is never an active shader).
      */
     public function setShader(?string $path): static
     {
@@ -366,6 +376,7 @@ class Emulator
         return $this;
     }
 
+    /** Cheats are NOT implemented in v1 — the bridge returns a NOT_IMPLEMENTED error. */
     public function addCheat(string $code, string $description = ''): static
     {
         if (function_exists('nativephp_call')) {

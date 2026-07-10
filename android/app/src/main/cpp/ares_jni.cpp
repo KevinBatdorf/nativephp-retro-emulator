@@ -71,6 +71,12 @@ struct EmulatorState {
     // Phase 7 — emulator control.
     std::atomic<bool> paused {false};
 
+    // Phase 14 — master audio volume (0–1) and balance (−1 left … +1 right),
+    // applied when mixing into the ring buffer. Atomic: set from bridge
+    // threads, read on the emu thread.
+    std::atomic<float> volume  {1.0f};
+    std::atomic<float> balance {0.0f};
+
     // ROM metadata set during nativeLoadRom; read-only afterward.
     std::string romRegion;
 
@@ -160,6 +166,11 @@ struct AndroidPlatform : ares::Platform {
 
             float l = (float)std::max(-1.0, std::min(+1.0, samples[0]));
             float r = (float)std::max(-1.0, std::min(+1.0, samples[1]));
+
+            const float volume  = g_state->volume.load(std::memory_order_relaxed);
+            const float balance = g_state->balance.load(std::memory_order_relaxed);
+            l *= volume * (balance > 0.0f ? 1.0f - balance : 1.0f);
+            r *= volume * (balance < 0.0f ? 1.0f + balance : 1.0f);
 
             std::lock_guard<std::mutex> lock(g_state->audioMutex);
             g_state->audioRingBuffer.push_back(l);
@@ -633,6 +644,42 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetPortsJson(JNIEnv* 
 {
     if (!g_state || !g_state->systemLoaded) return env->NewStringUTF("[]");
     return env->NewStringUTF(g_state->portsJson.c_str());
+}
+
+// Phase 14 — audio / video options ---------------------------------------------
+
+/**
+ * Master volume (0–1) and stereo balance (−1 left … +1 right), applied when
+ * mixing into the audio ring buffer. Safe from any thread.
+ */
+JNIEXPORT void JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetAudio(
+    JNIEnv*, jobject, jfloat volume, jfloat balance)
+{
+    if (!g_state) return;
+    g_state->volume.store(std::clamp((float)volume, 0.0f, 1.0f),
+                          std::memory_order_relaxed);
+    g_state->balance.store(std::clamp((float)balance, -1.0f, 1.0f),
+                           std::memory_order_relaxed);
+}
+
+/**
+ * Video post-processing options on the ares screen node. Ranges follow ares:
+ * luminance/saturation 0–1, gamma 1.0–2.0. Must run on the GL thread.
+ */
+JNIEXPORT void JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetVideo(
+    JNIEnv*, jobject, jfloat luminance, jfloat saturation, jfloat gamma,
+    jboolean colorBleed, jboolean interframeBlending)
+{
+    if (!g_state || !g_state->systemLoaded) return;
+    for (auto& screen : g_state->root->find<ares::Node::Video::Screen>()) {
+        screen->setLuminance((f64)luminance);
+        screen->setSaturation((f64)saturation);
+        screen->setGamma((f64)gamma);
+        screen->setColorBleed(colorBleed);
+        screen->setInterframeBlending(interframeBlending);
+    }
 }
 
 // Phase 13 — battery-save flush ------------------------------------------------

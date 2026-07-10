@@ -53,6 +53,11 @@ struct AresContext {
 
     std::atomic<bool> paused {false};
 
+    // Master audio volume (0–1) and balance (−1 left … +1 right), applied
+    // when mixing into the ring buffer.
+    std::atomic<float> volume  {1.0f};
+    std::atomic<float> balance {0.0f};
+
     // ROM metadata (set once during ares_load_rom, read-only afterward).
     std::string romRegion;
     std::string portsJson;
@@ -126,6 +131,10 @@ struct IosPlatform : ares::Platform {
             }
             float l = (float)std::max(-1.0, std::min(+1.0, samples[0]));
             float r = (float)std::max(-1.0, std::min(+1.0, samples[1]));
+            const float volume  = g_ctx->volume.load(std::memory_order_relaxed);
+            const float balance = g_ctx->balance.load(std::memory_order_relaxed);
+            l *= volume * (balance > 0.0f ? 1.0f - balance : 1.0f);
+            r *= volume * (balance < 0.0f ? 1.0f + balance : 1.0f);
             std::lock_guard<std::mutex> lock(g_ctx->audioMutex);
             g_ctx->audioRingBuffer.push_back(l);
             g_ctx->audioRingBuffer.push_back(r);
@@ -299,6 +308,24 @@ bool ares_load_rom(AresContext* ctx, const uint8_t* rom, size_t rom_size,
     ctx->root->power(false);
     ctx->romLoaded = true;
     return true;
+}
+
+void ares_set_audio(AresContext* ctx, float volume, float balance) {
+    if (!ctx) return;
+    ctx->volume.store(std::clamp(volume, 0.0f, 1.0f), std::memory_order_relaxed);
+    ctx->balance.store(std::clamp(balance, -1.0f, 1.0f), std::memory_order_relaxed);
+}
+
+void ares_set_video(AresContext* ctx, float luminance, float saturation,
+                    float gamma, bool color_bleed, bool interframe_blending) {
+    if (!ctx || !ctx->systemLoaded) return;
+    for (auto& screen : ctx->root->find<ares::Node::Video::Screen>()) {
+        screen->setLuminance((f64)luminance);
+        screen->setSaturation((f64)saturation);
+        screen->setGamma((f64)gamma);
+        screen->setColorBleed(color_bleed);
+        screen->setInterframeBlending(interframe_blending);
+    }
 }
 
 bool ares_flush_saves(AresContext* ctx) {

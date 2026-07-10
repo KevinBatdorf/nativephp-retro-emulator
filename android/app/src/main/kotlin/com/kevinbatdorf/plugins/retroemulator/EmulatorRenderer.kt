@@ -102,8 +102,10 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
     private data class WatchEntry(val address: Int, val length: Int, var lastValue: Int)
     private val watchedAddresses = ConcurrentHashMap<Int, WatchEntry>()
 
-    // Phase 7 — fast-forward / speed.
+    // Phase 7/14 — fast-forward and speed multiplier. fastForward takes
+    // precedence (4×); otherwise speedMultiplier scales the tick budget.
     @Volatile var fastForward: Boolean = false
+    @Volatile var speedMultiplier: Double = 1.0
 
     // Frame pacing — the GL thread draws at the display's refresh rate (120 Hz
     // on some devices) and GLSurfaceView redraws opportunistically, so ticks
@@ -231,7 +233,7 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
             val elapsed = ((now - lastTickNanos) / 1e9).coerceAtMost(0.25)
             lastTickNanos = now
 
-            val speed = if (fastForward) 4.0 else 1.0
+            val speed = if (fastForward) 4.0 else speedMultiplier
             tickAccumulator += elapsed * TARGET_FPS * speed
             var ticks = tickAccumulator.toInt()
             if (ticks > MAX_TICKS_PER_FRAME) {
@@ -532,6 +534,24 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
             Log.e(TAG, "Screenshot failed: ${e.message}")
             null
         }
+    }
+
+    // ---------------------------------------------------------------------------
+    // Phase 14 — audio / video options
+    // ---------------------------------------------------------------------------
+
+    /** Master volume (0–1) and stereo balance (−1 … +1). Safe from any thread. */
+    fun setAudioOptions(volume: Float, balance: Float) = core.setAudio(volume, balance)
+
+    /** Queue video post-processing options onto the GL thread. */
+    fun queueVideoOptions(
+        luminance: Float,
+        saturation: Float,
+        gamma: Float,
+        colorBleed: Boolean,
+        interframeBlending: Boolean,
+    ) {
+        queueEvent { core.setVideo(luminance, saturation, gamma, colorBleed, interframeBlending) }
     }
 
     /**
