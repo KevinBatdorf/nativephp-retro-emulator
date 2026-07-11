@@ -64,28 +64,11 @@ object EmulatorFunctions {
     private fun surface(parameters: Map<String, Any>): String =
         parameters["surface"] as? String ?: "main"
 
-    /**
-     * BridgeRouter builds the parameters map with JSONObject.get(), so nested
-     * values arrive as org.json JSONArray/JSONObject — a plain `as? List`/
-     * `as? Map` cast silently nulls them out.
-     */
-    private fun fromJson(value: Any?): Any? = when (value) {
-        JSONObject.NULL -> null
-        is JSONObject -> value.keys().asSequence().associateWith { fromJson(value.get(it)) }
-        is JSONArray -> (0 until value.length()).map { fromJson(value.get(it)) }
-        else -> value
-    }
-
     private fun paramList(parameters: Map<String, Any>, key: String): List<Any?>? =
-        (fromJson(parameters[key]) as? List<*>)
+        BridgeParams.list(parameters, key)
 
-    private fun paramMap(parameters: Map<String, Any>, key: String): Map<String, Any>? {
-        val map = fromJson(parameters[key]) as? Map<*, *> ?: return null
-
-        return map.entries
-            .filter { it.key is String && it.value != null }
-            .associate { it.key as String to it.value as Any }
-    }
+    private fun paramMap(parameters: Map<String, Any>, key: String): Map<String, Any>? =
+        BridgeParams.map(parameters, key)
 
     private fun entry(parameters: Map<String, Any>): Pair<SurfaceEntry?, Map<String, Any>?> {
         val name = surface(parameters)

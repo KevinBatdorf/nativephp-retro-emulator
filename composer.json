@@ -40,7 +40,10 @@
         }
     },
     "scripts": {
-        "test": "pest"
+        "test": [
+            "bash scripts/check_artifacts.sh",
+            "pest"
+        ]
     },
     "config": {
         "allow-plugins": {
