@@ -34,6 +34,10 @@ object EmulatorSurface {
                     (context as? FragmentActivity)?.let { activity ->
                         EmulatorFunctions.registerSurface(name, renderer, activity)
                     }
+
+                    // Gamepad events go to the focused view; claim focus so
+                    // hardware input works without any host-side wiring.
+                    renderer.requestFocus()
                 }
             },
             onRelease = { renderer ->

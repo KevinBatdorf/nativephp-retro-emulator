@@ -5,6 +5,8 @@ import android.graphics.Bitmap
 import android.opengl.GLES20
 import android.opengl.GLSurfaceView
 import android.util.Log
+import android.view.KeyEvent
+import android.view.MotionEvent
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -46,6 +48,29 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
     private val core  = AresCore()
     private val audio = EmulatorAudio(core)
     val input = EmulatorInput(core)
+
+    init {
+        // Hardware gamepads deliver key/motion events to the focused view.
+        // In an EDGE host nothing else routes them here (the plugin's old
+        // test activity overrode dispatchKeyEvent; hosts don't).
+        isFocusable = true
+        isFocusableInTouchMode = true
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean =
+        input.onKeyEvent(event) || super.onKeyDown(keyCode, event)
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean =
+        input.onKeyEvent(event) || super.onKeyUp(keyCode, event)
+
+    override fun onGenericMotionEvent(event: MotionEvent): Boolean =
+        input.onMotionEvent(event) || super.onGenericMotionEvent(event)
+
+    override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
+        super.onWindowFocusChanged(hasWindowFocus)
+        // Buttons held across a focus loss would otherwise stay pressed forever.
+        if (!hasWindowFocus) input.reset()
+    }
 
     // Pending commands posted from the main thread and consumed on the GL thread.
     @Volatile var pendingSystemId: String?    = null
