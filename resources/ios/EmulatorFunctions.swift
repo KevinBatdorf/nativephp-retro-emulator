@@ -196,11 +196,17 @@ enum EmulatorFunctions {
             }
 
             // Battery saves live in app support, keyed by surface + ROM basename.
-            let saveDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-                .appendingPathComponent("saves/\(surfaceName(parameters))", isDirectory: true)
-            try? FileManager.default.createDirectory(at: saveDir, withIntermediateDirectories: true)
-            let base = URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent
-            let savePrefix = saveDir.appendingPathComponent(base).path
+            // A savePath parameter overrides the prefix entirely.
+            let savePrefix: String
+            if let savePath = parameters["savePath"] as? String {
+                savePrefix = savePath
+            } else {
+                let saveDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                    .appendingPathComponent("saves/\(surfaceName(parameters))", isDirectory: true)
+                try? FileManager.default.createDirectory(at: saveDir, withIntermediateDirectories: true)
+                let base = URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent
+                savePrefix = saveDir.appendingPathComponent(base).path
+            }
 
             guard renderer.loadRom(romData, path: path, savePrefix: savePrefix) else {
                 return BridgeResponse.error(code: "LOAD_FAILED", message: "ares_load_rom rejected \(path)")

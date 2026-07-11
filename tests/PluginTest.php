@@ -1,6 +1,11 @@
 <?php
 
+use KevinBatdorf\RetroEmulator\Buttons\FcButton;
+use KevinBatdorf\RetroEmulator\Buttons\GbButton;
+use KevinBatdorf\RetroEmulator\Buttons\MdButton;
+use KevinBatdorf\RetroEmulator\Buttons\SfcButton;
 use KevinBatdorf\RetroEmulator\Components\Emulator as EmulatorComponent;
+use KevinBatdorf\RetroEmulator\Config\SfcConfig;
 use KevinBatdorf\RetroEmulator\Elements\Emulator as EmulatorElement;
 use KevinBatdorf\RetroEmulator\Emulator;
 use KevinBatdorf\RetroEmulator\Events\EmulatorError;
@@ -11,6 +16,8 @@ use KevinBatdorf\RetroEmulator\Events\EmulatorStopped;
 use KevinBatdorf\RetroEmulator\Events\MemoryChanged;
 use KevinBatdorf\RetroEmulator\Events\MemoryRead;
 use KevinBatdorf\RetroEmulator\RetroEmulatorServiceProvider;
+use KevinBatdorf\RetroEmulator\Status;
+use KevinBatdorf\RetroEmulator\System;
 
 // ---------------------------------------------------------------------------
 // nativephp.json manifest
@@ -143,25 +150,25 @@ describe('Emulator class', function () {
         expect(class_exists(Emulator::class))->toBeTrue();
     });
 
-    it('getSystems is static', function () {
-        $ref = new ReflectionMethod(Emulator::class, 'getSystems');
+    it('systems is static', function () {
+        $ref = new ReflectionMethod(Emulator::class, 'systems');
         expect($ref->isStatic())->toBeTrue();
     });
 
     it('has all instance methods', function () {
         $methods = [
-            'boot', 'loadSystem', 'loadRom',
+            'surface', 'loadSystem', 'loadRom',
             'pause', 'resume', 'stop',
-            'stateSave', 'stateLoad', 'undoStateSave', 'undoStateLoad',
+            'saveState', 'loadState', 'undoSaveState', 'undoLoadState',
             'readMemory', 'readMemoryAsync', 'writeMemory',
             'watchMemory', 'unwatchMemory', 'clearMemoryWatches',
-            'setAudio', 'setVideo', 'configure', 'setSystemOptions',
-            'fastForward', 'toggleRewind',
+            'setVolume', 'setBalance', 'setVideo', 'configure', 'setSystemOptions',
+            'fastForward', 'toggleRewind', 'setSpeed',
             'setInputMapping', 'setRumble',
             'setShader',
             'addCheat', 'removeCheat', 'clearCheats',
-            'pressButton', 'releaseButton', 'setButtons',
-            'screenshot', 'getStatus', 'getPorts', 'getRegion',
+            'pressButton', 'releaseButton', 'pressButtons',
+            'screenshot', 'status', 'ports', 'region',
         ];
 
         foreach ($methods as $method) {
@@ -170,20 +177,20 @@ describe('Emulator class', function () {
         }
     });
 
-    it('boot returns an Emulator instance', function () {
-        expect((new Emulator)->boot('main'))->toBeInstanceOf(Emulator::class);
+    it('surface returns an Emulator instance', function () {
+        expect(Emulator::surface('main'))->toBeInstanceOf(Emulator::class);
     });
 
-    it('getStatus returns stopped without native runtime', function () {
-        expect((new Emulator)->getStatus())->toBe('stopped');
+    it('status returns Stopped without native runtime', function () {
+        expect(Emulator::surface()->status())->toBe(Status::Stopped);
     });
 
     it('readMemory returns empty array without native runtime', function () {
-        expect((new Emulator)->readMemory(0x7E0010))->toBe([]);
+        expect(Emulator::surface()->readMemory(0x7E0010))->toBe([]);
     });
 
-    it('getSystems returns empty array without native runtime', function () {
-        expect(Emulator::getSystems())->toBe([]);
+    it('systems returns empty array without native runtime', function () {
+        expect(Emulator::systems())->toBe([]);
     });
 });
 
@@ -294,19 +301,19 @@ describe('Bridge response parsing', function () {
         $GLOBALS['__nativephp_mock'] = [];
     });
 
-    it('getStatus parses running from native response', function () {
+    it('status parses running from native response', function () {
         $GLOBALS['__nativephp_mock']['Emulator.GetStatus'] = '{"status":"running"}';
-        expect((new Emulator)->getStatus())->toBe('running');
+        expect(Emulator::surface()->status())->toBe(Status::Running);
     });
 
-    it('getStatus parses paused from native response', function () {
+    it('status parses paused from native response', function () {
         $GLOBALS['__nativephp_mock']['Emulator.GetStatus'] = '{"status":"paused"}';
-        expect((new Emulator)->getStatus())->toBe('paused');
+        expect(Emulator::surface()->status())->toBe(Status::Paused);
     });
 
-    it('getStatus returns stopped when native returns no status key', function () {
+    it('status returns Stopped when native returns no status key', function () {
         $GLOBALS['__nativephp_mock']['Emulator.GetStatus'] = '{}';
-        expect((new Emulator)->getStatus())->toBe('stopped');
+        expect(Emulator::surface()->status())->toBe(Status::Stopped);
     });
 
     it('readMemory parses bytes from native response', function () {
@@ -319,37 +326,37 @@ describe('Bridge response parsing', function () {
         expect((new Emulator)->readMemory(0x7E0010))->toBe([]);
     });
 
-    it('getRegion parses region from native response', function () {
+    it('region parses region from native response', function () {
         $GLOBALS['__nativephp_mock']['Emulator.GetRegion'] = '{"region":"NTSC"}';
-        expect((new Emulator)->getRegion())->toBe('NTSC');
+        expect(Emulator::surface()->region())->toBe('NTSC');
     });
 
-    it('getRegion returns empty string when native returns no region key', function () {
+    it('region returns empty string when native returns no region key', function () {
         $GLOBALS['__nativephp_mock']['Emulator.GetRegion'] = '{}';
-        expect((new Emulator)->getRegion())->toBe('');
+        expect(Emulator::surface()->region())->toBe('');
     });
 
-    it('getPorts parses ports array from native response', function () {
+    it('ports parses ports array from native response', function () {
         $GLOBALS['__nativephp_mock']['Emulator.GetPorts'] = json_encode([
             'ports' => [
                 ['port' => 1, 'buttons' => ['B', 'Y', 'Select', 'Start', 'Up', 'Down', 'Left', 'Right', 'A', 'X', 'L', 'R']],
             ],
         ]);
-        $ports = (new Emulator)->getPorts();
+        $ports = Emulator::surface()->ports();
         expect($ports)->toHaveCount(1);
         expect($ports[0]['port'])->toBe(1);
         expect($ports[0]['buttons'])->toContain('B');
         expect($ports[0]['buttons'])->toContain('Start');
     });
 
-    it('getSystems parses systems array from native response', function () {
+    it('systems parses systems array from native response', function () {
         $GLOBALS['__nativephp_mock']['Emulator.GetSystems'] = json_encode([
             'systems' => [
                 ['id' => 'sfc', 'name' => 'SNES / Super Famicom', 'biosRequired' => false, 'stable' => true],
                 ['id' => 'ps1', 'name' => 'PlayStation', 'biosRequired' => true, 'stable' => false],
             ],
         ]);
-        $systems = Emulator::getSystems();
+        $systems = Emulator::systems();
         expect($systems)->toHaveCount(2);
         expect($systems[0]['id'])->toBe('sfc');
         expect($systems[0]['biosRequired'])->toBeFalse();
@@ -358,9 +365,9 @@ describe('Bridge response parsing', function () {
         expect($systems[1]['stable'])->toBeFalse();
     });
 
-    it('boot returns Emulator instance after successful native call', function () {
+    it('surface returns Emulator instance after successful native call', function () {
         $GLOBALS['__nativephp_mock']['Emulator.Boot'] = '{"status":"bound","surface":"main"}';
-        $emu = (new Emulator)->boot('main');
+        $emu = Emulator::surface('main');
         expect($emu)->toBeInstanceOf(Emulator::class);
     });
 
@@ -372,37 +379,37 @@ describe('Bridge response parsing', function () {
 
     it('pause returns fluent instance', function () {
         $GLOBALS['__nativephp_mock']['Emulator.Pause'] = '{"status":"paused"}';
-        $emu = (new Emulator)->pause();
+        $emu = Emulator::surface()->pause();
         expect($emu)->toBeInstanceOf(Emulator::class);
     });
 
     it('watchMemory returns fluent instance', function () {
         $GLOBALS['__nativephp_mock']['Emulator.WatchMemory'] = '{"status":"watching","count":2}';
-        $emu = (new Emulator)->watchMemory([0x7E0010, ['address' => 0x7EF340, 'length' => 2]]);
+        $emu = Emulator::surface()->watchMemory(0x7E0010)->watchMemory(0x7EF340, length: 2);
         expect($emu)->toBeInstanceOf(Emulator::class);
     });
 
     it('fastForward returns fluent instance', function () {
         $GLOBALS['__nativephp_mock']['Emulator.FastForward'] = '{"status":"fast"}';
-        $emu = (new Emulator)->fastForward(true);
+        $emu = Emulator::surface()->fastForward(true);
         expect($emu)->toBeInstanceOf(Emulator::class);
     });
 
     it('toggleRewind returns fluent instance', function () {
         $GLOBALS['__nativephp_mock']['Emulator.ToggleRewind'] = '{"status":"rewinding"}';
-        $emu = (new Emulator)->toggleRewind();
+        $emu = Emulator::surface()->toggleRewind();
         expect($emu)->toBeInstanceOf(Emulator::class);
     });
 
-    it('stateSave returns fluent instance', function () {
+    it('saveState returns fluent instance', function () {
         $GLOBALS['__nativephp_mock']['Emulator.StateSave'] = '{"status":"saved","slot":1}';
-        $emu = (new Emulator)->stateSave(1);
+        $emu = Emulator::surface()->saveState(1);
         expect($emu)->toBeInstanceOf(Emulator::class);
     });
 
-    it('stateLoad returns fluent instance', function () {
+    it('loadState returns fluent instance', function () {
         $GLOBALS['__nativephp_mock']['Emulator.StateLoad'] = '{"status":"loaded","slot":1}';
-        $emu = (new Emulator)->stateLoad(1);
+        $emu = Emulator::surface()->loadState(1);
         expect($emu)->toBeInstanceOf(Emulator::class);
     });
 });
@@ -466,4 +473,103 @@ describe('loadCheatsFile', function () {
     it('throws when the file is not readable', function () {
         (new Emulator)->loadCheatsFile('/nonexistent/path.cheats.bml');
     })->throws(RuntimeException::class);
+});
+
+// ---------------------------------------------------------------------------
+// Typed layer — enums, config classes, button drift vs the native registry
+// ---------------------------------------------------------------------------
+
+describe('Typed layer', function () {
+    beforeEach(function () {
+        $GLOBALS['__nativephp_calls'] = [];
+    });
+
+    it('button enums match the native registry', function (string $systemId, string $enumClass) {
+        $registry = file_get_contents(dirname(__DIR__).'/native/system_registry.cpp');
+
+        preg_match(
+            '/\.id\s*=\s*"'.$systemId.'".*?\.buttons\s*=\s*\{(.*?)\n\s*\},/s',
+            $registry,
+            $m,
+        );
+        expect($m)->not->toBe([], "no .buttons block found for '{$systemId}'");
+
+        preg_match_all('/\{"([^"]+)",/', $m[1], $names);
+        $native = $names[1];
+        $enum = array_map(fn ($case) => $case->value, $enumClass::cases());
+
+        sort($native);
+        sort($enum);
+        expect($enum)->toBe($native);
+    })->with([
+        ['sfc', SfcButton::class],
+        ['fc', FcButton::class],
+        ['gb', GbButton::class],
+        ['md', MdButton::class],
+    ]);
+
+    it('system enum matches the ids GetSystems reports', function () {
+        $kotlin = file_get_contents(dirname(__DIR__).'/resources/android/EmulatorFunctions.kt');
+
+        preg_match_all('/system\("([a-z0-9]+)",\s*"/', $kotlin, $m);
+        $native = $m[1];
+        $enum = array_map(fn ($case) => $case->value, System::cases());
+
+        sort($native);
+        sort($enum);
+        expect($enum)->toBe($native);
+    });
+
+    it('config classes send only explicitly set options', function () {
+        $config = new SfcConfig(autoSave: false, rewind: true);
+
+        expect($config->toArray())->toBe(['autoSave' => false, 'rewind' => true]);
+    });
+
+    it('loadSystem accepts a System enum and a config object', function () {
+        Emulator::surface()->loadSystem(
+            System::Sfc,
+            new SfcConfig(rewind: true, rewindBufferSeconds: 30),
+        );
+
+        $call = collect($GLOBALS['__nativephp_calls'])->firstWhere('function', 'Emulator.LoadSystem');
+        expect($call['payload']['system'])->toBe('sfc');
+        expect($call['payload']['config'])->toBe(['rewind' => true, 'rewindBufferSeconds' => 30]);
+    });
+
+    it('pressButtons sends an atomic all-pressed state map', function () {
+        Emulator::surface()->pressButtons(1, [
+            SfcButton::Up,
+            SfcButton::A,
+        ]);
+
+        $call = collect($GLOBALS['__nativephp_calls'])->firstWhere('function', 'Emulator.SetButtons');
+        expect($call['payload']['state'])->toBe(['Up' => true, 'A' => true]);
+    });
+
+    it('watchMemory sends a single address entry with length', function () {
+        Emulator::surface()->watchMemory(0x7EF340, length: 2);
+
+        $call = collect($GLOBALS['__nativephp_calls'])->firstWhere('function', 'Emulator.WatchMemory');
+        expect($call['payload']['addresses'])->toBe([['address' => 0x7EF340, 'length' => 2]]);
+    });
+
+    it('loadRom omits savePath unless given', function () {
+        Emulator::surface()->loadRom('/roms/a.sfc');
+        Emulator::surface()->loadRom('/roms/b.sfc', savePath: '/saves/b');
+
+        $calls = array_values(array_filter(
+            $GLOBALS['__nativephp_calls'],
+            fn (array $call) => $call['function'] === 'Emulator.LoadRom',
+        ));
+        expect($calls[0]['payload'])->not->toHaveKey('savePath');
+        expect($calls[1]['payload']['savePath'])->toBe('/saves/b');
+    });
+
+    it('setVideo sends only the named options', function () {
+        Emulator::surface()->setVideo(luminance: 90, colorBleed: true);
+
+        $call = collect($GLOBALS['__nativephp_calls'])->firstWhere('function', 'Emulator.SetVideo');
+        expect($call['payload']['options'])->toBe(['luminance' => 90, 'colorBleed' => true]);
+    });
 });

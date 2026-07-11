@@ -5,8 +5,8 @@ namespace KevinBatdorf\RetroEmulator\Facades;
 use Illuminate\Support\Facades\Facade;
 
 /**
- * @method static \KevinBatdorf\RetroEmulator\Emulator boot(string $surface)
- * @method static array<int, array{id: string, name: string, biosRequired: bool, stable: bool}> getSystems()
+ * @method static \KevinBatdorf\RetroEmulator\Emulator surface(string $name = 'main')
+ * @method static array<int, array{id: string, name: string, biosRequired: bool, stable: bool, supported: bool}> systems()
  *
  * @see \KevinBatdorf\RetroEmulator\Emulator
  */

@@ -248,9 +248,12 @@ object EmulatorFunctions {
                 val system   = entry!!.renderer.loadedSystem.ifEmpty { "sfc" }
                 // Battery saves live in app storage, keyed by surface + ROM
                 // basename: "<filesDir>/saves/<surface>/<rom>.save.ram", etc.
-                val saveDir = File(activity.filesDir, "saves/${surface(parameters)}")
-                saveDir.mkdirs()
-                val savePrefix = File(saveDir, file.nameWithoutExtension).absolutePath
+                // A savePath parameter overrides the prefix entirely.
+                val savePrefix = (parameters["savePath"] as? String) ?: run {
+                    val saveDir = File(activity.filesDir, "saves/${surface(parameters)}")
+                    saveDir.mkdirs()
+                    File(saveDir, file.nameWithoutExtension).absolutePath
+                }
                 entry.renderer.queueRomLoad(romBytes, system, path, savePrefix)
                 Log.d(TAG, "LoadRom: queued $path (${romBytes.size} bytes, saves=$savePrefix)")
                 BridgeResponse.success(mapOf("status" to "loading", "path" to path))

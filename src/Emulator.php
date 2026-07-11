@@ -2,21 +2,24 @@
 
 namespace KevinBatdorf\RetroEmulator;
 
+use KevinBatdorf\RetroEmulator\Config\SystemConfig;
+
 class Emulator
 {
     private string $surface = 'main';
 
     /**
-     * Bind to the named surface declared by <native:emulator name="..." />.
-     * Returns a new instance so multiple surfaces can coexist.
+     * Runtime handle for the named surface declared by
+     * <native:emulator name="..." />. Returns a new instance so multiple
+     * surfaces can coexist.
      */
-    public function boot(string $surface): static
+    public static function surface(string $name = 'main'): static
     {
         $instance = new static;
-        $instance->surface = $surface;
+        $instance->surface = $name;
 
         if (function_exists('nativephp_call')) {
-            nativephp_call('Emulator.Boot', json_encode(['surface' => $surface]));
+            nativephp_call('Emulator.Boot', json_encode(['surface' => $name]));
         }
 
         return $instance;
@@ -26,8 +29,7 @@ class Emulator
      * Initialise ares core for a system with system-level config.
      * This is the expensive call; call once per system, then swap ROMs via loadRom().
      *
-     * @param  array{
-     *     renderer?: 'opengl'|'vulkan',
+     * @param  SystemConfig|array{
      *     biosPath?: string|null,
      *     autoSave?: bool,
      *     runAhead?: int,
@@ -36,13 +38,13 @@ class Emulator
      *     speed?: float,
      * }  $config
      */
-    public function loadSystem(string $system, array $config = []): static
+    public function loadSystem(System|string $system, SystemConfig|array $config = []): static
     {
         if (function_exists('nativephp_call')) {
             nativephp_call('Emulator.LoadSystem', json_encode([
                 'surface' => $this->surface,
-                'system' => $system,
-                'config' => $config,
+                'system' => $system instanceof System ? $system->value : $system,
+                'config' => $config instanceof SystemConfig ? $config->toArray() : $config,
             ]));
         }
 
@@ -53,14 +55,18 @@ class Emulator
      * Start emulation with ROM at the given path.
      * Fire-and-forget — status goes to 'loading'; EmulatorStarted fires on first frame.
      * Call again without reinitialising the system to swap ROMs.
+     *
+     * @param  string|null  $savePath  Battery-save file prefix; null keeps the
+     *                                 default per-surface location in app storage.
      */
-    public function loadRom(string $path): static
+    public function loadRom(string $path, ?string $savePath = null): static
     {
         if (function_exists('nativephp_call')) {
-            nativephp_call('Emulator.LoadRom', json_encode([
+            nativephp_call('Emulator.LoadRom', json_encode(array_filter([
                 'surface' => $this->surface,
                 'path' => $path,
-            ]));
+                'savePath' => $savePath,
+            ], fn ($value) => $value !== null)));
         }
 
         return $this;
@@ -93,7 +99,7 @@ class Emulator
         return $this;
     }
 
-    public function stateSave(int|string $slot = 1): static
+    public function saveState(int|string $slot = 1): static
     {
         if (function_exists('nativephp_call')) {
             nativephp_call('Emulator.StateSave', json_encode([
@@ -105,7 +111,7 @@ class Emulator
         return $this;
     }
 
-    public function stateLoad(int|string $slot = 1): static
+    public function loadState(int|string $slot = 1): static
     {
         if (function_exists('nativephp_call')) {
             nativephp_call('Emulator.StateLoad', json_encode([
@@ -117,7 +123,7 @@ class Emulator
         return $this;
     }
 
-    public function undoStateSave(): static
+    public function undoSaveState(): static
     {
         if (function_exists('nativephp_call')) {
             nativephp_call('Emulator.UndoStateSave', json_encode(['surface' => $this->surface]));
@@ -126,7 +132,7 @@ class Emulator
         return $this;
     }
 
-    public function undoStateLoad(): static
+    public function undoLoadState(): static
     {
         if (function_exists('nativephp_call')) {
             nativephp_call('Emulator.UndoStateLoad', json_encode(['surface' => $this->surface]));
@@ -192,33 +198,28 @@ class Emulator
     }
 
     /**
-     * Register/merge address watches. Native checks every frame and fires
+     * Register/merge an address watch. Native checks every frame and fires
      * MemoryChanged only when the value at that address actually changes.
-     * Watches are cleared automatically when loadRom() is called.
-     *
-     * @param  array<int|array{address: int, length: int}>  $addresses
+     * Chain per address; watches survive ROM swaps until cleared explicitly.
      */
-    public function watchMemory(array $addresses): static
+    public function watchMemory(int $address, int $length = 1): static
     {
         if (function_exists('nativephp_call')) {
             nativephp_call('Emulator.WatchMemory', json_encode([
                 'surface' => $this->surface,
-                'addresses' => $addresses,
+                'addresses' => [['address' => $address, 'length' => $length]],
             ]));
         }
 
         return $this;
     }
 
-    /**
-     * @param  int[]  $addresses
-     */
-    public function unwatchMemory(array $addresses): static
+    public function unwatchMemory(int $address): static
     {
         if (function_exists('nativephp_call')) {
             nativephp_call('Emulator.UnwatchMemory', json_encode([
                 'surface' => $this->surface,
-                'addresses' => $addresses,
+                'addresses' => [$address],
             ]));
         }
 
@@ -234,10 +235,20 @@ class Emulator
         return $this;
     }
 
-    /**
-     * @param  array{volume?: int, balance?: int}  $options
-     */
-    public function setAudio(array $options): static
+    /** Per-emulator gain (0–100), not device volume. */
+    public function setVolume(int $volume): static
+    {
+        return $this->setAudio(['volume' => $volume]);
+    }
+
+    /** Stereo balance: −100 full left … +100 full right. */
+    public function setBalance(int $balance): static
+    {
+        return $this->setAudio(['balance' => $balance]);
+    }
+
+    /** @param  array{volume?: int, balance?: int}  $options */
+    private function setAudio(array $options): static
     {
         if (function_exists('nativephp_call')) {
             nativephp_call('Emulator.SetAudio', json_encode([
@@ -250,20 +261,26 @@ class Emulator
     }
 
     /**
-     * @param  array{
-     *     luminance?: int,
-     *     saturation?: int,
-     *     gamma?: float,
-     *     colorEmulation?: bool,
-     *     colorBleed?: bool,
-     *     deepBlackBoost?: bool,
-     *     interframeBlending?: bool,
-     *     overscan?: bool,
-     *     pixelAccuracy?: bool,
-     * }  $options
+     * Merge video post-processing options. Options ares has no hook for
+     * (colorEmulation, deepBlackBoost, overscan, pixelAccuracy) are reported
+     * back as ignored by the bridge.
      */
-    public function setVideo(array $options): static
-    {
+    public function setVideo(
+        ?int $luminance = null,
+        ?int $saturation = null,
+        ?float $gamma = null,
+        ?bool $colorBleed = null,
+        ?bool $interframeBlending = null,
+        ?bool $colorEmulation = null,
+        ?bool $deepBlackBoost = null,
+        ?bool $overscan = null,
+        ?bool $pixelAccuracy = null,
+    ): static {
+        $options = array_filter(compact(
+            'luminance', 'saturation', 'gamma', 'colorBleed', 'interframeBlending',
+            'colorEmulation', 'deepBlackBoost', 'overscan', 'pixelAccuracy',
+        ), fn ($value) => $value !== null);
+
         if (function_exists('nativephp_call')) {
             nativephp_call('Emulator.SetVideo', json_encode([
                 'surface' => $this->surface,
@@ -326,6 +343,12 @@ class Emulator
         }
 
         return $this;
+    }
+
+    /** Live emulation speed (0.25–4.0); 1.0 is native speed. */
+    public function setSpeed(float $speed): static
+    {
+        return $this->configure(['speed' => $speed]);
     }
 
     public function fastForward(bool $enabled): static
@@ -497,26 +520,26 @@ class Emulator
         return $cheats;
     }
 
-    public function pressButton(int $port, string $button): static
+    public function pressButton(int $port, \BackedEnum|string $button): static
     {
         if (function_exists('nativephp_call')) {
             nativephp_call('Emulator.PressButton', json_encode([
                 'surface' => $this->surface,
                 'port' => $port,
-                'button' => $button,
+                'button' => $button instanceof \BackedEnum ? $button->value : $button,
             ]));
         }
 
         return $this;
     }
 
-    public function releaseButton(int $port, string $button): static
+    public function releaseButton(int $port, \BackedEnum|string $button): static
     {
         if (function_exists('nativephp_call')) {
             nativephp_call('Emulator.ReleaseButton', json_encode([
                 'surface' => $this->surface,
                 'port' => $port,
-                'button' => $button,
+                'button' => $button instanceof \BackedEnum ? $button->value : $button,
             ]));
         }
 
@@ -524,12 +547,18 @@ class Emulator
     }
 
     /**
-     * Atomically merge multiple button states into the input state map.
+     * Press multiple buttons atomically — all land in the same input frame,
+     * unlike chained pressButton() calls. Release them individually.
      *
-     * @param  array<string, bool>  $state
+     * @param  array<\BackedEnum|string>  $buttons
      */
-    public function setButtons(int $port, array $state): static
+    public function pressButtons(int $port, array $buttons): static
     {
+        $state = [];
+        foreach ($buttons as $button) {
+            $state[$button instanceof \BackedEnum ? $button->value : $button] = true;
+        }
+
         if (function_exists('nativephp_call')) {
             nativephp_call('Emulator.SetButtons', json_encode([
                 'surface' => $this->surface,
@@ -541,17 +570,23 @@ class Emulator
         return $this;
     }
 
-    public function screenshot(): static
+    /** Capture the current frame as a PNG; returns its path, or null on failure. */
+    public function screenshot(): ?string
     {
         if (function_exists('nativephp_call')) {
-            nativephp_call('Emulator.Screenshot', json_encode(['surface' => $this->surface]));
+            $result = nativephp_call('Emulator.Screenshot', json_encode(['surface' => $this->surface]));
+
+            if ($result) {
+                $decoded = json_decode($result, true);
+
+                return $decoded['path'] ?? null;
+            }
         }
 
-        return $this;
+        return null;
     }
 
-    /** @return 'stopped'|'loading'|'running'|'paused' */
-    public function getStatus(): string
+    public function status(): Status
     {
         if (function_exists('nativephp_call')) {
             $result = nativephp_call('Emulator.GetStatus', json_encode(['surface' => $this->surface]));
@@ -559,14 +594,15 @@ class Emulator
             if ($result) {
                 $decoded = json_decode($result, true);
 
-                return $decoded['status'] ?? 'stopped';
+                return Status::tryFrom($decoded['status'] ?? '') ?? Status::Stopped;
             }
         }
 
-        return 'stopped';
+        return Status::Stopped;
     }
 
-    public function getPorts(): array
+    /** @return array<int, array{port: int, buttons: string[]}> */
+    public function ports(): array
     {
         if (function_exists('nativephp_call')) {
             $result = nativephp_call('Emulator.GetPorts', json_encode(['surface' => $this->surface]));
@@ -581,7 +617,7 @@ class Emulator
         return [];
     }
 
-    public function getRegion(): string
+    public function region(): string
     {
         if (function_exists('nativephp_call')) {
             $result = nativephp_call('Emulator.GetRegion', json_encode(['surface' => $this->surface]));
@@ -597,11 +633,12 @@ class Emulator
     }
 
     /**
-     * Return all supported systems as rich objects.
+     * Return all ares systems as rich objects. `supported` reflects whether
+     * the system's core is compiled into this build's native library.
      *
-     * @return array<int, array{id: string, name: string, biosRequired: bool, stable: bool}>
+     * @return array<int, array{id: string, name: string, biosRequired: bool, stable: bool, supported: bool}>
      */
-    public static function getSystems(): array
+    public static function systems(): array
     {
         if (function_exists('nativephp_call')) {
             $result = nativephp_call('Emulator.GetSystems', '{}');
