@@ -499,10 +499,19 @@ enum EmulatorFunctions {
         }
     }
 
-    /// Rumble is NOT implemented in v1.
+    /// Gate rumble forwarding: while enabled, motor state published by the
+    /// emulated hardware (SFC Rumble Gamepad, GB MBC5 rumble carts, N64
+    /// Rumble Pak) drives CoreHaptics. The response reports whether this
+    /// device supports haptics at all.
     class SetRumble: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
-            BridgeResponse.error(code: "NOT_IMPLEMENTED", message: "rumble is not supported in v1")
+            guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
+            let enabled = parameters["enabled"] as? Bool ?? false
+            renderer.setRumbleEnabled(enabled)
+            return BridgeResponse.success(data: [
+                "status": enabled ? "enabled" : "disabled",
+                "hasVibrator": renderer.hasHaptics,
+            ])
         }
     }
 

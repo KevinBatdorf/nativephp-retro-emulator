@@ -97,6 +97,12 @@ struct AresContext {
     // Suppressed while fast-forwarding or rewinding, like desktop.
     bool runAheadEnabled = false;
     std::atomic<bool> fastForwardActive {false};
+
+    // Rumble — cores publish motor state via Platform::input() on rumble
+    // nodes (SFC Rumble Gamepad, GB MBC5 carts, N64 Rumble Pak). Packed
+    // strong<<16|weak; the host polls per frame and drives its haptics.
+    std::atomic<bool> rumbleEnabled {false};
+    std::atomic<uint32_t> rumbleState {0};
 };
 
 static AresContext* g_ctx      = nullptr;
@@ -190,6 +196,13 @@ struct IosPlatform : ares::Platform {
                     return;
                 }
             }
+            return;
+        }
+        if (auto rumble = node->cast<ares::Node::Input::Rumble>()) {
+            const uint32_t state = g_ctx->rumbleEnabled.load(std::memory_order_relaxed)
+                ? (uint32_t)rumble->strongValue() << 16 | rumble->weakValue()
+                : 0u;
+            g_ctx->rumbleState.store(state, std::memory_order_relaxed);
         }
     }
 
@@ -490,6 +503,16 @@ void ares_set_run_ahead(AresContext* ctx, bool enabled) {
 
 void ares_set_fast_forward(AresContext* ctx, bool active) {
     if (ctx) ctx->fastForwardActive.store(active, std::memory_order_relaxed);
+}
+
+void ares_set_rumble_enabled(AresContext* ctx, bool enabled) {
+    if (!ctx) return;
+    ctx->rumbleEnabled.store(enabled, std::memory_order_relaxed);
+    if (!enabled) ctx->rumbleState.store(0, std::memory_order_relaxed);
+}
+
+uint32_t ares_get_rumble_state(AresContext* ctx) {
+    return ctx ? ctx->rumbleState.load(std::memory_order_relaxed) : 0;
 }
 
 void ares_set_input(AresContext* ctx, int port, uint32_t bits) {

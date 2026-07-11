@@ -263,7 +263,9 @@
     "service_provider": "KevinBatdorf\\RetroEmulator\\RetroEmulatorServiceProvider",
     "android": {
         "min_version": 21,
-        "permissions": [],
+        "permissions": [
+            "android.permission.VIBRATE"
+        ],
         "repositories": [],
         "dependencies": {
             "implementation": []

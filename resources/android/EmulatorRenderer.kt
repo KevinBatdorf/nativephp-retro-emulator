@@ -4,6 +4,10 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.opengl.GLES20
 import android.opengl.GLSurfaceView
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.util.Log
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -33,6 +37,10 @@ private const val MAX_TICKS_PER_FRAME = 8
 // Battery-save auto-flush cadence — matches ares' desktop 30 s auto-save.
 private const val AUTOSAVE_INTERVAL_NANOS = 30_000_000_000L
 
+// Motors publish on/off transitions, not a sustain signal — a long one-shot
+// stands in for "held" and the zero transition cancels it.
+private const val RUMBLE_ONESHOT_MS = 10_000L
+
 /**
  * A [GLSurfaceView] that drives the ares emulator and blits each frame via a
  * full-screen textured quad. All ares calls happen on the GL thread so libco
@@ -48,6 +56,15 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
     private val core  = AresCore()
     private val audio = EmulatorAudio(core)
     val input = EmulatorInput(core)
+
+    private val vibrator: Vibrator? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
+    } else {
+        @Suppress("DEPRECATION")
+        context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+    }
+
+    @Volatile private var lastRumbleState = 0
 
     init {
         // Hardware gamepads deliver key/motion events to the focused view.
@@ -334,6 +351,13 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
                 req.latch.countDown()
             }
 
+            // --- Drive the vibrator from ares' motor state ---
+            val rumble = core.rumbleState()
+            if (rumble != lastRumbleState) {
+                lastRumbleState = rumble
+                applyRumble(rumble)
+            }
+
             // --- Check memory watches and fire MemoryChanged events ---
             if (watchedAddresses.isNotEmpty()) {
                 for (entry in watchedAddresses.values) {
@@ -416,6 +440,9 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
     fun pauseEmulation() {
         core.pause()
         queueEvent { core.flushSaves() }
+        // A held one-shot would keep buzzing while the game is frozen.
+        lastRumbleState = 0
+        vibrator?.cancel()
         currentStatus = "paused"
         eventListener?.onPaused()
     }
@@ -435,6 +462,8 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
         watchedAddresses.clear()
         input.reset()
         audio.stop()
+        lastRumbleState = 0
+        vibrator?.cancel()
         queueEvent {
             core.flushSaves()
             core.destroy()
@@ -457,6 +486,8 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
         watchedAddresses.clear()
         input.reset()
         audio.stop()
+        lastRumbleState = 0
+        vibrator?.cancel()
         queueEvent {
             core.flushSaves()
             core.destroy()
@@ -563,6 +594,39 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
 
     /** Enable/disable one-frame run-ahead (see [AresCore.setRunAhead]). Fire-and-forget. */
     fun queueSetRunAhead(enabled: Boolean) = queueEvent { core.setRunAhead(enabled) }
+
+    // ---------------------------------------------------------------------------
+    // Rumble — ares motor state polled per frame, driven onto the device vibrator
+    // ---------------------------------------------------------------------------
+
+    /** Gate rumble forwarding from ares' motor nodes. Safe from any thread. */
+    fun setRumbleEnabled(enabled: Boolean) {
+        core.setRumbleEnabled(enabled)
+        if (!enabled) {
+            lastRumbleState = 0
+            vibrator?.cancel()
+        }
+    }
+
+    /** Whether this device can rumble at all. */
+    fun hasVibrator(): Boolean = vibrator?.hasVibrator() == true
+
+    private fun applyRumble(state: Int) {
+        val v = vibrator ?: return
+        if (state == 0) {
+            v.cancel()
+            return
+        }
+        val strong = (state ushr 16) and 0xFFFF
+        val weak = state and 0xFFFF
+        val amplitude = (maxOf(strong, weak) * 255 / 65535).coerceIn(1, 255)
+        val effect = if (v.hasAmplitudeControl()) {
+            VibrationEffect.createOneShot(RUMBLE_ONESHOT_MS, amplitude)
+        } else {
+            VibrationEffect.createOneShot(RUMBLE_ONESHOT_MS, VibrationEffect.DEFAULT_AMPLITUDE)
+        }
+        v.vibrate(effect)
+    }
 
     /** Run [block] on the GL thread and block the caller for the result (≤2 s). */
     private fun <T> syncOnGlThread(block: () -> T): T? {

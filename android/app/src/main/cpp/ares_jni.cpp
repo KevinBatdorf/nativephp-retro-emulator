@@ -120,6 +120,12 @@ struct EmulatorState {
     // GL thread only; suppressed while fast-forwarding or rewinding, like desktop.
     bool runAheadEnabled = false;
     std::atomic<bool> fastForwardActive {false};
+
+    // Rumble — cores publish motor state via Platform::input() on rumble
+    // nodes (SFC Rumble Gamepad, GB MBC5 carts, N64 Rumble Pak). Packed
+    // strong<<16|weak; the host polls per frame and drives its vibrator.
+    std::atomic<bool> rumbleEnabled {false};
+    std::atomic<uint32_t> rumbleState {0};
 };
 
 static EmulatorState* g_state = nullptr;
@@ -229,6 +235,13 @@ struct AndroidPlatform : ares::Platform {
                     return;
                 }
             }
+            return;
+        }
+        if (auto rumble = node->cast<ares::Node::Input::Rumble>()) {
+            const u32 state = g_state->rumbleEnabled.load(std::memory_order_relaxed)
+                ? (u32)rumble->strongValue() << 16 | rumble->weakValue()
+                : 0u;
+            g_state->rumbleState.store(state, std::memory_order_relaxed);
         }
     }
 
@@ -828,6 +841,23 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetFastForward(
     JNIEnv*, jobject, jboolean active)
 {
     if (g_state) g_state->fastForwardActive.store(active, std::memory_order_relaxed);
+}
+
+/** Gate rumble forwarding. Disabling zeroes the motor state. Any thread. */
+JNIEXPORT void JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetRumbleEnabled(
+    JNIEnv*, jobject, jboolean enabled)
+{
+    if (!g_state) return;
+    g_state->rumbleEnabled.store(enabled, std::memory_order_relaxed);
+    if (!enabled) g_state->rumbleState.store(0, std::memory_order_relaxed);
+}
+
+/** Current motor state, packed strong<<16|weak (u16 each). Any thread. */
+JNIEXPORT jint JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetRumbleState(JNIEnv*, jobject)
+{
+    return g_state ? (jint)g_state->rumbleState.load(std::memory_order_relaxed) : 0;
 }
 
 // Phase 7 — region / ports --------------------------------------------------

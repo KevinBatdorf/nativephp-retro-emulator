@@ -208,6 +208,16 @@ class AresCore {
     fun setFastForward(active: Boolean) = nativeSetFastForward(active)
 
     // -------------------------------------------------------------------------
+    // Rumble (any thread)
+    // -------------------------------------------------------------------------
+
+    /** Gate rumble forwarding from ares' motor nodes. Disabling zeroes the state. */
+    fun setRumbleEnabled(enabled: Boolean) = nativeSetRumbleEnabled(enabled)
+
+    /** Current motor state, packed strong shl 16 or weak (u16 each; 0 = off). */
+    fun rumbleState(): Int = nativeGetRumbleState()
+
+    // -------------------------------------------------------------------------
     // Cheats (GL thread only — the cheat map is read inside tick())
     // -------------------------------------------------------------------------
 
@@ -284,6 +294,9 @@ class AresCore {
     private external fun nativeToggleRewind(): Int
     private external fun nativeSetRunAhead(enabled: Boolean)
     private external fun nativeSetFastForward(active: Boolean)
+
+    private external fun nativeSetRumbleEnabled(enabled: Boolean)
+    private external fun nativeGetRumbleState(): Int
 
     private external fun nativeGetRegion(): String
     private external fun nativeGetPortsJson(): String

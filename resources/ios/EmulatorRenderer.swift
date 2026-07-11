@@ -1,6 +1,7 @@
 import UIKit
 import Metal
 import MetalKit
+import CoreHaptics
 import RetroEmulator
 
 /// Callbacks the renderer raises as the emulator changes state. `EmulatorFunctions`
@@ -167,6 +168,69 @@ final class EmulatorRenderer: UIView {
             ares_write_memory(ctx, address, $0.baseAddress, Int32(bytes.count))
         }
         emuLock.unlock()
+    }
+
+    // MARK: - Rumble
+
+    private var hapticEngine: CHHapticEngine?
+    private var lastRumbleState: UInt32 = 0
+
+    /// Gate rumble forwarding from ares' motor nodes. Safe from any thread.
+    func setRumbleEnabled(_ enabled: Bool) {
+        emuLock.lock()
+        ares_set_rumble_enabled(ctx, enabled)
+        emuLock.unlock()
+        if !enabled {
+            lastRumbleState = 0
+            hapticEngine?.stop()
+        }
+    }
+
+    /// Whether this device can rumble at all.
+    var hasHaptics: Bool { CHHapticEngine.capabilitiesForHardware().supportsHaptics }
+
+    /// Called from the emulation loop when the packed motor state changes.
+    /// Motors publish on/off transitions — a long continuous event stands in
+    /// for "held" and the zero transition stops the engine.
+    private func applyRumble(_ state: UInt32) {
+        guard hasHaptics else { return }
+        if state == 0 {
+            hapticEngine?.stop()
+            return
+        }
+        let strong = Float((state >> 16) & 0xFFFF) / 65535.0
+        let weak = Float(state & 0xFFFF) / 65535.0
+        let intensity = max(strong, weak)
+        do {
+            if hapticEngine == nil {
+                hapticEngine = try CHHapticEngine()
+                hapticEngine?.resetHandler = { [weak self] in self?.hapticEngine = nil }
+            }
+            guard let engine = hapticEngine else { return }
+            try engine.start()
+            let event = CHHapticEvent(
+                eventType: .hapticContinuous,
+                parameters: [
+                    CHHapticEventParameter(parameterID: .hapticIntensity, value: intensity),
+                    CHHapticEventParameter(parameterID: .hapticSharpness, value: strong >= weak ? 0.3 : 0.7),
+                ],
+                relativeTime: 0,
+                duration: 10
+            )
+            let player = try engine.makePlayer(with: CHHapticPattern(events: [event], parameters: []))
+            try player.start(atTime: CHHapticTimeImmediate)
+        } catch {
+            // Haptics are best-effort — a failed engine start drops this pulse.
+        }
+    }
+
+    /// Poll the packed motor state (atomic native-side; no lock needed).
+    func pollRumble() {
+        let state = ares_get_rumble_state(ctx)
+        if state != lastRumbleState {
+            lastRumbleState = state
+            applyRumble(state)
+        }
     }
 
     // MARK: - Rewind / run-ahead
@@ -457,6 +521,8 @@ final class EmulatorRenderer: UIView {
                     }
                 }
                 emuLock.unlock()
+
+                pollRumble()
             }
 
             if w > 0 && h > 0 {

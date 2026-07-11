@@ -608,10 +608,23 @@ object EmulatorFunctions {
             BridgeResponse.error("NOT_IMPLEMENTED", "custom input mappings are not supported in v1")
     }
 
-    /** Rumble is NOT implemented in v1. */
+    /**
+     * Gate rumble forwarding: while enabled, motor state published by the
+     * emulated hardware (SFC Rumble Gamepad, GB MBC5 rumble carts, N64
+     * Rumble Pak) drives the device vibrator. The response reports whether
+     * this device can rumble at all.
+     */
     class SetRumble(private val activity: FragmentActivity) : BridgeFunction {
-        override fun execute(parameters: Map<String, Any>): Map<String, Any> =
-            BridgeResponse.error("NOT_IMPLEMENTED", "rumble is not supported in v1")
+        override fun execute(parameters: Map<String, Any>): Map<String, Any> {
+            val (entry, err) = entry(parameters)
+            if (err != null) return err
+            val enabled = parameters["enabled"] as? Boolean ?: false
+            entry!!.renderer.setRumbleEnabled(enabled)
+            return BridgeResponse.success(mapOf(
+                "status" to if (enabled) "enabled" else "disabled",
+                "hasVibrator" to entry.renderer.hasVibrator(),
+            ))
+        }
     }
 
     /**

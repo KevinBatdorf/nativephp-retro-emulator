@@ -8,7 +8,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FAIL=0
 
 decls() {
-    grep -E '^\s*(bool|void|int|size_t|const char\*|AresContext\*)\s+ares_' "$1" | sed 's/\s\+/ /g' | sort
+    grep -E '^\s*(bool|void|int|size_t|uint32_t|const char\*|AresContext\*)\s+ares_' "$1" | sed 's/\s\+/ /g' | sort
 }
 
 SRC="$ROOT/ios/ares_ios_api.h"

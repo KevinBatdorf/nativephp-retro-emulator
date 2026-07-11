@@ -110,6 +110,16 @@ void ares_set_run_ahead(AresContext* ctx, bool enabled);
 // Mirror of the host fast-forward flag — suppresses run-ahead.  Any thread.
 void ares_set_fast_forward(AresContext* ctx, bool active);
 
+// Rumble — cores publish motor state (SFC Rumble Gamepad, GB MBC5 rumble
+// carts, N64 Rumble Pak); the host polls per frame and drives its haptics.
+// Any thread. ---------------------------------------------------------------
+
+// Gate rumble forwarding.  Disabling zeroes the motor state.
+void ares_set_rumble_enabled(AresContext* ctx, bool enabled);
+
+// Current motor state, packed strong<<16|weak (u16 each; 0 = off).
+uint32_t ares_get_rumble_state(AresContext* ctx);
+
 // Cheats — ares' raw format: hex "ADDR:VALUE" pairs joined with '+'
 // (e.g. "7E0010:01+7E0011:FF").  The value overrides every CPU read of the
 // address while active.  Cheats clear automatically when a new ROM loads.

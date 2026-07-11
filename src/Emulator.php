@@ -361,7 +361,13 @@ class Emulator
         return $this;
     }
 
-    /** NOT implemented in v1 — the bridge returns a NOT_IMPLEMENTED error. */
+    /**
+     * Gate rumble forwarding: while enabled, motor state published by the
+     * emulated hardware (SFC Rumble Gamepad, GB MBC5 rumble carts, N64
+     * Rumble Pak) drives the device vibrator/haptics. The bridge response
+     * reports hasVibrator so apps can hide their rumble toggle on devices
+     * without a motor.
+     */
     public function setRumble(bool $enabled): static
     {
         if (function_exists('nativephp_call')) {
