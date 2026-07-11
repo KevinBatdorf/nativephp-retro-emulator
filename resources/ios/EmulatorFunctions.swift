@@ -475,27 +475,45 @@ enum EmulatorFunctions {
         }
     }
 
-    /// Cheats are NOT implemented in v1.
+    /// Register a cheat in ares' raw format: hex "ADDR:VALUE" pairs joined
+    /// with '+' (e.g. "7E0010:01+7E0011:FF"). The value overrides every CPU
+    /// read of the address while active. Re-adding a code replaces it; cheats
+    /// clear automatically when a new ROM loads. Game Genie / GameShark
+    /// formats are not parsed (not supported upstream in ares).
     class AddCheat: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
-            guard parameters["code"] as? String != nil else {
+            guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
+            guard let code = parameters["code"] as? String else {
                 return BridgeResponse.error(code: "INVALID_PARAMETERS", message: "code is required")
             }
-            return BridgeResponse.error(code: "NOT_IMPLEMENTED", message: "cheats are not supported in v1")
+            guard renderer.addCheat(code: code) else {
+                return BridgeResponse.error(
+                    code: "INVALID_CHEAT",
+                    message: "No valid ADDR:VALUE pairs in '\(code)' — expected hex pairs joined with '+'"
+                )
+            }
+            return BridgeResponse.success(data: ["status": "added", "code": code])
         }
     }
 
-    /// Cheats are NOT implemented in v1.
+    /// Remove a cheat by its exact code string. Removing an inactive code is not an error.
     class RemoveCheat: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
-            BridgeResponse.error(code: "NOT_IMPLEMENTED", message: "cheats are not supported in v1")
+            guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
+            guard let code = parameters["code"] as? String else {
+                return BridgeResponse.error(code: "INVALID_PARAMETERS", message: "code is required")
+            }
+            let removed = renderer.removeCheat(code: code)
+            return BridgeResponse.success(data: ["status": removed ? "removed" : "not_found", "code": code])
         }
     }
 
-    /// Clearing is idempotent and there are never active cheats in v1.
+    /// Deactivate all cheats. Idempotent.
     class ClearCheats: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
-            BridgeResponse.success(data: ["status": "cleared"])
+            guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
+            renderer.clearCheats()
+            return BridgeResponse.success(data: ["status": "cleared"])
         }
     }
 

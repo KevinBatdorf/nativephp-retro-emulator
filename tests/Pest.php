@@ -19,13 +19,19 @@ uses()->in('.');
 |
 | Existing tests that do NOT set a mock entry receive null, which triggers
 | the graceful fallback in each Emulator method — so they continue to pass.
+|
+| Every call is also appended to $GLOBALS['__nativephp_calls'] (decoded
+| payload included) so tests can assert on outgoing bridge traffic.
 */
 
 if (! function_exists('nativephp_call')) {
     $GLOBALS['__nativephp_mock'] = [];
+    $GLOBALS['__nativephp_calls'] = [];
 
     function nativephp_call(string $function, string $payload): ?string
     {
+        $GLOBALS['__nativephp_calls'][] = ['function' => $function, 'payload' => json_decode($payload, true)];
+
         return $GLOBALS['__nativephp_mock'][$function] ?? null;
     }
 }

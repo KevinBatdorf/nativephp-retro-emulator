@@ -90,6 +90,20 @@ int  ares_read_memory(AresContext* ctx, uint32_t address, uint8_t* out, int leng
 void ares_write_memory(AresContext* ctx, uint32_t address,
                        const uint8_t* bytes, int length);
 
+// Cheats — ares' raw format: hex "ADDR:VALUE" pairs joined with '+'
+// (e.g. "7E0010:01+7E0011:FF").  The value overrides every CPU read of the
+// address while active.  Cheats clear automatically when a new ROM loads.
+// Emulation thread only (the cheat map is read inside ares_tick). ------------
+
+// Register (or replace) a cheat under its exact code string.
+// Returns false when no valid ADDR:VALUE pair parses.
+bool ares_add_cheat(AresContext* ctx, const char* code);
+
+// Remove a cheat by exact code string.  Returns false when it wasn't active.
+bool ares_remove_cheat(AresContext* ctx, const char* code);
+
+void ares_clear_cheats(AresContext* ctx);
+
 // Metadata --------------------------------------------------------------------
 
 const char* ares_get_region(AresContext* ctx);     // "NTSC", "PAL", or ""

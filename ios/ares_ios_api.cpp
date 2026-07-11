@@ -4,13 +4,16 @@
 
 #include "system_registry.hpp"
 #include "save_io.hpp"
+#include "cheat_parse.hpp"
 
 #include <algorithm>
 #include <atomic>
 #include <cstdio>
 #include <cstring>
+#include <map>
 #include <mutex>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 // ---------------------------------------------------------------------------
@@ -64,6 +67,20 @@ struct AresContext {
 
     // Battery-save location ("<prefix>.save.ram", …); empty disables persistence.
     std::string savePrefix;
+
+    // Cheats — every ctx access is serialized by the Swift-side emuLock, so
+    // the emulation loop never reads these while a bridge call mutates them.
+    // `cheats` keeps per-code pairs so ares_remove_cheat(code) works;
+    // `cheatLookup` is the merged map the per-read hot path consults.
+    std::map<std::string, std::map<uint32_t, uint32_t>> cheats;
+    std::unordered_map<uint32_t, uint32_t> cheatLookup;
+
+    auto rebuildCheatLookup() -> void {
+        cheatLookup.clear();
+        for (auto& [code, pairs] : cheats) {
+            for (auto& [addr, value] : pairs) cheatLookup[addr] = value;
+        }
+    }
 };
 
 static AresContext* g_ctx      = nullptr;
@@ -158,6 +175,15 @@ struct IosPlatform : ares::Platform {
                 }
             }
         }
+    }
+
+    // Consulted by the cores on every CPU bus read — the empty() check keeps
+    // the no-cheat hot path to a single branch.
+    auto cheat(u32 address) -> maybe<u32> override {
+        if (!g_ctx || g_ctx->cheatLookup.empty()) return nothing;
+        auto it = g_ctx->cheatLookup.find(address);
+        if (it != g_ctx->cheatLookup.end()) return it->second;
+        return nothing;
     }
 };
 
@@ -305,9 +331,36 @@ bool ares_load_rom(AresContext* ctx, const uint8_t* rom, size_t rom_size,
     cartridgeSlot->allocate();
     cartridgeSlot->connect();
 
+    // Cheat addresses are game knowledge — stale codes applied to a new ROM
+    // would corrupt it unpredictably.
+    ctx->cheats.clear();
+    ctx->cheatLookup.clear();
+
     ctx->root->power(false);
     ctx->romLoaded = true;
     return true;
+}
+
+bool ares_add_cheat(AresContext* ctx, const char* code) {
+    if (!ctx || !code) return false;
+    auto pairs = CheatParse::parse(code);
+    if (pairs.empty()) return false;
+    ctx->cheats[code] = std::move(pairs);
+    ctx->rebuildCheatLookup();
+    return true;
+}
+
+bool ares_remove_cheat(AresContext* ctx, const char* code) {
+    if (!ctx || !code) return false;
+    bool removed = ctx->cheats.erase(code) > 0;
+    if (removed) ctx->rebuildCheatLookup();
+    return removed;
+}
+
+void ares_clear_cheats(AresContext* ctx) {
+    if (!ctx) return;
+    ctx->cheats.clear();
+    ctx->cheatLookup.clear();
 }
 
 void ares_set_audio(AresContext* ctx, float volume, float balance) {

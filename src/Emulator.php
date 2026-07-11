@@ -376,7 +376,13 @@ class Emulator
         return $this;
     }
 
-    /** Cheats are NOT implemented in v1 — the bridge returns a NOT_IMPLEMENTED error. */
+    /**
+     * Register a cheat in ares' raw format: hex "ADDR:VALUE" pairs joined with
+     * '+' (e.g. "7E0010:01+7E0011:FF"). The value overrides every CPU read of
+     * the address while active. Re-adding a code replaces it; cheats clear
+     * automatically when a new ROM loads. Game Genie / GameShark codes are not
+     * parsed (unsupported upstream in ares) — convert them first.
+     */
     public function addCheat(string $code, string $description = ''): static
     {
         if (function_exists('nativephp_call')) {
@@ -409,6 +415,64 @@ class Emulator
         }
 
         return $this;
+    }
+
+    /**
+     * Register every enabled cheat from a desktop-ares .cheats.bml file, so
+     * cheat lists are interchangeable with desktop ares. Disabled or codeless
+     * entries are skipped.
+     *
+     * @throws \RuntimeException When the file cannot be read.
+     */
+    public function loadCheatsFile(string $path): static
+    {
+        if (! is_readable($path)) {
+            throw new \RuntimeException("Cheats file not readable: {$path}");
+        }
+
+        foreach ($this->parseCheatsBml((string) file_get_contents($path)) as $cheat) {
+            $this->addCheat($cheat['code'], $cheat['description']);
+        }
+
+        return $this;
+    }
+
+    /**
+     * Parse desktop-ares .cheats.bml content: top-level `cheat` nodes with
+     * indented `description:` / `code:` / `enabled:` children.
+     *
+     * @return list<array{code: string, description: string}>
+     */
+    private function parseCheatsBml(string $bml): array
+    {
+        $cheats = [];
+        $current = null;
+
+        $flush = function () use (&$cheats, &$current): void {
+            if ($current && $current['enabled'] && $current['code'] !== '') {
+                $cheats[] = ['code' => $current['code'], 'description' => $current['description']];
+            }
+            $current = null;
+        };
+
+        foreach (preg_split('/\r?\n/', $bml) as $line) {
+            if (trim($line) === 'cheat') {
+                $flush();
+                $current = ['description' => '', 'code' => '', 'enabled' => false];
+
+                continue;
+            }
+
+            if ($current === null || ! preg_match('/^\s+(description|code|enabled):\s*(.*)$/', $line, $m)) {
+                continue;
+            }
+
+            $current[$m[1]] = $m[1] === 'enabled' ? $m[2] === 'true' : $m[2];
+        }
+
+        $flush();
+
+        return $cheats;
     }
 
     public function pressButton(int $port, string $button): static

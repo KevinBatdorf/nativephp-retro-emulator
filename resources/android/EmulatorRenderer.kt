@@ -395,6 +395,10 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
         romPath: String = "",
         savePrefix: String? = null,
     ) {
+        // Cheat addresses are game knowledge — stale codes applied to a new ROM
+        // would corrupt it unpredictably. Queued before pendingRomBytes so any
+        // addCheat issued after this call survives the swap.
+        queueEvent { core.clearCheats() }
         loadedSystem  = system
         loadedRomPath = romPath
         firstFrameSent = false
@@ -517,6 +521,38 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
         requestRender()
         latch.await(5, TimeUnit.SECONDS)
         return req.result
+    }
+
+    // ---------------------------------------------------------------------------
+    // Cheats — mutations run on the GL thread (the cheat map is read inside tick)
+    // ---------------------------------------------------------------------------
+
+    /**
+     * Register (or replace) a cheat code. Blocks until the GL thread parses it
+     * (≤2 s). Returns false if no valid ADDR:VALUE pair parsed, null on timeout.
+     */
+    fun syncAddCheat(code: String): Boolean? = syncOnGlThread { core.addCheat(code) }
+
+    /**
+     * Remove a cheat by exact code string. Blocks ≤2 s. Returns false if the
+     * code wasn't active, null on timeout.
+     */
+    fun syncRemoveCheat(code: String): Boolean? = syncOnGlThread { core.removeCheat(code) }
+
+    /** Deactivate all cheats. Fire-and-forget. */
+    fun queueClearCheats() = queueEvent { core.clearCheats() }
+
+    /** Run [block] on the GL thread and block the caller for the result (≤2 s). */
+    private fun <T> syncOnGlThread(block: () -> T): T? {
+        val latch = CountDownLatch(1)
+        var result: T? = null
+        queueEvent {
+            result = block()
+            latch.countDown()
+        }
+        requestRender()
+        latch.await(2, TimeUnit.SECONDS)
+        return result
     }
 
     // ---------------------------------------------------------------------------

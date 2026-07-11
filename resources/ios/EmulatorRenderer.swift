@@ -166,6 +166,29 @@ final class EmulatorRenderer: UIView {
         emuLock.unlock()
     }
 
+    // MARK: - Cheats
+
+    /// Register (or replace) a cheat code. Returns false when no valid
+    /// ADDR:VALUE pair parses. Serialised on emuLock.
+    func addCheat(code: String) -> Bool {
+        emuLock.lock()
+        defer { emuLock.unlock() }
+        return ares_add_cheat(ctx, code)
+    }
+
+    /// Remove a cheat by exact code string. Returns false when it wasn't active.
+    func removeCheat(code: String) -> Bool {
+        emuLock.lock()
+        defer { emuLock.unlock() }
+        return ares_remove_cheat(ctx, code)
+    }
+
+    func clearCheats() {
+        emuLock.lock()
+        ares_clear_cheats(ctx)
+        emuLock.unlock()
+    }
+
     // MARK: - Memory watches
 
     /// Register/merge a watch. Length defaults to 1. Baseline is captured on the next

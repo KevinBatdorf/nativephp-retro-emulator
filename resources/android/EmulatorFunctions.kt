@@ -580,26 +580,55 @@ object EmulatorFunctions {
         }
     }
 
-    /** Cheats are NOT implemented in v1. */
+    /**
+     * Register a cheat in ares' raw format: hex "ADDR:VALUE" pairs joined with
+     * '+' (e.g. "7E0010:01+7E0011:FF"). The value overrides every CPU read of
+     * the address while active. Re-adding a code replaces it; cheats are
+     * cleared automatically when a new ROM loads. Game Genie / GameShark
+     * formats are not parsed (not supported upstream in ares).
+     */
     class AddCheat(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
-            parameters["code"] as? String
+            val (entry, err) = entry(parameters)
+            if (err != null) return err
+            val code = parameters["code"] as? String
                 ?: return BridgeResponse.error("INVALID_PARAMETERS", "code is required")
-            return BridgeResponse.error("NOT_IMPLEMENTED", "cheats are not supported in v1")
+
+            return when (entry!!.renderer.syncAddCheat(code)) {
+                true  -> BridgeResponse.success(mapOf("status" to "added", "code" to code))
+                false -> BridgeResponse.error(
+                    "INVALID_CHEAT",
+                    "No valid ADDR:VALUE pairs in '$code' — expected hex pairs joined with '+'",
+                )
+                null  -> BridgeResponse.error("CHEAT_FAILED", "Emulator not running")
+            }
         }
     }
 
-    /** Cheats are NOT implemented in v1. */
+    /** Remove a cheat by its exact code string. Removing an inactive code is not an error. */
     class RemoveCheat(private val activity: FragmentActivity) : BridgeFunction {
-        override fun execute(parameters: Map<String, Any>): Map<String, Any> =
-            BridgeResponse.error("NOT_IMPLEMENTED", "cheats are not supported in v1")
+        override fun execute(parameters: Map<String, Any>): Map<String, Any> {
+            val (entry, err) = entry(parameters)
+            if (err != null) return err
+            val code = parameters["code"] as? String
+                ?: return BridgeResponse.error("INVALID_PARAMETERS", "code is required")
+
+            return when (entry!!.renderer.syncRemoveCheat(code)) {
+                true  -> BridgeResponse.success(mapOf("status" to "removed", "code" to code))
+                false -> BridgeResponse.success(mapOf("status" to "not_found", "code" to code))
+                null  -> BridgeResponse.error("CHEAT_FAILED", "Emulator not running")
+            }
+        }
     }
 
-    /** Clear all cheat codes. Stubbed. */
+    /** Deactivate all cheats. Idempotent. */
     class ClearCheats(private val activity: FragmentActivity) : BridgeFunction {
-        // Clearing is idempotent and there are never active cheats in v1.
-        override fun execute(parameters: Map<String, Any>): Map<String, Any> =
-            BridgeResponse.success(mapOf("status" to "cleared"))
+        override fun execute(parameters: Map<String, Any>): Map<String, Any> {
+            val (entry, err) = entry(parameters)
+            if (err != null) return err
+            entry!!.renderer.queueClearCheats()
+            return BridgeResponse.success(mapOf("status" to "cleared"))
+        }
     }
 
     /** Set a single button to pressed in the software input state map. */

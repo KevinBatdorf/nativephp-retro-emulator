@@ -179,6 +179,23 @@ class AresCore {
     fun writeMemory(address: Int, bytes: ByteArray) = nativeWriteMemory(address, bytes)
 
     // -------------------------------------------------------------------------
+    // Cheats (GL thread only — the cheat map is read inside tick())
+    // -------------------------------------------------------------------------
+
+    /**
+     * Register (or replace) a cheat in ares' raw format: hex "ADDR:VALUE" pairs
+     * joined with '+' (e.g. "7E0010:01+7E0011:FF"). Applied on every CPU read
+     * of the address from the next tick. Returns false if no valid pair parses.
+     */
+    fun addCheat(code: String): Boolean = nativeAddCheat(code)
+
+    /** Remove a cheat by its exact code string. Returns false if it wasn't active. */
+    fun removeCheat(code: String): Boolean = nativeRemoveCheat(code)
+
+    /** Deactivate all cheats. */
+    fun clearCheats() = nativeClearCheats()
+
+    // -------------------------------------------------------------------------
     // Phase 7 — ROM metadata (safe from any thread after loadRom)
     // -------------------------------------------------------------------------
 
@@ -229,6 +246,10 @@ class AresCore {
 
     private external fun nativeReadMemory(address: Int, length: Int): ByteArray?
     private external fun nativeWriteMemory(address: Int, bytes: ByteArray)
+
+    private external fun nativeAddCheat(code: String): Boolean
+    private external fun nativeRemoveCheat(code: String): Boolean
+    private external fun nativeClearCheats()
 
     private external fun nativeGetRegion(): String
     private external fun nativeGetPortsJson(): String

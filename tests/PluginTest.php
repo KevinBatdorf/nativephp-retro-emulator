@@ -399,3 +399,64 @@ describe('Bridge response parsing', function () {
         expect($emu)->toBeInstanceOf(Emulator::class);
     });
 });
+
+// ---------------------------------------------------------------------------
+// Cheats file (.cheats.bml)
+// ---------------------------------------------------------------------------
+
+describe('loadCheatsFile', function () {
+    beforeEach(function () {
+        $GLOBALS['__nativephp_calls'] = [];
+        $this->cheatsFile = sys_get_temp_dir().'/'.uniqid('pest-cheats-').'.cheats.bml';
+    });
+
+    afterEach(function () {
+        if (file_exists($this->cheatsFile)) {
+            unlink($this->cheatsFile);
+        }
+    });
+
+    it('registers enabled cheats and skips disabled or codeless entries', function () {
+        file_put_contents($this->cheatsFile, implode("\n", [
+            'cheats',
+            '  revision: 2026-07-11',
+            '',
+            'cheat',
+            '  description: Infinite health',
+            '  code: 7E0010:01+7E0011:FF',
+            '  enabled: true',
+            '',
+            'cheat',
+            '  description: Disabled cheat',
+            '  code: 7E0020:63',
+            '  enabled: false',
+            '',
+            'cheat',
+            '  description: No code',
+            '  enabled: true',
+            '',
+        ]));
+
+        (new Emulator)->loadCheatsFile($this->cheatsFile);
+
+        $added = array_values(array_filter(
+            $GLOBALS['__nativephp_calls'],
+            fn (array $call) => $call['function'] === 'Emulator.AddCheat',
+        ));
+
+        expect($added)->toHaveCount(1);
+        expect($added[0]['payload']['code'])->toBe('7E0010:01+7E0011:FF');
+        expect($added[0]['payload']['description'])->toBe('Infinite health');
+    });
+
+    it('returns fluent instance for an empty cheats file', function () {
+        file_put_contents($this->cheatsFile, "cheats\n  revision: 2026-07-11\n");
+
+        expect((new Emulator)->loadCheatsFile($this->cheatsFile))->toBeInstanceOf(Emulator::class);
+        expect($GLOBALS['__nativephp_calls'])->toBe([]);
+    });
+
+    it('throws when the file is not readable', function () {
+        (new Emulator)->loadCheatsFile('/nonexistent/path.cheats.bml');
+    })->throws(RuntimeException::class);
+});

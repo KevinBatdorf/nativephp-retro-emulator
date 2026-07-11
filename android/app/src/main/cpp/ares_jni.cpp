@@ -5,14 +5,18 @@
 #include <algorithm>
 #include <atomic>
 #include <cstdio>
+#include <cstdlib>
+#include <map>
 #include <mutex>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <ares/ares.hpp>
 
 #include "system_registry.hpp"
 #include "save_io.hpp"
+#include "cheat_parse.hpp"
 
 #define LOG_TAG "AresCore"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO,  LOG_TAG, __VA_ARGS__)
@@ -86,6 +90,20 @@ struct EmulatorState {
 
     // Port info JSON built once during nativeLoadSystem; read-only afterward.
     std::string portsJson;
+
+    // Cheats — mutated and read on the GL thread only (bridge calls arrive via
+    // GLSurfaceView.queueEvent; Platform::cheat runs inside root->run()).
+    // `cheats` keeps per-code pairs so removeCheat(code) works; `cheatLookup`
+    // is the merged map the per-read hot path consults.
+    std::map<std::string, std::map<u32, u32>> cheats;
+    std::unordered_map<u32, u32> cheatLookup;
+
+    auto rebuildCheatLookup() -> void {
+        cheatLookup.clear();
+        for (auto& [code, pairs] : cheats) {
+            for (auto& [addr, value] : pairs) cheatLookup[addr] = value;
+        }
+    }
 };
 
 static EmulatorState* g_state = nullptr;
@@ -196,6 +214,16 @@ struct AndroidPlatform : ares::Platform {
                 }
             }
         }
+    }
+
+    // Consulted by the cores on every CPU bus read — the empty() check keeps
+    // the no-cheat hot path to a single branch. GL thread only (see
+    // EmulatorState::cheats).
+    auto cheat(u32 address) -> maybe<u32> override {
+        if (!g_state || g_state->cheatLookup.empty()) return nothing;
+        auto it = g_state->cheatLookup.find(address);
+        if (it != g_state->cheatLookup.end()) return it->second;
+        return nothing;
     }
 };
 
@@ -628,6 +656,55 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeWriteMemory(
 
     auto bytes = jbyteArrayToVector(env, bytesArr);
     for (jsize i = 0; i < len; i++) def->memWrite(offset + i, bytes[i]);
+}
+
+// Cheats ----------------------------------------------------------------------
+// GL thread only: callers route through GLSurfaceView.queueEvent so the maps
+// are never touched while root->run() is between reads.
+
+/**
+ * Register (or replace) a cheat under its exact code string. Returns false if
+ * no valid ADDR:VALUE pair could be parsed from the code.
+ */
+JNIEXPORT jboolean JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeAddCheat(
+    JNIEnv* env, jobject, jstring codeStr)
+{
+    if (!g_state) return JNI_FALSE;
+
+    std::string code = jstringToString(env, codeStr);
+    auto pairs = CheatParse::parse(code);
+    if (pairs.empty()) {
+        LOGE("addCheat: no valid ADDR:VALUE pairs in '%s'", code.c_str());
+        return JNI_FALSE;
+    }
+
+    g_state->cheats[code] = std::move(pairs);
+    g_state->rebuildCheatLookup();
+    LOGI("cheat added: '%s' (%zu total)", code.c_str(), g_state->cheats.size());
+    return JNI_TRUE;
+}
+
+/** Remove a cheat by its exact code string. Returns false if it wasn't active. */
+JNIEXPORT jboolean JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeRemoveCheat(
+    JNIEnv* env, jobject, jstring codeStr)
+{
+    if (!g_state) return JNI_FALSE;
+
+    std::string code = jstringToString(env, codeStr);
+    bool removed = g_state->cheats.erase(code) > 0;
+    if (removed) g_state->rebuildCheatLookup();
+    return removed ? JNI_TRUE : JNI_FALSE;
+}
+
+/** Deactivate all cheats. */
+JNIEXPORT void JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeClearCheats(JNIEnv*, jobject)
+{
+    if (!g_state) return;
+    g_state->cheats.clear();
+    g_state->cheatLookup.clear();
 }
 
 // Phase 7 — region / ports --------------------------------------------------
