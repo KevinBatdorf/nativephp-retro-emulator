@@ -79,6 +79,12 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
     )
     private val pendingRead = AtomicReference<MemReadRequest?>(null)
 
+    private class PortsReadRequest(val latch: CountDownLatch) {
+        @Volatile var result: String? = null
+    }
+
+    private val pendingPortsRead = AtomicReference<PortsReadRequest?>(null)
+
     private data class MemWriteRequest(val address: Int, val bytes: ByteArray)
     private val pendingWrite = AtomicReference<MemWriteRequest?>(null)
 
@@ -197,6 +203,12 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
             if (!systemLoaded && systemId != null) {
                 systemLoaded = core.loadSystem(systemId)
                 if (!systemLoaded) Log.e(TAG, "loadSystem($systemId) failed")
+            }
+
+            // --- Service pending ports read here so it orders after a queued system load ---
+            pendingPortsRead.getAndSet(null)?.let { req ->
+                req.result = if (systemLoaded) core.getPortsJson() else null
+                req.latch.countDown()
             }
 
             // --- Consume pending ROM load ---
@@ -565,6 +577,20 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
      * [systemLoaded] is true — built once during system load and read-only afterward.
      */
     fun getPortsJson(): String = core.getPortsJson()
+
+    /**
+     * Ports JSON is built by the system load on the GL thread — round-trip
+     * through it so a GetPorts issued right after LoadSystem orders correctly.
+     * Returns null if no system is loaded within the wait window.
+     */
+    fun syncGetPortsJson(): String? {
+        val latch = CountDownLatch(1)
+        val req = PortsReadRequest(latch)
+        pendingPortsRead.set(req)
+        requestRender()
+        latch.await(2, TimeUnit.SECONDS)
+        return req.result
+    }
 
     private fun packBytesToInt(bytes: ByteArray): Int {
         var value = 0

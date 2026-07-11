@@ -13,8 +13,14 @@ and watch emulated RAM live.
 
 ```bash
 composer require kevinbatdorf/retro-emulator
+php artisan vendor:publish --tag=nativephp-plugins-provider
+php artisan native:plugin:register kevinbatdorf/retro-emulator
 php artisan native:install
 ```
+
+Registration is not optional: NativePHP only compiles plugins listed in
+`App\Providers\NativeServiceProvider::plugins()` into native builds —
+`native:plugin:register` adds the entry for you.
 
 Prebuilt native libraries ship with the plugin (hosts never compile the ares C++). To refresh
 them after changing native code: `scripts/build_android_libs.sh` and `scripts/build_xcframework.sh`.
@@ -62,6 +68,10 @@ Emulator::watchMemory([0x7E0010]);            // MemoryChanged event on change
 > **Boot after first render, not in `mount()`.** The native surface is created when the screen
 > first renders, which happens *after* `mount()` returns — bridge calls made in `mount()` cannot
 > find the surface. Boot from a `#[Poll]` tick or any post-render interaction instead.
+
+> **iOS is currently single-surface.** The iOS renderer registers under the name `main`
+> regardless of the `name` attribute, so multiple simultaneous surfaces and custom surface
+> names only work on Android for now. This lifts when the iOS EDGE renderer integration lands.
 
 ### Memory windows
 

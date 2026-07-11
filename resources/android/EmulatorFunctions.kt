@@ -64,6 +64,29 @@ object EmulatorFunctions {
     private fun surface(parameters: Map<String, Any>): String =
         parameters["surface"] as? String ?: "main"
 
+    /**
+     * BridgeRouter builds the parameters map with JSONObject.get(), so nested
+     * values arrive as org.json JSONArray/JSONObject — a plain `as? List`/
+     * `as? Map` cast silently nulls them out.
+     */
+    private fun fromJson(value: Any?): Any? = when (value) {
+        JSONObject.NULL -> null
+        is JSONObject -> value.keys().asSequence().associateWith { fromJson(value.get(it)) }
+        is JSONArray -> (0 until value.length()).map { fromJson(value.get(it)) }
+        else -> value
+    }
+
+    private fun paramList(parameters: Map<String, Any>, key: String): List<Any?>? =
+        (fromJson(parameters[key]) as? List<*>)
+
+    private fun paramMap(parameters: Map<String, Any>, key: String): Map<String, Any>? {
+        val map = fromJson(parameters[key]) as? Map<*, *> ?: return null
+
+        return map.entries
+            .filter { it.key is String && it.value != null }
+            .associate { it.key as String to it.value as Any }
+    }
+
     private fun entry(parameters: Map<String, Any>): Pair<SurfaceEntry?, Map<String, Any>?> {
         val name = surface(parameters)
 
@@ -195,8 +218,7 @@ object EmulatorFunctions {
 
             val renderer = entry!!.renderer
             renderer.fastForward = false
-            @Suppress("UNCHECKED_CAST")
-            val config = parameters["config"] as? Map<String, Any> ?: emptyMap()
+            val config = paramMap(parameters, "config") ?: emptyMap()
             renderer.autoSave = config["autoSave"] as? Boolean ?: true
             renderer.queueSystemLoad(system)
 
@@ -401,8 +423,7 @@ object EmulatorFunctions {
             val address = (parameters["address"] as? Number)?.toInt()
                 ?: return BridgeResponse.error("INVALID_PARAMETERS", "address is required")
 
-            @Suppress("UNCHECKED_CAST")
-            val byteList = parameters["bytes"] as? List<*>
+            val byteList = paramList(parameters, "bytes")
                 ?: return BridgeResponse.error("INVALID_PARAMETERS", "bytes is required")
 
             val bytes = byteList.mapNotNull { (it as? Number)?.toInt()?.toByte() }.toByteArray()
@@ -418,8 +439,7 @@ object EmulatorFunctions {
             val (entry, err) = entry(parameters)
             if (err != null) return err
 
-            @Suppress("UNCHECKED_CAST")
-            val addresses = parameters["addresses"] as? List<*>
+            val addresses = paramList(parameters, "addresses")
                 ?: return BridgeResponse.error("INVALID_PARAMETERS", "addresses is required")
 
             val coerced = addresses.mapNotNull { item ->
@@ -441,8 +461,7 @@ object EmulatorFunctions {
             val (entry, err) = entry(parameters)
             if (err != null) return err
 
-            @Suppress("UNCHECKED_CAST")
-            val addresses = (parameters["addresses"] as? List<*>)
+            val addresses = paramList(parameters, "addresses")
                 ?.mapNotNull { (it as? Number)?.toInt() }
                 ?: return BridgeResponse.error("INVALID_PARAMETERS", "addresses is required")
 
@@ -470,7 +489,7 @@ object EmulatorFunctions {
             val (entry, err) = entry(parameters)
             if (err != null) return err
             @Suppress("UNCHECKED_CAST")
-            val options = parameters["options"] as? Map<String, Any> ?: emptyMap()
+            val options = paramMap(parameters, "options") ?: emptyMap()
             val volume  = ((options["volume"]  as? Number)?.toFloat() ?: 100f) / 100f
             val balance = ((options["balance"] as? Number)?.toFloat() ?: 0f) / 100f
             entry!!.renderer.setAudioOptions(volume, balance)
@@ -489,7 +508,7 @@ object EmulatorFunctions {
             val (entry, err) = entry(parameters)
             if (err != null) return err
             @Suppress("UNCHECKED_CAST")
-            val options = parameters["options"] as? Map<String, Any> ?: emptyMap()
+            val options = paramMap(parameters, "options") ?: emptyMap()
             entry!!.renderer.queueVideoOptions(
                 luminance  = ((options["luminance"]  as? Number)?.toFloat() ?: 100f) / 100f,
                 saturation = ((options["saturation"] as? Number)?.toFloat() ?: 100f) / 100f,
@@ -518,7 +537,7 @@ object EmulatorFunctions {
             if (err != null) return err
 
             @Suppress("UNCHECKED_CAST")
-            val options = parameters["options"] as? Map<String, Any> ?: emptyMap()
+            val options = paramMap(parameters, "options") ?: emptyMap()
 
             if ((options["runAhead"] as? Number)?.toInt()?.takeIf { it != 0 } != null) {
                 return BridgeResponse.error("NOT_IMPLEMENTED", "runAhead is not supported in v1")
@@ -638,7 +657,8 @@ object EmulatorFunctions {
             val port = (parameters["port"] as? Number)?.toInt() ?: 1
 
             @Suppress("UNCHECKED_CAST")
-            val state = parameters["state"] as? Map<String, Boolean>
+            val state = paramMap(parameters, "state")
+                ?.entries?.associate { it.key to (it.value == true) }
                 ?: return BridgeResponse.error("INVALID_PARAMETERS", "state map is required")
 
             for ((button, pressed) in state) {
@@ -710,7 +730,8 @@ object EmulatorFunctions {
             val (entry, err) = entry(parameters)
             if (err != null) return err
 
-            val json = entry!!.renderer.getPortsJson()
+            val json = entry!!.renderer.syncGetPortsJson()
+                ?: return BridgeResponse.error("SYSTEM_NOT_LOADED", "Call LoadSystem before GetPorts")
             val ports = buildList {
                 val arr = JSONArray(json)
                 for (i in 0 until arr.length()) {
