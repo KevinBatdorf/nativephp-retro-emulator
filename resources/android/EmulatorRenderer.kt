@@ -202,7 +202,12 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
             val systemId = pendingSystemId
             if (!systemLoaded && systemId != null) {
                 systemLoaded = core.loadSystem(systemId)
-                if (!systemLoaded) Log.e(TAG, "loadSystem($systemId) failed")
+                if (!systemLoaded) {
+                    // Consume the request — retrying an id ares rejected
+                    // once would fail identically every frame, forever.
+                    pendingSystemId = null
+                    Log.e(TAG, "loadSystem($systemId) failed")
+                }
             }
 
             // --- Service pending ports read here so it orders after a queued system load ---
@@ -399,6 +404,9 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
         queueEvent {
             core.flushSaves()
             core.destroy()
+            // Restore the surface-created invariant (core initialized) so a
+            // follow-up loadSystem works — system switching goes through here.
+            core.init()
             romLoaded     = false
             systemLoaded  = false
             audioStarted  = false

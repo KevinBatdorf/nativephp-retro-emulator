@@ -12,9 +12,11 @@ private const val SAMPLE_RATE = 48000
  * Streams mixed stereo audio from [AresCore]'s native ring buffer into an
  * [AudioTrack] running in streaming mode.
  *
- * Lifecycle: call [start] once after the ROM loads; call [stop] from any thread
- * to flush and release the AudioTrack. [start] and [stop] are not thread-safe
- * with respect to each other — call them sequentially.
+ * Lifecycle: call [start] after a ROM loads and [stop] on teardown — in that
+ * order, any number of times. The AudioTrack is created per [start] because a
+ * released track cannot be replayed (system switching stops and restarts
+ * audio). [start] and [stop] are not thread-safe with respect to each other —
+ * call them sequentially.
  */
 class EmulatorAudio(private val core: AresCore) {
 
@@ -24,7 +26,9 @@ class EmulatorAudio(private val core: AresCore) {
         AudioFormat.ENCODING_PCM_FLOAT,
     ).coerceAtLeast(4096)
 
-    private val audioTrack = AudioTrack.Builder()
+    private var audioTrack: AudioTrack? = null
+
+    private fun buildTrack(): AudioTrack = AudioTrack.Builder()
         .setAudioAttributes(
             AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_GAME)
@@ -54,7 +58,9 @@ class EmulatorAudio(private val core: AresCore) {
     private var drainThread: Thread? = null
 
     fun start() {
-        audioTrack.play()
+        val track = buildTrack()
+        audioTrack = track
+        track.play()
         running = true
         drainThread = Thread {
             while (running) {
@@ -62,7 +68,7 @@ class EmulatorAudio(private val core: AresCore) {
                 if (n > 0) {
                     var written = 0
                     while (written < n) {
-                        val result = audioTrack.write(
+                        val result = track.write(
                             drainBuffer, written, n - written,
                             AudioTrack.WRITE_BLOCKING,
                         )
@@ -80,7 +86,7 @@ class EmulatorAudio(private val core: AresCore) {
             name = "emu-audio"
             start()
         }
-        Log.i(TAG, "started — sampleRate=$SAMPLE_RATE bufferBytes=${audioTrack.bufferSizeInFrames * 8}")
+        Log.i(TAG, "started — sampleRate=$SAMPLE_RATE bufferBytes=${track.bufferSizeInFrames * 8}")
     }
 
     fun stop() {
@@ -90,10 +96,13 @@ class EmulatorAudio(private val core: AresCore) {
         // Idempotent: stop() may be called again from a teardown path after the
         // track has already been stopped/released (e.g. stopEmulation followed
         // by Activity.onDestroy → release).
-        if (audioTrack.state == AudioTrack.STATE_INITIALIZED) {
-            audioTrack.stop()
-            audioTrack.release()
-            Log.i(TAG, "stopped")
+        audioTrack?.let { track ->
+            if (track.state == AudioTrack.STATE_INITIALIZED) {
+                track.stop()
+                track.release()
+                Log.i(TAG, "stopped")
+            }
         }
+        audioTrack = null
     }
 }
