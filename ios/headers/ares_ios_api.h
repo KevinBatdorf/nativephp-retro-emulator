@@ -51,6 +51,16 @@ void ares_set_input(AresContext* ctx, int port, uint32_t bits);
 void ares_pause(AresContext* ctx);
 void ares_resume(AresContext* ctx);
 
+// Audio / video options ---------------------------------------------------------
+
+// Master volume (0–1) and stereo balance (−1 left … +1 right).  Any thread.
+void ares_set_audio(AresContext* ctx, float volume, float balance);
+
+// Video post-processing on the ares screen node.  Ranges follow ares:
+// luminance/saturation 0–1, gamma 1.0–2.0.  Emulation thread only.
+void ares_set_video(AresContext* ctx, float luminance, float saturation,
+                    float gamma, bool color_bleed, bool interframe_blending);
+
 // Video -----------------------------------------------------------------------
 
 // Copy the latest frame into caller-supplied ARGB8888 buffer.
