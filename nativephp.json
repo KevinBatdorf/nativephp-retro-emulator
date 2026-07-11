@@ -149,6 +149,12 @@
             "description": "Merge general live options (speed, runAhead, rewind, etc.)"
         },
         {
+            "name": "Emulator.ToggleRewind",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.ToggleRewind",
+            "ios": "EmulatorFunctions.ToggleRewind",
+            "description": "Enter or exit rewind playback"
+        },
+        {
             "name": "Emulator.SetSystemOptions",
             "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.SetSystemOptions",
             "ios": "EmulatorFunctions.SetSystemOptions",

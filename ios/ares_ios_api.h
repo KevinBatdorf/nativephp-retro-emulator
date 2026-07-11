@@ -90,6 +90,26 @@ int  ares_read_memory(AresContext* ctx, uint32_t address, uint8_t* out, int leng
 void ares_write_memory(AresContext* ctx, uint32_t address,
                        const uint8_t* bytes, int length);
 
+// Rewind / run-ahead — emulation thread only (state is read inside ares_tick).
+
+// Enable/disable rewind snapshot capture.  buffer_seconds sizes the history
+// (6 snapshots per second); <= 0 keeps ares' desktop default (~16.7 s).
+// Disabling drops the captured history.
+void ares_configure_rewind(AresContext* ctx, bool enabled, int buffer_seconds);
+
+// Enter/exit rewind playback (5× the capture rate, ares desktop semantics;
+// play resumes when history runs out).
+// Returns 1 rewinding, 0 playing, -1 rewind capture not enabled.
+int ares_toggle_rewind(AresContext* ctx);
+
+// Enable/disable one-frame run-ahead: each tick runs a hidden frame plus a
+// rolled-back visible preview, cutting perceived input latency by one frame
+// at 2× emulation cost.  Suppressed during fast-forward and rewind.
+void ares_set_run_ahead(AresContext* ctx, bool enabled);
+
+// Mirror of the host fast-forward flag — suppresses run-ahead.  Any thread.
+void ares_set_fast_forward(AresContext* ctx, bool active);
+
 // Cheats — ares' raw format: hex "ADDR:VALUE" pairs joined with '+'
 // (e.g. "7E0010:01+7E0011:FF").  The value overrides every CPU read of the
 // address while active.  Cheats clear automatically when a new ROM loads.

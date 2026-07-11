@@ -55,6 +55,7 @@ describe('Plugin Manifest', function () {
             'Emulator.SetAudio',
             'Emulator.SetVideo',
             'Emulator.Configure',
+            'Emulator.ToggleRewind',
             'Emulator.SetSystemOptions',
             'Emulator.FastForward',
             'Emulator.SetInputMapping',
@@ -155,7 +156,7 @@ describe('Emulator class', function () {
             'readMemory', 'readMemoryAsync', 'writeMemory',
             'watchMemory', 'unwatchMemory', 'clearMemoryWatches',
             'setAudio', 'setVideo', 'configure', 'setSystemOptions',
-            'fastForward',
+            'fastForward', 'toggleRewind',
             'setInputMapping', 'setRumble',
             'setShader',
             'addCheat', 'removeCheat', 'clearCheats',
@@ -384,6 +385,12 @@ describe('Bridge response parsing', function () {
     it('fastForward returns fluent instance', function () {
         $GLOBALS['__nativephp_mock']['Emulator.FastForward'] = '{"status":"fast"}';
         $emu = (new Emulator)->fastForward(true);
+        expect($emu)->toBeInstanceOf(Emulator::class);
+    });
+
+    it('toggleRewind returns fluent instance', function () {
+        $GLOBALS['__nativephp_mock']['Emulator.ToggleRewind'] = '{"status":"rewinding"}';
+        $emu = (new Emulator)->toggleRewind();
         expect($emu)->toBeInstanceOf(Emulator::class);
     });
 

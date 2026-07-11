@@ -135,7 +135,12 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
 
     // Phase 7/14 — fast-forward and speed multiplier. fastForward takes
     // precedence (4×); otherwise speedMultiplier scales the tick budget.
+    // The native side mirrors the flag so run-ahead suppresses itself.
     @Volatile var fastForward: Boolean = false
+        set(value) {
+            field = value
+            core.setFastForward(value)
+        }
     @Volatile var speedMultiplier: Double = 1.0
 
     // Frame pacing — the GL thread draws at the display's refresh rate (120 Hz
@@ -541,6 +546,23 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
 
     /** Deactivate all cheats. Fire-and-forget. */
     fun queueClearCheats() = queueEvent { core.clearCheats() }
+
+    // ---------------------------------------------------------------------------
+    // Rewind / run-ahead — state lives GL-side (read inside tick)
+    // ---------------------------------------------------------------------------
+
+    /** Enable/disable rewind capture (see [AresCore.configureRewind]). Fire-and-forget. */
+    fun queueConfigureRewind(enabled: Boolean, bufferSeconds: Int = 0) =
+        queueEvent { core.configureRewind(enabled, bufferSeconds) }
+
+    /**
+     * Enter/exit rewind playback. Blocks ≤2 s.
+     * Returns 1 rewinding, 0 playing, -1 rewind not enabled, null on timeout.
+     */
+    fun syncToggleRewind(): Int? = syncOnGlThread { core.toggleRewind() }
+
+    /** Enable/disable one-frame run-ahead (see [AresCore.setRunAhead]). Fire-and-forget. */
+    fun queueSetRunAhead(enabled: Boolean) = queueEvent { core.setRunAhead(enabled) }
 
     /** Run [block] on the GL thread and block the caller for the result (≤2 s). */
     private fun <T> syncOnGlThread(block: () -> T): T? {

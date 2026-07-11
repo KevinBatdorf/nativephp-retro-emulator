@@ -277,9 +277,10 @@ class Emulator
     /**
      * Merge general live options. All keys merge into current state.
      *
-     * speed (0.25–4.0) is live. runAhead and rewind are NOT implemented in
-     * v1 — requesting a non-default value returns a NOT_IMPLEMENTED bridge
-     * error.
+     * speed (0.25–4.0) scales the tick budget. runAhead accepts 0 or 1 —
+     * ares supports exactly one hidden frame, halving perceived input lag at
+     * 2× emulation cost. rewind toggles snapshot capture (rewindBufferSeconds
+     * sizes the history, default ~16.7 s); play it back with toggleRewind().
      *
      * @param  array{speed?: float, runAhead?: int, rewind?: bool, rewindBufferSeconds?: int}  $options
      */
@@ -290,6 +291,21 @@ class Emulator
                 'surface' => $this->surface,
                 'options' => $options,
             ]));
+        }
+
+        return $this;
+    }
+
+    /**
+     * Enter/exit rewind playback (5× the capture rate, ares desktop
+     * semantics). Play resumes automatically when history runs out. Requires
+     * rewind capture enabled via loadSystem() config or configure() —
+     * toggling while disabled returns a REWIND_DISABLED bridge error.
+     */
+    public function toggleRewind(): static
+    {
+        if (function_exists('nativephp_call')) {
+            nativephp_call('Emulator.ToggleRewind', json_encode(['surface' => $this->surface]));
         }
 
         return $this;

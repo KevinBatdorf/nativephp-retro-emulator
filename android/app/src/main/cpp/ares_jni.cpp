@@ -104,6 +104,22 @@ struct EmulatorState {
             for (auto& [addr, value] : pairs) cheatLookup[addr] = value;
         }
     }
+
+    // Rewind — desktop-ui/program/rewind.cpp semantics, run inside nativeTick.
+    // GL thread only, same queueEvent routing as cheats.
+    struct Rewind {
+        bool enabled   = false;
+        bool rewinding = false;
+        u32  counter   = 0;
+        u32  frequency = 10;   // capture every N frames (ares desktop default)
+        u32  length    = 100;  // history cap (ares desktop default ≈ 16.7 s)
+        std::vector<nall::serializer> history;
+    } rewind;
+
+    // Run-ahead — ares supports one hidden frame (desktop-ui program.cpp loop).
+    // GL thread only; suppressed while fast-forwarding or rewinding, like desktop.
+    bool runAheadEnabled = false;
+    std::atomic<bool> fastForwardActive {false};
 };
 
 static EmulatorState* g_state = nullptr;
@@ -438,6 +454,11 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadRom(
     cartridgeSlot->allocate();
     cartridgeSlot->connect();
 
+    // A new game starts a new timeline — snapshots of the old one are useless.
+    g_state->rewind.rewinding = false;
+    g_state->rewind.counter = 0;
+    g_state->rewind.history.clear();
+
     g_state->root->power(false);
     g_state->romLoaded  = true;
     g_state->romRegion  = built.region;
@@ -447,13 +468,61 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadRom(
 
 // Phase 4 — tick (real frame) -----------------------------------------------
 
+// Port of desktop-ui rewindRun(): in normal play, snapshot every `frequency`
+// frames into a bounded ring; while rewinding, pop and restore at 5× the
+// capture rate until the history is exhausted, then fall back to play.
+static void rewindRun() {
+    auto& rw = g_state->rewind;
+    if (!rw.enabled) return;
+
+    if (!rw.rewinding) {
+        if (++rw.counter < rw.frequency) return;
+        rw.counter = 0;
+        if (rw.history.size() >= rw.length) rw.history.erase(rw.history.begin());
+        rw.history.push_back(g_state->root->serialize(false));
+        return;
+    }
+
+    if (rw.history.empty()) {
+        rw.rewinding = false;
+        rw.counter = 0;
+        return;
+    }
+    if (++rw.counter < std::max(1u, rw.frequency / 5)) return;
+    rw.counter = 0;
+    auto s = rw.history.back();
+    rw.history.pop_back();
+    s.setReading();
+    g_state->root->unserialize(s);
+    if (rw.history.empty()) rw.rewinding = false;
+}
+
 JNIEXPORT void JNICALL
 Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeTick(
     JNIEnv*, jobject)
 {
     if (!g_state || !g_state->romLoaded) return;
     if (!g_state->paused.load(std::memory_order_relaxed)) {
-        g_state->root->run();
+        rewindRun();
+
+        // Desktop-ui run-ahead loop: run one hidden frame (video/audio
+        // suppressed by the cores), snapshot, run the visible frame, roll
+        // back — the visible frame is a one-frame preview that reduces
+        // perceived input latency at 2× emulation cost.
+        const bool runAhead = g_state->runAheadEnabled &&
+            !g_state->rewind.rewinding &&
+            !g_state->fastForwardActive.load(std::memory_order_relaxed);
+        if (!runAhead) {
+            g_state->root->run();
+        } else {
+            ares::setRunAhead(true);
+            g_state->root->run();
+            auto state = g_state->root->serialize(false);
+            ares::setRunAhead(false);
+            g_state->root->run();
+            state.setReading();
+            g_state->root->unserialize(state);
+        }
     }
 
     // Upload the latest buffered frame — this runs on the GL thread; the
@@ -705,6 +774,60 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeClearCheats(JNIEnv*, 
     if (!g_state) return;
     g_state->cheats.clear();
     g_state->cheatLookup.clear();
+}
+
+// Rewind / run-ahead ----------------------------------------------------------
+// GL thread only (queueEvent routing): the history and flags are read inside
+// nativeTick.
+
+/**
+ * Enable/disable rewind capture. bufferSeconds sizes the history at the
+ * capture rate (60 fps / frequency 10 = 6 snapshots per second); <= 0 keeps
+ * ares' desktop default of 100 snapshots (~16.7 s). Disabling drops history.
+ */
+JNIEXPORT void JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeConfigureRewind(
+    JNIEnv*, jobject, jboolean enabled, jint bufferSeconds)
+{
+    if (!g_state) return;
+    auto& rw = g_state->rewind;
+    rw.enabled = enabled;
+    rw.length  = bufferSeconds > 0 ? (u32)bufferSeconds * 6u : 100u;
+    if (!enabled) {
+        rw.rewinding = false;
+        rw.counter = 0;
+        rw.history.clear();
+    }
+}
+
+/**
+ * Enter/exit rewind playback. Returns the new state:
+ * 1 rewinding, 0 playing, -1 rewind capture is not enabled.
+ */
+JNIEXPORT jint JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeToggleRewind(JNIEnv*, jobject)
+{
+    if (!g_state || !g_state->rewind.enabled) return -1;
+    auto& rw = g_state->rewind;
+    rw.rewinding = !rw.rewinding;
+    rw.counter = 0;
+    return rw.rewinding ? 1 : 0;
+}
+
+/** Enable/disable one-frame run-ahead (see the nativeTick loop). */
+JNIEXPORT void JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetRunAhead(
+    JNIEnv*, jobject, jboolean enabled)
+{
+    if (g_state) g_state->runAheadEnabled = enabled;
+}
+
+/** Mirror of the Kotlin fast-forward flag — suppresses run-ahead. Any thread. */
+JNIEXPORT void JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetFastForward(
+    JNIEnv*, jobject, jboolean active)
+{
+    if (g_state) g_state->fastForwardActive.store(active, std::memory_order_relaxed);
 }
 
 // Phase 7 — region / ports --------------------------------------------------

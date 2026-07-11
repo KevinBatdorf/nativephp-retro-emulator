@@ -42,8 +42,11 @@ final class EmulatorRenderer: UIView {
     var eventListener: EmulatorEventListener?
 
     /// When true the emulation loop ticks extra frames per display frame. Stored for
-    /// parity with Android; consumed by the loop's frame pacing.
-    var fastForward: Bool = false
+    /// parity with Android; consumed by the loop's frame pacing. Mirrored to the
+    /// native side so run-ahead can suppress itself while fast-forwarding.
+    var fastForward: Bool = false {
+        didSet { ares_set_fast_forward(ctx, fastForward) }
+    }
 
     /// Periodic battery-save flush toggle (LoadSystem config { autoSave }).
     var autoSave: Bool = true
@@ -163,6 +166,29 @@ final class EmulatorRenderer: UIView {
         bytes.withUnsafeBufferPointer {
             ares_write_memory(ctx, address, $0.baseAddress, Int32(bytes.count))
         }
+        emuLock.unlock()
+    }
+
+    // MARK: - Rewind / run-ahead
+
+    /// Enable/disable rewind capture (see ares_configure_rewind). Serialised on emuLock.
+    func configureRewind(enabled: Bool, bufferSeconds: Int) {
+        emuLock.lock()
+        ares_configure_rewind(ctx, enabled, Int32(bufferSeconds))
+        emuLock.unlock()
+    }
+
+    /// Enter/exit rewind playback. Returns 1 rewinding, 0 playing, -1 rewind not enabled.
+    func toggleRewind() -> Int {
+        emuLock.lock()
+        defer { emuLock.unlock() }
+        return Int(ares_toggle_rewind(ctx))
+    }
+
+    /// Enable/disable one-frame run-ahead (see ares_set_run_ahead). Serialised on emuLock.
+    func setRunAhead(enabled: Bool) {
+        emuLock.lock()
+        ares_set_run_ahead(ctx, enabled)
         emuLock.unlock()
     }
 

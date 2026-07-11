@@ -199,10 +199,26 @@ object EmulatorFunctions {
                 )
             }
 
+            val config = paramMap(parameters, "config") ?: emptyMap()
+            val runAhead = (config["runAhead"] as? Number)?.toInt() ?: 0
+            if (runAhead !in 0..1) {
+                return BridgeResponse.error(
+                    "INVALID_PARAMETERS",
+                    "runAhead must be 0 or 1 — ares supports one hidden frame",
+                )
+            }
+
             val renderer = entry!!.renderer
             renderer.fastForward = false
-            val config = paramMap(parameters, "config") ?: emptyMap()
             renderer.autoSave = config["autoSave"] as? Boolean ?: true
+            renderer.queueSetRunAhead(runAhead == 1)
+            renderer.queueConfigureRewind(
+                config["rewind"] as? Boolean ?: false,
+                (config["rewindBufferSeconds"] as? Number)?.toInt() ?: 0,
+            )
+            (config["speed"] as? Number)?.toDouble()?.let { speed ->
+                renderer.speedMultiplier = speed.coerceIn(0.25, 4.0)
+            }
             renderer.queueSystemLoad(system)
 
             Log.d(TAG, "LoadSystem: queued system=$system")
@@ -511,8 +527,8 @@ object EmulatorFunctions {
 
     /**
      * Merge general live options. speed (0.25–4.0) scales the tick budget.
-     * runAhead and rewind are NOT implemented in v1 — requesting a
-     * non-default value returns NOT_IMPLEMENTED rather than silently no-oping.
+     * runAhead accepts 0 or 1 — ares supports exactly one hidden frame.
+     * rewind toggles snapshot capture; rewindBufferSeconds sizes the history.
      */
     class Configure(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
@@ -522,11 +538,21 @@ object EmulatorFunctions {
             @Suppress("UNCHECKED_CAST")
             val options = paramMap(parameters, "options") ?: emptyMap()
 
-            if ((options["runAhead"] as? Number)?.toInt()?.takeIf { it != 0 } != null) {
-                return BridgeResponse.error("NOT_IMPLEMENTED", "runAhead is not supported in v1")
+            (options["runAhead"] as? Number)?.toInt()?.let { frames ->
+                if (frames !in 0..1) {
+                    return BridgeResponse.error(
+                        "INVALID_PARAMETERS",
+                        "runAhead must be 0 or 1 — ares supports one hidden frame",
+                    )
+                }
+                entry!!.renderer.queueSetRunAhead(frames == 1)
             }
-            if (options["rewind"] as? Boolean == true) {
-                return BridgeResponse.error("NOT_IMPLEMENTED", "rewind is not supported in v1")
+
+            (options["rewind"] as? Boolean)?.let { enabled ->
+                entry!!.renderer.queueConfigureRewind(
+                    enabled,
+                    (options["rewindBufferSeconds"] as? Number)?.toInt() ?: 0,
+                )
             }
 
             (options["speed"] as? Number)?.toDouble()?.let { speed ->
@@ -534,6 +560,28 @@ object EmulatorFunctions {
             }
 
             return BridgeResponse.success(mapOf("status" to "ok"))
+        }
+    }
+
+    /**
+     * Enter/exit rewind playback (5× the capture rate, ares desktop
+     * semantics). Play resumes automatically when history runs out.
+     * Requires rewind capture enabled via LoadSystem config or Configure.
+     */
+    class ToggleRewind(private val activity: FragmentActivity) : BridgeFunction {
+        override fun execute(parameters: Map<String, Any>): Map<String, Any> {
+            val (entry, err) = entry(parameters)
+            if (err != null) return err
+
+            return when (entry!!.renderer.syncToggleRewind()) {
+                1 -> BridgeResponse.success(mapOf("status" to "rewinding"))
+                0 -> BridgeResponse.success(mapOf("status" to "playing"))
+                -1 -> BridgeResponse.error(
+                    "REWIND_DISABLED",
+                    "Rewind capture is off — enable it via configure(['rewind' => true]) first",
+                )
+                else -> BridgeResponse.error("REWIND_FAILED", "Emulator not running")
+            }
         }
     }
 

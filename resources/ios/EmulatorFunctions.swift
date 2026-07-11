@@ -155,9 +155,25 @@ enum EmulatorFunctions {
                 )
             }
 
-            renderer.fastForward = false
             let config = parameters["config"] as? [String: Any] ?? [:]
+            let runAhead = (config["runAhead"] as? NSNumber)?.intValue ?? 0
+            guard (0...1).contains(runAhead) else {
+                return BridgeResponse.error(
+                    code: "INVALID_PARAMETERS",
+                    message: "runAhead must be 0 or 1 — ares supports one hidden frame"
+                )
+            }
+
+            renderer.fastForward = false
             renderer.autoSave = config["autoSave"] as? Bool ?? true
+            renderer.setRunAhead(enabled: runAhead == 1)
+            renderer.configureRewind(
+                enabled: config["rewind"] as? Bool ?? false,
+                bufferSeconds: (config["rewindBufferSeconds"] as? NSNumber)?.intValue ?? 0
+            )
+            if let speed = (config["speed"] as? NSNumber)?.doubleValue {
+                renderer.speedMultiplier = min(max(speed, 0.25), 4.0)
+            }
             guard renderer.loadSystem(system) else {
                 return BridgeResponse.error(code: "LOAD_FAILED", message: "ares_load_system failed for '\(system)'")
             }
@@ -410,24 +426,51 @@ enum EmulatorFunctions {
     }
 
     /// Merge general live options. speed (0.25–4.0) scales the tick budget.
-    /// runAhead and rewind are NOT implemented in v1 — requesting a
-    /// non-default value returns NOT_IMPLEMENTED rather than silently no-oping.
+    /// runAhead accepts 0 or 1 — ares supports exactly one hidden frame.
+    /// rewind toggles snapshot capture; rewindBufferSeconds sizes the history.
     class Configure: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
             let options = parameters["options"] as? [String: Any] ?? [:]
 
-            if let runAhead = (options["runAhead"] as? NSNumber)?.intValue, runAhead != 0 {
-                return BridgeResponse.error(code: "NOT_IMPLEMENTED", message: "runAhead is not supported in v1")
+            if let runAhead = (options["runAhead"] as? NSNumber)?.intValue {
+                guard (0...1).contains(runAhead) else {
+                    return BridgeResponse.error(
+                        code: "INVALID_PARAMETERS",
+                        message: "runAhead must be 0 or 1 — ares supports one hidden frame"
+                    )
+                }
+                renderer.setRunAhead(enabled: runAhead == 1)
             }
-            if options["rewind"] as? Bool == true {
-                return BridgeResponse.error(code: "NOT_IMPLEMENTED", message: "rewind is not supported in v1")
+
+            if let rewind = options["rewind"] as? Bool {
+                renderer.configureRewind(
+                    enabled: rewind,
+                    bufferSeconds: (options["rewindBufferSeconds"] as? NSNumber)?.intValue ?? 0
+                )
             }
 
             if let speed = (options["speed"] as? NSNumber)?.doubleValue {
                 renderer.speedMultiplier = min(max(speed, 0.25), 4.0)
             }
             return BridgeResponse.success(data: ["status": "ok"])
+        }
+    }
+
+    /// Enter/exit rewind playback (5× the capture rate, ares desktop
+    /// semantics). Play resumes automatically when history runs out.
+    /// Requires rewind capture enabled via LoadSystem config or Configure.
+    class ToggleRewind: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
+            switch renderer.toggleRewind() {
+            case 1: return BridgeResponse.success(data: ["status": "rewinding"])
+            case 0: return BridgeResponse.success(data: ["status": "playing"])
+            default: return BridgeResponse.error(
+                code: "REWIND_DISABLED",
+                message: "Rewind capture is off — enable it via configure(['rewind' => true]) first"
+            )
+            }
         }
     }
 

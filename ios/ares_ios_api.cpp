@@ -81,6 +81,22 @@ struct AresContext {
             for (auto& [addr, value] : pairs) cheatLookup[addr] = value;
         }
     }
+
+    // Rewind — desktop-ui/program/rewind.cpp semantics, run inside ares_tick.
+    // Serialized by the Swift-side emuLock like every other ctx access.
+    struct Rewind {
+        bool enabled   = false;
+        bool rewinding = false;
+        uint32_t counter   = 0;
+        uint32_t frequency = 10;   // capture every N frames (ares desktop default)
+        uint32_t length    = 100;  // history cap (ares desktop default ≈ 16.7 s)
+        std::vector<nall::serializer> history;
+    } rewind;
+
+    // Run-ahead — ares supports one hidden frame (desktop-ui program.cpp loop).
+    // Suppressed while fast-forwarding or rewinding, like desktop.
+    bool runAheadEnabled = false;
+    std::atomic<bool> fastForwardActive {false};
 };
 
 static AresContext* g_ctx      = nullptr;
@@ -336,6 +352,11 @@ bool ares_load_rom(AresContext* ctx, const uint8_t* rom, size_t rom_size,
     ctx->cheats.clear();
     ctx->cheatLookup.clear();
 
+    // A new game starts a new timeline — snapshots of the old one are useless.
+    ctx->rewind.rewinding = false;
+    ctx->rewind.counter = 0;
+    ctx->rewind.history.clear();
+
     ctx->root->power(false);
     ctx->romLoaded = true;
     return true;
@@ -388,11 +409,87 @@ bool ares_flush_saves(AresContext* ctx) {
     return SaveIO::flush(ctx->cartridgePak, ctx->savePrefix);
 }
 
+// Port of desktop-ui rewindRun(): in normal play, snapshot every `frequency`
+// frames into a bounded ring; while rewinding, pop and restore at 5× the
+// capture rate until the history is exhausted, then fall back to play.
+static void rewindRun(AresContext* ctx) {
+    auto& rw = ctx->rewind;
+    if (!rw.enabled) return;
+
+    if (!rw.rewinding) {
+        if (++rw.counter < rw.frequency) return;
+        rw.counter = 0;
+        if (rw.history.size() >= rw.length) rw.history.erase(rw.history.begin());
+        rw.history.push_back(ctx->root->serialize(false));
+        return;
+    }
+
+    if (rw.history.empty()) {
+        rw.rewinding = false;
+        rw.counter = 0;
+        return;
+    }
+    if (++rw.counter < std::max(1u, rw.frequency / 5)) return;
+    rw.counter = 0;
+    auto s = rw.history.back();
+    rw.history.pop_back();
+    s.setReading();
+    ctx->root->unserialize(s);
+    if (rw.history.empty()) rw.rewinding = false;
+}
+
 bool ares_tick(AresContext* ctx) {
     if (!ctx || !ctx->romLoaded) return false;
     if (ctx->paused.load(std::memory_order_relaxed)) return false;
-    ctx->root->run();
+
+    rewindRun(ctx);
+
+    // Desktop-ui run-ahead loop: run one hidden frame (video/audio suppressed
+    // by the cores), snapshot, run the visible frame, roll back — a one-frame
+    // preview that reduces perceived input latency at 2× emulation cost.
+    const bool runAhead = ctx->runAheadEnabled &&
+        !ctx->rewind.rewinding &&
+        !ctx->fastForwardActive.load(std::memory_order_relaxed);
+    if (!runAhead) {
+        ctx->root->run();
+    } else {
+        ares::setRunAhead(true);
+        ctx->root->run();
+        auto state = ctx->root->serialize(false);
+        ares::setRunAhead(false);
+        ctx->root->run();
+        state.setReading();
+        ctx->root->unserialize(state);
+    }
     return true;
+}
+
+void ares_configure_rewind(AresContext* ctx, bool enabled, int buffer_seconds) {
+    if (!ctx) return;
+    auto& rw = ctx->rewind;
+    rw.enabled = enabled;
+    rw.length  = buffer_seconds > 0 ? (uint32_t)buffer_seconds * 6u : 100u;
+    if (!enabled) {
+        rw.rewinding = false;
+        rw.counter = 0;
+        rw.history.clear();
+    }
+}
+
+int ares_toggle_rewind(AresContext* ctx) {
+    if (!ctx || !ctx->rewind.enabled) return -1;
+    auto& rw = ctx->rewind;
+    rw.rewinding = !rw.rewinding;
+    rw.counter = 0;
+    return rw.rewinding ? 1 : 0;
+}
+
+void ares_set_run_ahead(AresContext* ctx, bool enabled) {
+    if (ctx) ctx->runAheadEnabled = enabled;
+}
+
+void ares_set_fast_forward(AresContext* ctx, bool active) {
+    if (ctx) ctx->fastForwardActive.store(active, std::memory_order_relaxed);
 }
 
 void ares_set_input(AresContext* ctx, int port, uint32_t bits) {

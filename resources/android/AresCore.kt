@@ -179,6 +179,35 @@ class AresCore {
     fun writeMemory(address: Int, bytes: ByteArray) = nativeWriteMemory(address, bytes)
 
     // -------------------------------------------------------------------------
+    // Rewind / run-ahead (GL thread only — state is read inside tick())
+    // -------------------------------------------------------------------------
+
+    /**
+     * Enable/disable rewind capture. [bufferSeconds] sizes the history
+     * (6 snapshots per second); <= 0 keeps ares' desktop default (~16.7 s).
+     * Disabling drops the captured history.
+     */
+    fun configureRewind(enabled: Boolean, bufferSeconds: Int = 0) =
+        nativeConfigureRewind(enabled, bufferSeconds)
+
+    /**
+     * Enter/exit rewind playback (5× the capture rate, ares desktop
+     * semantics; play resumes when history runs out).
+     * Returns 1 rewinding, 0 playing, -1 rewind capture not enabled.
+     */
+    fun toggleRewind(): Int = nativeToggleRewind()
+
+    /**
+     * Enable/disable one-frame run-ahead: each tick runs a hidden frame plus
+     * a rolled-back visible preview frame, cutting perceived input latency by
+     * one frame at 2× emulation cost. Suppressed during fast-forward/rewind.
+     */
+    fun setRunAhead(enabled: Boolean) = nativeSetRunAhead(enabled)
+
+    /** Mirror the fast-forward flag so run-ahead can suppress itself. Any thread. */
+    fun setFastForward(active: Boolean) = nativeSetFastForward(active)
+
+    // -------------------------------------------------------------------------
     // Cheats (GL thread only — the cheat map is read inside tick())
     // -------------------------------------------------------------------------
 
@@ -250,6 +279,11 @@ class AresCore {
     private external fun nativeAddCheat(code: String): Boolean
     private external fun nativeRemoveCheat(code: String): Boolean
     private external fun nativeClearCheats()
+
+    private external fun nativeConfigureRewind(enabled: Boolean, bufferSeconds: Int)
+    private external fun nativeToggleRewind(): Int
+    private external fun nativeSetRunAhead(enabled: Boolean)
+    private external fun nativeSetFastForward(active: Boolean)
 
     private external fun nativeGetRegion(): String
     private external fun nativeGetPortsJson(): String
