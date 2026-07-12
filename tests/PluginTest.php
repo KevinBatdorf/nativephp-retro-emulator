@@ -584,6 +584,33 @@ describe('Typed layer', function () {
         expect($call['payload']['config'])->toBe(['rewind' => true, 'rewindBufferSeconds' => 30]);
     });
 
+    it('loadSystem fans a config\'s AV knobs out to their own setters', function () {
+        Emulator::surface()->loadSystem(
+            System::Sfc,
+            new SfcConfig(luminance: 120, volume: 80, deepBlackBoost: true, rewind: true),
+        );
+
+        $calls = collect($GLOBALS['__nativephp_calls']);
+
+        // AV knobs are peeled off the staged system config...
+        expect($calls->firstWhere('function', 'Emulator.LoadSystem')['payload']['config'])
+            ->toBe(['rewind' => true, 'deepBlackBoost' => true]);
+
+        // ...and routed to their own native channels instead.
+        expect($calls->firstWhere('function', 'Emulator.SetVideo')['payload']['options'])
+            ->toBe(['luminance' => 120]);
+        expect($calls->firstWhere('function', 'Emulator.SetAudio')['payload']['options'])
+            ->toBe(['volume' => 80]);
+    });
+
+    it('loadSystem leaves inputCapture for surface creation, not the load path', function () {
+        Emulator::surface()->loadSystem(System::Sfc, new SfcConfig(inputCapture: InputCapture::Global));
+
+        $calls = collect($GLOBALS['__nativephp_calls']);
+        expect($calls->firstWhere('function', 'Emulator.LoadSystem')['payload']['config'])->toBe([]);
+        expect($calls->firstWhere('function', 'Emulator.SetVideo'))->toBeNull();
+    });
+
     it('pressButtons sends an atomic all-pressed state map', function () {
         Emulator::surface()->pressButtons(1, [
             SfcButton::Up,

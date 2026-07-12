@@ -2,11 +2,23 @@
 
 namespace KevinBatdorf\RetroEmulator;
 
+use KevinBatdorf\RetroEmulator\Config\Config;
 use KevinBatdorf\RetroEmulator\Config\SystemConfig;
 
 class Emulator
 {
     private string $surface = 'main';
+
+    /**
+     * Config keys that reach the core through the AV setters, not the staged
+     * system config. inputCapture is here too: it is resolved when the surface
+     * is created, so loadSystem has nowhere to route it.
+     */
+    private const PRESENTATION_KEYS = [
+        'luminance', 'saturation', 'gamma', 'colorBleed', 'overscan',
+        'output', 'fixedScale', 'aspectCorrection',
+        'volume', 'balance', 'rumble', 'shader', 'inputCapture',
+    ];
 
     /**
      * Runtime handle for the named surface declared by
@@ -45,15 +57,66 @@ class Emulator
      */
     public function loadSystem(System|string $system, SystemConfig|array $config = []): static
     {
+        $staged = $config instanceof Config
+            ? array_diff_key($config->toArray(), array_flip(self::PRESENTATION_KEYS))
+            : $config;
+
         if (function_exists('nativephp_call')) {
             nativephp_call('Emulator.LoadSystem', json_encode([
                 'surface' => $this->surface,
                 'system' => $system instanceof System ? $system->value : $system,
-                'config' => $config instanceof SystemConfig ? $config->toArray() : $config,
+                'config' => $staged,
             ]));
         }
 
+        if ($config instanceof Config) {
+            $this->applyPresentation($config);
+        }
+
         return $this;
+    }
+
+    /**
+     * Fan a config's presentation/AV knobs out to their own native channels,
+     * which the staged system config doesn't carry.
+     */
+    private function applyPresentation(Config $config): void
+    {
+        $video = [
+            $config->luminance, $config->saturation, $config->gamma,
+            $config->colorBleed, $config->overscan, $config->output,
+            $config->fixedScale, $config->aspectCorrection,
+        ];
+        if (array_filter($video, fn ($value) => $value !== null) !== []) {
+            $this->setVideo(
+                luminance: $config->luminance,
+                saturation: $config->saturation,
+                gamma: $config->gamma,
+                colorBleed: $config->colorBleed,
+                overscan: $config->overscan,
+                output: $config->output,
+                fixedScale: $config->fixedScale,
+                aspectCorrection: $config->aspectCorrection,
+            );
+        }
+
+        // Send both audio knobs in one call — the native side recomputes the
+        // pair each time, so a lone key would reset the other.
+        $audio = array_filter([
+            'volume' => $config->volume,
+            'balance' => $config->balance,
+        ], fn ($value) => $value !== null);
+        if ($audio !== []) {
+            $this->setAudio($audio);
+        }
+
+        if ($config->rumble !== null) {
+            $this->setRumble($config->rumble);
+        }
+
+        if ($config->shader !== null) {
+            $this->setShader($config->shader);
+        }
     }
 
     /**
