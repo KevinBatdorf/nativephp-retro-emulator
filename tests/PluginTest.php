@@ -1,29 +1,31 @@
 <?php
 
+use KevinBatdorf\RetroEmulator\AspectCorrection;
 use KevinBatdorf\RetroEmulator\Buttons\FcButton;
 use KevinBatdorf\RetroEmulator\Buttons\GbButton;
 use KevinBatdorf\RetroEmulator\Buttons\MdButton;
 use KevinBatdorf\RetroEmulator\Buttons\SfcButton;
 use KevinBatdorf\RetroEmulator\Components\Emulator as EmulatorComponent;
+use KevinBatdorf\RetroEmulator\Config\Config;
 use KevinBatdorf\RetroEmulator\Config\GbConfig;
 use KevinBatdorf\RetroEmulator\Config\MdConfig;
 use KevinBatdorf\RetroEmulator\Config\RegionalSystemConfig;
 use KevinBatdorf\RetroEmulator\Config\SfcConfig;
 use KevinBatdorf\RetroEmulator\Elements\Emulator as EmulatorElement;
-use KevinBatdorf\RetroEmulator\Region;
-use KevinBatdorf\RetroEmulator\AspectCorrection;
 use KevinBatdorf\RetroEmulator\Emulator;
 use KevinBatdorf\RetroEmulator\Events\EmulatorError;
-use KevinBatdorf\RetroEmulator\VideoOutput;
 use KevinBatdorf\RetroEmulator\Events\EmulatorPaused;
 use KevinBatdorf\RetroEmulator\Events\EmulatorResumed;
 use KevinBatdorf\RetroEmulator\Events\EmulatorStarted;
 use KevinBatdorf\RetroEmulator\Events\EmulatorStopped;
 use KevinBatdorf\RetroEmulator\Events\MemoryChanged;
 use KevinBatdorf\RetroEmulator\Events\MemoryRead;
+use KevinBatdorf\RetroEmulator\InputCapture;
+use KevinBatdorf\RetroEmulator\Region;
 use KevinBatdorf\RetroEmulator\RetroEmulatorServiceProvider;
 use KevinBatdorf\RetroEmulator\Status;
 use KevinBatdorf\RetroEmulator\System;
+use KevinBatdorf\RetroEmulator\VideoOutput;
 
 // ---------------------------------------------------------------------------
 // nativephp.json manifest
@@ -568,6 +570,42 @@ describe('Typed layer', function () {
         expect($config->toArray())->toBe([
             'colorEmulation' => true,
             'interframeBlending' => true,
+        ]);
+    });
+
+    it('the global Config serializes shared knobs as wire values', function () {
+        $config = new Config(
+            luminance: 100,
+            output: VideoOutput::Integer,
+            aspectCorrection: AspectCorrection::None,
+            volume: 80,
+            inputCapture: InputCapture::Global,
+            speed: 1.5,
+            rewind: true,
+        );
+
+        expect($config->toArray())->toBe([
+            'luminance' => 100,
+            'output' => 'integer',
+            'aspectCorrection' => 'none',
+            'volume' => 80,
+            'inputCapture' => 'global',
+            'speed' => 1.5,
+            'rewind' => true,
+        ]);
+    });
+
+    it('the global Config omits every unset knob', function () {
+        expect((new Config)->toArray())->toBe([]);
+    });
+
+    it('a system config inherits and overrides the shared Config knobs', function () {
+        $config = new SfcConfig(luminance: 90, volume: 60, deepBlackBoost: true);
+
+        expect($config->toArray())->toBe([
+            'luminance' => 90,
+            'volume' => 60,
+            'deepBlackBoost' => true,
         ]);
     });
 

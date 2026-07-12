@@ -2,34 +2,67 @@
 
 namespace KevinBatdorf\RetroEmulator\Config;
 
+use KevinBatdorf\RetroEmulator\AspectCorrection;
+use KevinBatdorf\RetroEmulator\InputCapture;
+use KevinBatdorf\RetroEmulator\VideoOutput;
+
 /**
- * System-level config passed to loadSystem(). Only explicitly-set options are
- * sent over the bridge, so native defaults stay authoritative. Subclassed per
- * system because each system's options are genuinely unique.
+ * A single system's config: everything shared from Config, plus the one key
+ * that is never shareable — the path to that system's BIOS/firmware. Subclassed
+ * per system because each system's remaining options are genuinely unique.
  */
-abstract class SystemConfig
+abstract class SystemConfig extends Config
 {
     public function __construct(
+        ?int $luminance = null,
+        ?int $saturation = null,
+        ?float $gamma = null,
+        ?bool $colorBleed = null,
+        ?bool $overscan = null,
+        ?VideoOutput $output = null,
+        ?int $fixedScale = null,
+        ?AspectCorrection $aspectCorrection = null,
+        ?int $volume = null,
+        ?int $balance = null,
+        ?InputCapture $inputCapture = null,
+        ?bool $autoSave = null,
+        ?float $speed = null,
+        ?int $runAhead = null,
+        ?bool $rewind = null,
+        ?int $rewindBufferSeconds = null,
+        ?bool $dynamicRateControl = null,
+        ?bool $rumble = null,
+        ?string $shader = null,
         public ?string $biosPath = null,
-        public ?bool $autoSave = null,
-        public ?float $speed = null,
-        public ?int $runAhead = null,
-        public ?bool $rewind = null,
-        public ?int $rewindBufferSeconds = null,
-        public ?bool $dynamicRateControl = null,
-    ) {}
+    ) {
+        parent::__construct(
+            luminance: $luminance,
+            saturation: $saturation,
+            gamma: $gamma,
+            colorBleed: $colorBleed,
+            overscan: $overscan,
+            output: $output,
+            fixedScale: $fixedScale,
+            aspectCorrection: $aspectCorrection,
+            volume: $volume,
+            balance: $balance,
+            inputCapture: $inputCapture,
+            autoSave: $autoSave,
+            speed: $speed,
+            runAhead: $runAhead,
+            rewind: $rewind,
+            rewindBufferSeconds: $rewindBufferSeconds,
+            dynamicRateControl: $dynamicRateControl,
+            rumble: $rumble,
+            shader: $shader,
+        );
+    }
 
     /** @return array<string, mixed> */
     public function toArray(): array
     {
-        return array_filter([
+        return parent::toArray() + array_filter([
             'biosPath' => $this->biosPath,
-            'autoSave' => $this->autoSave,
-            'speed' => $this->speed,
-            'runAhead' => $this->runAhead,
-            'rewind' => $this->rewind,
-            'rewindBufferSeconds' => $this->rewindBufferSeconds,
-            'dynamicRateControl' => $this->dynamicRateControl,
         ], fn ($value) => $value !== null);
     }
 }
