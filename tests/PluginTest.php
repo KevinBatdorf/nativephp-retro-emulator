@@ -526,6 +526,12 @@ describe('Typed layer', function () {
         expect($config->toArray())->toBe(['autoSave' => false, 'rewind' => true]);
     });
 
+    it('config classes can opt out of dynamic rate control', function () {
+        $config = new SfcConfig(dynamicRateControl: false);
+
+        expect($config->toArray())->toBe(['dynamicRateControl' => false]);
+    });
+
     it('loadSystem accepts a System enum and a config object', function () {
         Emulator::surface()->loadSystem(
             System::Sfc,

@@ -207,6 +207,14 @@ class AresCore {
     /** Mirror the fast-forward flag so run-ahead can suppress itself. Any thread. */
     fun setFastForward(active: Boolean) = nativeSetFastForward(active)
 
+    /**
+     * Enable/disable dynamic rate control (default on): each tick skews the
+     * stream resamplers by up to ±0.5% toward a half-full audio ring, so
+     * production tracks the device DAC clock instead of drifting into
+     * overflow or underrun. Any thread.
+     */
+    fun setDynamicRateControl(enabled: Boolean) = nativeSetDynamicRateControl(enabled)
+
     // -------------------------------------------------------------------------
     // Rumble (any thread)
     // -------------------------------------------------------------------------
@@ -294,6 +302,7 @@ class AresCore {
     private external fun nativeToggleRewind(): Int
     private external fun nativeSetRunAhead(enabled: Boolean)
     private external fun nativeSetFastForward(active: Boolean)
+    private external fun nativeSetDynamicRateControl(enabled: Boolean)
 
     private external fun nativeSetRumbleEnabled(enabled: Boolean)
     private external fun nativeGetRumbleState(): Int

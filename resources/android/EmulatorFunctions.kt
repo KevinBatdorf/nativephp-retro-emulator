@@ -183,7 +183,7 @@ object EmulatorFunctions {
      * (SFC ipl.rom + boards.bml, GB boot ROM, MD TMSS) is embedded; no
      * biosPath is needed for these systems.
      * config keys: biosPath (String?), autoSave (Bool), speed (Float), runAhead (Int),
-     *              rewind (Bool), rewindBufferSeconds (Int).
+     *              rewind (Bool), rewindBufferSeconds (Int), dynamicRateControl (Bool).
      */
     class LoadSystem(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
@@ -212,6 +212,7 @@ object EmulatorFunctions {
             renderer.fastForward = false
             renderer.autoSave = config["autoSave"] as? Boolean ?: true
             renderer.queueSetRunAhead(runAhead == 1)
+            renderer.queueSetDynamicRateControl(config["dynamicRateControl"] as? Boolean ?: true)
             renderer.queueConfigureRewind(
                 config["rewind"] as? Boolean ?: false,
                 (config["rewindBufferSeconds"] as? Number)?.toInt() ?: 0,

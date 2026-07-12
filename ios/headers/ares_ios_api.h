@@ -110,6 +110,12 @@ void ares_set_run_ahead(AresContext* ctx, bool enabled);
 // Mirror of the host fast-forward flag — suppresses run-ahead.  Any thread.
 void ares_set_fast_forward(AresContext* ctx, bool active);
 
+// Enable/disable dynamic rate control (default on): each tick skews the
+// stream resamplers by up to ±0.5% toward a half-full audio ring, so
+// production tracks the device DAC clock instead of drifting into overflow
+// or underrun.  Any thread.
+void ares_set_dynamic_rate_control(AresContext* ctx, bool enabled);
+
 // Rumble — cores publish motor state (SFC Rumble Gamepad, GB MBC5 rumble
 // carts, N64 Rumble Pak); the host polls per frame and drives its haptics.
 // Any thread. ---------------------------------------------------------------

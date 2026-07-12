@@ -17,6 +17,7 @@
 #include "system_registry.hpp"
 #include "save_io.hpp"
 #include "cheat_parse.hpp"
+#include "rate_control.hpp"
 
 #define LOG_TAG "AresCore"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO,  LOG_TAG, __VA_ARGS__)
@@ -126,6 +127,10 @@ struct EmulatorState {
     // strong<<16|weak; the host polls per frame and drives its vibrator.
     std::atomic<bool> rumbleEnabled {false};
     std::atomic<uint32_t> rumbleState {0};
+
+    // Dynamic rate control (see native/rate_control.hpp). Written from bridge
+    // threads, read on the GL thread each tick.
+    std::atomic<bool> dynamicRateControl {true};
 };
 
 static EmulatorState* g_state = nullptr;
@@ -516,6 +521,17 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeTick(
 {
     if (!g_state || !g_state->romLoaded) return;
     if (!g_state->paused.load(std::memory_order_relaxed)) {
+        if (g_state->dynamicRateControl.load(std::memory_order_relaxed) &&
+            !g_state->audioStreams.empty()) {
+            f64 fill;
+            {
+                std::lock_guard<std::mutex> lock(g_state->audioMutex);
+                fill = (f64)g_state->audioRingBuffer.size() /
+                       EmulatorState::kAudioCap;
+            }
+            RateControl::apply(g_state->audioStreams, fill);
+        }
+
         rewindRun();
 
         // Desktop-ui run-ahead loop: run one hidden frame (video/audio
@@ -841,6 +857,14 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetFastForward(
     JNIEnv*, jobject, jboolean active)
 {
     if (g_state) g_state->fastForwardActive.store(active, std::memory_order_relaxed);
+}
+
+/** Enable/disable dynamic rate control (default on). Any thread. */
+JNIEXPORT void JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetDynamicRateControl(
+    JNIEnv*, jobject, jboolean enabled)
+{
+    if (g_state) g_state->dynamicRateControl.store(enabled, std::memory_order_relaxed);
 }
 
 /** Gate rumble forwarding. Disabling zeroes the motor state. Any thread. */

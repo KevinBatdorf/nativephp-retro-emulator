@@ -256,6 +256,14 @@ final class EmulatorRenderer: UIView {
         emuLock.unlock()
     }
 
+    /// Enable/disable dynamic rate control (see ares_set_dynamic_rate_control).
+    /// Serialised on emuLock.
+    func setDynamicRateControl(enabled: Bool) {
+        emuLock.lock()
+        ares_set_dynamic_rate_control(ctx, enabled)
+        emuLock.unlock()
+    }
+
     // MARK: - Cheats
 
     /// Register (or replace) a cheat code. Returns false when no valid

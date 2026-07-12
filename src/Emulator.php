@@ -36,6 +36,7 @@ class Emulator
      *     rewind?: bool,
      *     rewindBufferSeconds?: int,
      *     speed?: float,
+     *     dynamicRateControl?: bool,
      * }  $config
      */
     public function loadSystem(System|string $system, SystemConfig|array $config = []): static

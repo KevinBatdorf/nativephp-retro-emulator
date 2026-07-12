@@ -3,6 +3,9 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Rumble drives the vibrator; hosts get this from the plugin manifest. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
     <!-- READ_EXTERNAL_STORAGE lets tests load ROM files from device storage. -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />

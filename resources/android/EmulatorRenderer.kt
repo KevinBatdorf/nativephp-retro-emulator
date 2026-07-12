@@ -595,6 +595,10 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
     /** Enable/disable one-frame run-ahead (see [AresCore.setRunAhead]). Fire-and-forget. */
     fun queueSetRunAhead(enabled: Boolean) = queueEvent { core.setRunAhead(enabled) }
 
+    /** Enable/disable dynamic rate control (see [AresCore.setDynamicRateControl]). Fire-and-forget. */
+    fun queueSetDynamicRateControl(enabled: Boolean) =
+        queueEvent { core.setDynamicRateControl(enabled) }
+
     // ---------------------------------------------------------------------------
     // Rumble — ares motor state polled per frame, driven onto the device vibrator
     // ---------------------------------------------------------------------------

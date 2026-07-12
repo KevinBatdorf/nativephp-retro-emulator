@@ -16,6 +16,7 @@ abstract class SystemConfig
         public ?int $runAhead = null,
         public ?bool $rewind = null,
         public ?int $rewindBufferSeconds = null,
+        public ?bool $dynamicRateControl = null,
     ) {}
 
     /** @return array<string, mixed> */
@@ -28,6 +29,7 @@ abstract class SystemConfig
             'runAhead' => $this->runAhead,
             'rewind' => $this->rewind,
             'rewindBufferSeconds' => $this->rewindBufferSeconds,
+            'dynamicRateControl' => $this->dynamicRateControl,
         ], fn ($value) => $value !== null);
     }
 }

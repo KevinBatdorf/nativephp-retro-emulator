@@ -141,7 +141,8 @@ enum EmulatorFunctions {
     /// compiled into the native library — reported by GetSystems with
     /// `supported: true`. System firmware (SFC ipl.rom + boards.bml, GB boot
     /// ROM, MD TMSS) is embedded; no biosPath is needed for these systems.
-    /// config keys: biosPath (String?), autoSave, speed, runAhead, rewind, rewindBufferSeconds.
+    /// config keys: biosPath (String?), autoSave, speed, runAhead, rewind,
+    /// rewindBufferSeconds, dynamicRateControl.
     class LoadSystem: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
@@ -167,6 +168,7 @@ enum EmulatorFunctions {
             renderer.fastForward = false
             renderer.autoSave = config["autoSave"] as? Bool ?? true
             renderer.setRunAhead(enabled: runAhead == 1)
+            renderer.setDynamicRateControl(enabled: config["dynamicRateControl"] as? Bool ?? true)
             renderer.configureRewind(
                 enabled: config["rewind"] as? Bool ?? false,
                 bufferSeconds: (config["rewindBufferSeconds"] as? NSNumber)?.intValue ?? 0

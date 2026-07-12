@@ -5,6 +5,7 @@
 #include "system_registry.hpp"
 #include "save_io.hpp"
 #include "cheat_parse.hpp"
+#include "rate_control.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -103,6 +104,10 @@ struct AresContext {
     // strong<<16|weak; the host polls per frame and drives its haptics.
     std::atomic<bool> rumbleEnabled {false};
     std::atomic<uint32_t> rumbleState {0};
+
+    // Dynamic rate control (see native/rate_control.hpp). Written from the
+    // bridge thread, read in ares_tick on the emulation thread.
+    std::atomic<bool> dynamicRateControl {true};
 };
 
 static AresContext* g_ctx      = nullptr;
@@ -455,6 +460,16 @@ bool ares_tick(AresContext* ctx) {
     if (!ctx || !ctx->romLoaded) return false;
     if (ctx->paused.load(std::memory_order_relaxed)) return false;
 
+    if (ctx->dynamicRateControl.load(std::memory_order_relaxed) &&
+        !ctx->audioStreams.empty()) {
+        f64 fill;
+        {
+            std::lock_guard<std::mutex> lock(ctx->audioMutex);
+            fill = (f64)ctx->audioRingBuffer.size() / AresContext::kAudioCap;
+        }
+        RateControl::apply(ctx->audioStreams, fill);
+    }
+
     rewindRun(ctx);
 
     // Desktop-ui run-ahead loop: run one hidden frame (video/audio suppressed
@@ -503,6 +518,10 @@ void ares_set_run_ahead(AresContext* ctx, bool enabled) {
 
 void ares_set_fast_forward(AresContext* ctx, bool active) {
     if (ctx) ctx->fastForwardActive.store(active, std::memory_order_relaxed);
+}
+
+void ares_set_dynamic_rate_control(AresContext* ctx, bool enabled) {
+    if (ctx) ctx->dynamicRateControl.store(enabled, std::memory_order_relaxed);
 }
 
 void ares_set_rumble_enabled(AresContext* ctx, bool enabled) {
