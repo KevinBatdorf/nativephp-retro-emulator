@@ -1,6 +1,13 @@
 import Metal
 import MetalKit
 
+/// Presentation settings mirroring ares desktop's Video settings.
+struct PresentationSettings {
+    var output = "scale"            // scale | integer | integerFixed | stretch
+    var fixedScale = 2
+    var aspectCorrection = "standard"  // none | standard | anamorphic
+}
+
 /// Screen-node presentation geometry, captured alongside each frame
 /// (ares_get_video_geometry order).
 struct VideoGeometry {
@@ -21,26 +28,71 @@ struct VideoGeometry {
         rotation = Int(values[6])
     }
 
-    /// Port of ares desktop-ui/program/platform.cpp:95-115 with desktop's
-    /// default settings (output "Scale" = best-fit, aspect correction
-    /// "Standard"): video size is width·scaleX·aspectX/aspectY × height·scaleY
-    /// (swapped at 90°/270°), best-fit scaled into the viewport. The reference
-    /// truncates to u32 at each step — mirrored here. Returns the normalized
-    /// output scale for the centered quad, or nil when nothing can be sized.
-    func outputScale(viewportWidth: Double, viewportHeight: Double) -> SIMD2<Float>? {
-        var videoWidth  = (width * scaleX).rounded(.towardZero)
-        var videoHeight = (height * scaleY).rounded(.towardZero)
-        if aspectY > 0 { videoWidth = (videoWidth * aspectX / aspectY).rounded(.towardZero) }
+    /// Port of ares desktop-ui/program/platform.cpp:95-166: video size is
+    /// width·scaleX (·aspectX/aspectY unless aspectCorrection "none", ·4/3
+    /// more for "anamorphic") × height·scaleY, swapped at 90°/270°, then
+    /// sized per output mode — "scale" best-fit, "integer" largest whole
+    /// multiple, "integerFixed" exactly fixedScale×, "stretch" fill — with
+    /// desktop's fallbacks when a mode doesn't fit. u32 truncation at each
+    /// step mirrors the reference. Returns the normalized output scale for
+    /// the centered quad, or nil when nothing can be sized.
+    func outputScale(
+        viewportWidth: Int, viewportHeight: Int, settings: PresentationSettings
+    ) -> SIMD2<Float>? {
+        var videoWidth  = Int(width * scaleX)
+        var videoHeight = Int(height * scaleY)
+        if settings.aspectCorrection != "none", aspectY > 0 {
+            videoWidth = Int(Double(videoWidth) * aspectX / aspectY)
+        }
+        if settings.aspectCorrection == "anamorphic" { videoWidth = videoWidth * 4 / 3 }
         if rotation == 90 || rotation == 270 { swap(&videoWidth, &videoHeight) }
         guard videoWidth > 0, videoHeight > 0, viewportWidth > 0, viewportHeight > 0 else {
             return nil
         }
-        let frac = min(viewportWidth / videoWidth, viewportHeight / videoHeight)
-        let outputWidth  = (videoWidth * frac).rounded(.towardZero)
-        let outputHeight = (videoHeight * frac).rounded(.towardZero)
+
+        let multiplierX = viewportWidth / videoWidth
+        let multiplierY = viewportHeight / videoHeight
+        let multiplier  = min(multiplierX, multiplierY)
+        let bestFitScale = min(
+            Float(viewportWidth) / Float(videoWidth),
+            Float(viewportHeight) / Float(videoHeight)
+        )
+
+        var outputWidth  = videoWidth * multiplier
+        var outputHeight = videoHeight * multiplier
+
+        if multiplier == 0 || settings.output == "scale" {
+            outputWidth  = Int(Float(videoWidth) * bestFitScale)
+            outputHeight = Int(Float(videoHeight) * bestFitScale)
+        }
+        // "integer" keeps video·multiplier from above; the reference's inner
+        // fallback is unreachable there (multiplier == 0 is caught first).
+
+        if settings.output == "integerFixed" {
+            var fixedMult = max(1, settings.fixedScale)
+            if fixedMult > multiplierX || fixedMult > multiplierY {
+                fixedMult = max(1, min(multiplierX, multiplierY))
+                if multiplierX == 0 || multiplierY == 0 {
+                    outputWidth  = Int(Float(videoWidth) * bestFitScale)
+                    outputHeight = Int(Float(videoHeight) * bestFitScale)
+                } else {
+                    outputWidth  = videoWidth * fixedMult
+                    outputHeight = videoHeight * fixedMult
+                }
+            } else {
+                outputWidth  = videoWidth * fixedMult
+                outputHeight = videoHeight * fixedMult
+            }
+        }
+
+        if settings.output == "stretch" {
+            outputWidth  = viewportWidth
+            outputHeight = viewportHeight
+        }
+
         return SIMD2<Float>(
-            Float(outputWidth / viewportWidth),
-            Float(outputHeight / viewportHeight)
+            Float(outputWidth) / Float(viewportWidth),
+            Float(outputHeight) / Float(viewportHeight)
         )
     }
 }
@@ -65,6 +117,15 @@ final class MetalFrameRenderer: NSObject, MTKViewDelegate {
     private var pendingW = 0
     private var pendingH = 0
     private var geometry = VideoGeometry()
+    private var settings = PresentationSettings()
+
+    /// Thread-safe. Called from the bridge thread when SetVideo changes
+    /// presentation settings; applies on the next draw.
+    func setPresentation(_ newSettings: PresentationSettings) {
+        lock.lock()
+        settings = newSettings
+        lock.unlock()
+    }
 
     init?(device: MTLDevice, pixelFormat: MTLPixelFormat) {
         self.device = device
@@ -112,6 +173,7 @@ final class MetalFrameRenderer: NSObject, MTKViewDelegate {
         let pw = pendingW
         let ph = pendingH
         let geom = geometry
+        let pres = settings
         pending = nil
         lock.unlock()
 
@@ -124,8 +186,9 @@ final class MetalFrameRenderer: NSObject, MTKViewDelegate {
               let tex        = texture else { return }
 
         guard var posScale = geom.outputScale(
-            viewportWidth: Double(view.drawableSize.width),
-            viewportHeight: Double(view.drawableSize.height)
+            viewportWidth: Int(view.drawableSize.width),
+            viewportHeight: Int(view.drawableSize.height),
+            settings: pres
         ) else { return }
 
         guard let cmd = commandQueue.makeCommandBuffer(),

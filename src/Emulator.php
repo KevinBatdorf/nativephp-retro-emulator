@@ -263,9 +263,13 @@ class Emulator
 
     /**
      * Merge video post-processing options. Overscan borders are trimmed by
-     * default; overscan: true shows the full canvas. Options ares has no
-     * hook for (colorEmulation, deepBlackBoost, pixelAccuracy) are reported
-     * back as ignored by the bridge.
+     * default; overscan: true shows the full canvas. Presentation follows
+     * ares desktop's Video settings: output 'scale' (best-fit, default),
+     * 'integer' (largest whole multiple), 'integerFixed' (exactly
+     * fixedScale×), or 'stretch'; aspectCorrection 'standard' (default),
+     * 'none' (square pixels), or 'anamorphic' (force 4:3). Options ares has
+     * no hook for (colorEmulation, deepBlackBoost, pixelAccuracy) are
+     * reported back as ignored by the bridge.
      */
     public function setVideo(
         ?int $luminance = null,
@@ -277,10 +281,14 @@ class Emulator
         ?bool $deepBlackBoost = null,
         ?bool $overscan = null,
         ?bool $pixelAccuracy = null,
+        ?string $output = null,
+        ?int $fixedScale = null,
+        ?string $aspectCorrection = null,
     ): static {
         $options = array_filter(compact(
             'luminance', 'saturation', 'gamma', 'colorBleed', 'interframeBlending',
             'colorEmulation', 'deepBlackBoost', 'overscan', 'pixelAccuracy',
+            'output', 'fixedScale', 'aspectCorrection',
         ), fn ($value) => $value !== null);
 
         if (function_exists('nativephp_call')) {

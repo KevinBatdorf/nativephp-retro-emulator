@@ -578,4 +578,13 @@ describe('Typed layer', function () {
         $call = collect($GLOBALS['__nativephp_calls'])->firstWhere('function', 'Emulator.SetVideo');
         expect($call['payload']['options'])->toBe(['luminance' => 90, 'colorBleed' => true]);
     });
+
+    it('setVideo sends presentation settings', function () {
+        Emulator::surface()->setVideo(output: 'integerFixed', fixedScale: 3, aspectCorrection: 'none');
+
+        $call = collect($GLOBALS['__nativephp_calls'])->firstWhere('function', 'Emulator.SetVideo');
+        expect($call['payload']['options'])->toBe([
+            'output' => 'integerFixed', 'fixedScale' => 3, 'aspectCorrection' => 'none',
+        ]);
+    });
 });

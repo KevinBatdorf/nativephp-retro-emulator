@@ -412,19 +412,39 @@ enum EmulatorFunctions {
 
     /// Merge video options — luminance/saturation 0–100, gamma 1.0–2.0,
     /// colorBleed/interframeBlending/overscan booleans, applied on the ares
-    /// screen node. overscan false (default) trims the borders like desktop.
-    /// Options ares has no post-processing hook for are reported back as ignored.
+    /// screen node; presentation settings output (scale/integer/integerFixed/
+    /// stretch), fixedScale, and aspectCorrection (none/standard/anamorphic)
+    /// mirror ares desktop's Video settings. overscan false (default) trims
+    /// the borders like desktop. Options ares has no post-processing hook for
+    /// are reported back as ignored.
     class SetVideo: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
             let options = parameters["options"] as? [String: Any] ?? [:]
+            let output = options["output"] as? String ?? "scale"
+            guard ["scale", "integer", "integerFixed", "stretch"].contains(output) else {
+                return BridgeResponse.error(
+                    code: "INVALID_PARAMETERS",
+                    message: "output must be scale, integer, integerFixed, or stretch — got '\(output)'"
+                )
+            }
+            let aspectCorrection = options["aspectCorrection"] as? String ?? "standard"
+            guard ["none", "standard", "anamorphic"].contains(aspectCorrection) else {
+                return BridgeResponse.error(
+                    code: "INVALID_PARAMETERS",
+                    message: "aspectCorrection must be none, standard, or anamorphic — got '\(aspectCorrection)'"
+                )
+            }
             renderer.setVideoOptions(
                 luminance:  ((options["luminance"]  as? NSNumber)?.floatValue ?? 100) / 100,
                 saturation: ((options["saturation"] as? NSNumber)?.floatValue ?? 100) / 100,
                 gamma:      (options["gamma"] as? NSNumber)?.floatValue ?? 1.0,
                 colorBleed: options["colorBleed"] as? Bool ?? false,
                 interframeBlending: options["interframeBlending"] as? Bool ?? false,
-                overscan:   options["overscan"] as? Bool ?? false
+                overscan:   options["overscan"] as? Bool ?? false,
+                output:     output,
+                fixedScale: (options["fixedScale"] as? NSNumber)?.intValue ?? 2,
+                aspectCorrection: aspectCorrection
             )
             let ignored = options.keys.filter {
                 ["colorEmulation", "deepBlackBoost", "pixelAccuracy"].contains($0)

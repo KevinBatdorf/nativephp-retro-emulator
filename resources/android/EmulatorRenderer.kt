@@ -181,6 +181,12 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
     private var surfaceH = 0
     private var outputRect = OutputRect(0, 0, 0, 0)
 
+    // Presentation settings (ares desktop's Video settings) — written from
+    // bridge threads via [queueVideoOptions], read per frame on the GL thread.
+    @Volatile var videoOutput: String = "scale"
+    @Volatile var videoFixedScale: Int = 2
+    @Volatile var videoAspectCorrection: String = "standard"
+
     private val renderer = object : GLSurfaceView.Renderer {
 
         private var textureId   = 0
@@ -348,6 +354,9 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
                     aspectX = g[4], aspectY = g[5],
                     rotation = g[6].toInt(),
                     viewportWidth = surfaceW, viewportHeight = surfaceH,
+                    output = videoOutput,
+                    fixedScale = videoFixedScale,
+                    aspectCorrection = videoAspectCorrection,
                 )
             }
 
@@ -738,7 +747,11 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
     /** Master volume (0–1) and stereo balance (−1 … +1). Safe from any thread. */
     fun setAudioOptions(volume: Float, balance: Float) = core.setAudio(volume, balance)
 
-    /** Queue video post-processing options onto the GL thread. */
+    /**
+     * Queue video post-processing options onto the GL thread. Presentation
+     * settings (output/fixedScale/aspectCorrection) apply on the next frame;
+     * screen-node options need a loaded system.
+     */
     fun queueVideoOptions(
         luminance: Float,
         saturation: Float,
@@ -746,7 +759,13 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
         colorBleed: Boolean,
         interframeBlending: Boolean,
         overscan: Boolean,
+        output: String,
+        fixedScale: Int,
+        aspectCorrection: String,
     ) {
+        videoOutput = output
+        videoFixedScale = fixedScale
+        videoAspectCorrection = aspectCorrection
         queueEvent {
             core.setVideo(luminance, saturation, gamma, colorBleed, interframeBlending, overscan)
         }
@@ -798,11 +817,15 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
 internal data class OutputRect(val x: Int, val y: Int, val w: Int, val h: Int)
 
 /**
- * Port of ares desktop-ui/program/platform.cpp:95-115 with desktop's default
- * settings (output "Scale" = best-fit, aspect correction "Standard"): the
- * emulated video size is width·scaleX·aspectX/aspectY × height·scaleY
- * (dimensions swapped for 90°/270° rotation), scaled by the best-fit
- * fraction and centered in the viewport (ruby::video.output centering).
+ * Port of ares desktop-ui/program/platform.cpp:95-166: the emulated video
+ * size is width·scaleX (·aspectX/aspectY unless aspectCorrection "none",
+ * ·4/3 more for "anamorphic") × height·scaleY, dimensions swapped for
+ * 90°/270° rotation, then sized per output mode — "scale" best-fit,
+ * "integer" largest whole multiple, "integerFixed" exactly [fixedScale]×,
+ * "stretch" fill — and centered (ruby::video.output centering). Modes that
+ * don't fit fall back the way desktop does: integer → best-fit when even 1×
+ * overflows; integerFixed → largest fitting multiple, then best-fit.
+ * u32 truncation at each step mirrors the reference exactly.
  */
 internal fun computeOutputRect(
     nodeWidth: Double, nodeHeight: Double,
@@ -810,11 +833,16 @@ internal fun computeOutputRect(
     aspectX: Double, aspectY: Double,
     rotation: Int,
     viewportWidth: Int, viewportHeight: Int,
+    output: String = "scale",
+    fixedScale: Int = 2,
+    aspectCorrection: String = "standard",
 ): OutputRect {
-    // The reference truncates to u32 at each step — mirror that exactly.
     var videoWidth  = (nodeWidth * scaleX).toInt()
     var videoHeight = (nodeHeight * scaleY).toInt()
-    if (aspectY > 0) videoWidth = (videoWidth * aspectX / aspectY).toInt()
+    if (aspectCorrection != "none" && aspectY > 0) {
+        videoWidth = (videoWidth * aspectX / aspectY).toInt()
+    }
+    if (aspectCorrection == "anamorphic") videoWidth = videoWidth * 4 / 3
     if (rotation == 90 || rotation == 270) {
         val swap = videoWidth
         videoWidth = videoHeight
@@ -824,12 +852,46 @@ internal fun computeOutputRect(
         return OutputRect(0, 0, 0, 0)
     }
 
-    val frac = minOf(
+    val multiplierX = viewportWidth / videoWidth
+    val multiplierY = viewportHeight / videoHeight
+    val multiplier  = minOf(multiplierX, multiplierY)
+    val bestFitScale = minOf(
         viewportWidth.toFloat() / videoWidth,
         viewportHeight.toFloat() / videoHeight,
     )
-    val outputWidth  = (videoWidth * frac).toInt()
-    val outputHeight = (videoHeight * frac).toInt()
+
+    var outputWidth  = videoWidth * multiplier
+    var outputHeight = videoHeight * multiplier
+
+    if (multiplier == 0 || output == "scale") {
+        outputWidth  = (videoWidth * bestFitScale).toInt()
+        outputHeight = (videoHeight * bestFitScale).toInt()
+    }
+    // "integer" keeps video·multiplier from above; the reference's inner
+    // fallback is unreachable there (multiplier == 0 is caught first).
+
+    if (output == "integerFixed") {
+        var fixedMult = maxOf(1, fixedScale)
+        if (fixedMult > multiplierX || fixedMult > multiplierY) {
+            fixedMult = maxOf(1, minOf(multiplierX, multiplierY))
+            if (multiplierX == 0 || multiplierY == 0) {
+                outputWidth  = (videoWidth * bestFitScale).toInt()
+                outputHeight = (videoHeight * bestFitScale).toInt()
+            } else {
+                outputWidth  = videoWidth * fixedMult
+                outputHeight = videoHeight * fixedMult
+            }
+        } else {
+            outputWidth  = videoWidth * fixedMult
+            outputHeight = videoHeight * fixedMult
+        }
+    }
+
+    if (output == "stretch") {
+        outputWidth  = viewportWidth
+        outputHeight = viewportHeight
+    }
+
     return OutputRect(
         (viewportWidth - outputWidth) / 2,
         (viewportHeight - outputHeight) / 2,

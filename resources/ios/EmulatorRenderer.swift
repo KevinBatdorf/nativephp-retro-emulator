@@ -136,11 +136,15 @@ final class EmulatorRenderer: UIView {
     }
 
     /// Video post-processing options, serialised on emuLock. overscan false
-    /// (default) trims the borders like desktop.
+    /// (default) trims the borders like desktop. Presentation settings
+    /// (output/fixedScale/aspectCorrection) apply on the next draw.
     func setVideoOptions(
         luminance: Float, saturation: Float, gamma: Float,
-        colorBleed: Bool, interframeBlending: Bool, overscan: Bool
+        colorBleed: Bool, interframeBlending: Bool, overscan: Bool,
+        output: String, fixedScale: Int, aspectCorrection: String
     ) {
+        metalRenderer.setPresentation(PresentationSettings(
+            output: output, fixedScale: fixedScale, aspectCorrection: aspectCorrection))
         emuLock.lock()
         ares_set_video(ctx, luminance, saturation, gamma, colorBleed, interframeBlending, overscan)
         emuLock.unlock()

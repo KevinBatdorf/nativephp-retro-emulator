@@ -94,6 +94,64 @@ class VideoGeometryTest {
         assert(rect == OutputRect(0, 256, 1080, 1407)) { "got $rect" }
     }
 
+    // 292×224 video (SFC trimmed, standard aspect) into 1920×1200:
+    // multipliers are 6 and 5 → integer picks 5×.
+    @Test
+    fun integerModePicksLargestWholeMultiple() {
+        val rect = sfcRect(1920, 1200, output = "integer")
+        assert(rect == OutputRect(230, 40, 1460, 1120)) { "got $rect" }
+    }
+
+    @Test
+    fun integerModeFallsBackToBestFitWhenOneTimesOverflows() {
+        // Viewport narrower than the video → multiplier 0 → best-fit like desktop.
+        val rect = sfcRect(280, 112, output = "integer")
+        assert(rect == OutputRect(67, 0, 146, 112)) { "got $rect" }
+    }
+
+    @Test
+    fun integerFixedHonorsAndClampsFixedScale() {
+        val exact = sfcRect(1920, 1200, output = "integerFixed", fixedScale = 3)
+        assert(exact == OutputRect(522, 264, 876, 672)) { "got $exact" }
+
+        // 9× doesn't fit → clamps to the largest fitting multiple (5×).
+        val clamped = sfcRect(1920, 1200, output = "integerFixed", fixedScale = 9)
+        assert(clamped == OutputRect(230, 40, 1460, 1120)) { "got $clamped" }
+    }
+
+    @Test
+    fun stretchFillsTheViewport() {
+        val rect = sfcRect(1920, 1200, output = "stretch")
+        assert(rect == OutputRect(0, 0, 1920, 1200)) { "got $rect" }
+    }
+
+    @Test
+    fun aspectCorrectionNoneAndAnamorphic() {
+        // none: square pixels — 256×224 best-fit into 1920×1080 → ×4.821.
+        val none = sfcRect(1920, 1080, aspectCorrection = "none")
+        assert(none == OutputRect(343, 0, 1234, 1080)) { "got $none" }
+
+        // anamorphic: standard 292 then ·4/3 = 389 wide → ×1080/224.
+        val ana = sfcRect(1920, 1080, aspectCorrection = "anamorphic")
+        assert(ana == OutputRect(22, 0, 1875, 1080)) { "got $ana" }
+    }
+
+    /** SFC NTSC trimmed geometry (512×224, scale 0.5×1.0, aspect 8:7). */
+    private fun sfcRect(
+        viewportWidth: Int,
+        viewportHeight: Int,
+        output: String = "scale",
+        fixedScale: Int = 2,
+        aspectCorrection: String = "standard",
+    ) = computeOutputRect(
+        nodeWidth = 512.0, nodeHeight = 224.0,
+        scaleX = 0.5, scaleY = 1.0,
+        aspectX = 8.0, aspectY = 7.0,
+        rotation = 0,
+        viewportWidth = viewportWidth, viewportHeight = viewportHeight,
+        output = output, fixedScale = fixedScale, aspectCorrection = aspectCorrection,
+    )
+
     @Test
     fun screenshotIsLetterboxedToVideoAspect() {
         val romPath = "/data/local/tmp/test.sfc"

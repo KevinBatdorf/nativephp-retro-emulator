@@ -15,6 +15,10 @@ import java.io.File
  *   SYSTEM     (String, optional) — ares system ID ("sfc", "fc", "gb", "md").
  *              Defaults to "sfc". System firmware is embedded in the native
  *              library; no extra assets are needed.
+ *   OUTPUT            (String, optional) — presentation mode: scale (default),
+ *                     integer, integerFixed, stretch.
+ *   FIXED_SCALE       (Int, optional)    — multiplier for integerFixed.
+ *   ASPECT_CORRECTION (String, optional) — none, standard (default), anamorphic.
  *
  * The activity displays an [EmulatorRenderer] full-screen and immediately
  * starts loading once the GL surface is ready.
@@ -24,6 +28,9 @@ class EmulatorActivity : Activity() {
     companion object {
         const val EXTRA_ROM_PATH = "ROM_PATH"
         const val EXTRA_SYSTEM   = "SYSTEM"
+        const val EXTRA_OUTPUT   = "OUTPUT"
+        const val EXTRA_FIXED_SCALE = "FIXED_SCALE"
+        const val EXTRA_ASPECT_CORRECTION = "ASPECT_CORRECTION"
         private const val TAG = "EmulatorActivity"
     }
 
@@ -44,6 +51,10 @@ class EmulatorActivity : Activity() {
 
         renderer = EmulatorRenderer(this)
         setContentView(renderer)
+
+        intent.getStringExtra(EXTRA_OUTPUT)?.let { renderer.videoOutput = it }
+        renderer.videoFixedScale = intent.getIntExtra(EXTRA_FIXED_SCALE, 2)
+        intent.getStringExtra(EXTRA_ASPECT_CORRECTION)?.let { renderer.videoAspectCorrection = it }
 
         // Queue the system load (executes on GL thread).
         renderer.queueSystemLoad(system)
