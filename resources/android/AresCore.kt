@@ -12,6 +12,13 @@ package com.kevinbatdorf.plugins.retroemulator
  */
 class AresCore {
 
+    companion object {
+        // loadRom result codes — see nativeLoadRom in ares_jni.cpp.
+        const val LOAD_OK = 1                  // booted and running
+        const val LOAD_REJECTED = 0            // rejected pre-teardown; prior game untouched
+        const val LOAD_FAILED_STOPPED = -1     // failed after teardown; emulator cleanly stopped
+    }
+
     init {
         System.loadLibrary("retro_emulator")
     }
@@ -44,9 +51,10 @@ class AresCore {
     // -------------------------------------------------------------------------
 
     /**
-     * Initialise the system node tree for the given ares system ID. Must be
-     * called from the GL thread because it primes the libco scheduler context
-     * for this thread.
+     * STAGE a system declaration — no core boots until [loadRom] arrives with
+     * a ROM (every boot is ROM-first so the region variant is always right).
+     * Re-staging over a running core is legal; the running game continues
+     * until the next [loadRom]. GL thread only.
      *
      * System firmware (SFC ipl.rom + boards.bml, GB boot ROM, MD TMSS) is
      * embedded in the native library — no assets need to be provided.
@@ -58,19 +66,38 @@ class AresCore {
     /** Comma-separated ares system IDs compiled into this build (e.g. "fc,sfc,gb,md"). */
     fun supportedSystems(): String = nativeGetSupportedSystems()
 
+    /** Comma-separated ROM file extensions (no dots) valid for [systemId]. */
+    fun systemExtensions(systemId: String): String = nativeGetSystemExtensions(systemId)
+
     /**
-     * Load a ROM image and power on the emulator. Must be called after
-     * [loadSystem] and from the GL thread.
+     * Boot the staged system with this ROM — the ONE boot path, first load and
+     * every swap alike. Analyzes the ROM, resolves the region variant like
+     * desktop-ares (ROM region list × preference, override wins), tears down
+     * any running core, and boots fresh. A ROM that fails analysis leaves a
+     * running game untouched. Must be called after [loadSystem] staged a
+     * system, from the GL thread.
      *
-     * @param romBytes   Raw ROM bytes. A 512-byte copier header is stripped
-     *                   automatically if detected.
-     * @param savePrefix Battery-save location prefix — files are written as
-     *                   "<prefix>.save.ram", "<prefix>.save.eeprom", etc.
-     *                   Existing files seed the cartridge before boot.
-     *                   Null disables persistence.
+     * @param romBytes         Raw ROM bytes. A 512-byte copier header is
+     *                         stripped automatically if detected.
+     * @param savePrefix       Battery-save location prefix — files are written
+     *                         as "<prefix>.save.ram", "<prefix>.save.eeprom",
+     *                         etc. Existing files seed the cartridge before
+     *                         boot. Null disables persistence.
+     * @param region           Explicit region override (e.g. "PAL"); empty
+     *                         resolves from the ROM analysis.
+     * @param preferredRegions Preference order for multi-region ROMs, CSV
+     *                         (e.g. "NTSC-J,PAL"); empty uses desktop's
+     *                         default "NTSC-U".
+     * @return [LOAD_OK] on success; [LOAD_REJECTED] when the ROM failed before
+     *         any teardown (a running game is untouched); [LOAD_FAILED_STOPPED]
+     *         when a later failure left the emulator cleanly stopped.
      */
-    fun loadRom(romBytes: ByteArray, savePrefix: String? = null): Boolean =
-        nativeLoadRom(romBytes, savePrefix)
+    fun loadRom(
+        romBytes: ByteArray,
+        savePrefix: String? = null,
+        region: String = "",
+        preferredRegions: String = "",
+    ): Int = nativeLoadRom(romBytes, savePrefix, region, preferredRegions)
 
     /**
      * Write current battery-backed memory to disk under the prefix passed to
@@ -292,8 +319,12 @@ class AresCore {
 
     private external fun nativeLoadSystem(systemId: String): Boolean
     private external fun nativeGetSupportedSystems(): String
+    private external fun nativeGetSystemExtensions(systemId: String): String
 
-    private external fun nativeLoadRom(romBytes: ByteArray, savePrefix: String?): Boolean
+    private external fun nativeLoadRom(
+        romBytes: ByteArray, savePrefix: String?,
+        region: String, preferredRegions: String,
+    ): Int
     private external fun nativeFlushSaves(): Boolean
     private external fun nativeSetAudio(volume: Float, balance: Float)
     private external fun nativeSetVideo(

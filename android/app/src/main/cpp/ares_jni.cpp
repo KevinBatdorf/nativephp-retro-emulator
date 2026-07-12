@@ -333,20 +333,6 @@ static void cacheButtons(ares::Node::Object parent,
     }
 }
 
-static std::string buttonsJson(ares::Node::Object parent) {
-    std::string json = "[";
-    bool first = true;
-    for (auto& btn : parent->find<ares::Node::Input::Button>()) {
-        if (!first) json += ",";
-        first = false;
-        json += "\"";
-        json += std::string((const char*)btn->name());
-        json += "\"";
-    }
-    json += "]";
-    return json;
-}
-
 // ---------------------------------------------------------------------------
 // JNI implementations
 // ---------------------------------------------------------------------------
@@ -406,17 +392,19 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetupRenderer(
     LOGI("renderer bound to texture %d", textureId);
 }
 
-// Phase 4/11 — system loading ------------------------------------------------
+// Phase 4/11 → 4b — system staging + ROM-first boot ---------------------------
+//
+// No core boots without a ROM (plan 4b, agreed 2026-07-12): LoadSystem only
+// STAGES the system choice, and LoadRom is the one boot path — first load and
+// every swap alike — mirroring desktop, which builds a fresh system per game
+// load with the region already known from the ROM analysis
+// (desktop-ui/emulator/emulator.cpp:40-60, super-famicom.cpp:125-126).
 
 JNIEXPORT jboolean JNICALL
 Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadSystem(
     JNIEnv* env, jobject, jstring systemIdStr)
 {
     if (!g_state) return JNI_FALSE;
-    if (g_state->systemLoaded) {
-        LOGI("system already loaded");
-        return JNI_TRUE;
-    }
 
     auto systemId = jstringToString(env, systemIdStr);
     auto* def = SystemRegistry::find(systemId);
@@ -425,29 +413,110 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadSystem(
         return JNI_FALSE;
     }
 
+    // Stage only — re-staging over a running core is legal; the running game
+    // continues until the next LoadRom boots the new declaration.
     g_state->system    = def;
-    g_state->systemPak = def->makeSystemPak(*def);
+    g_state->portsJson = SystemRegistry::staticPortsJson(*def);
+    LOGI("%s system staged", def->id.c_str());
+    return JNI_TRUE;
+}
 
-    if (!def->load(g_state->root, *def)) {
-        LOGE("ares %s load failed", def->id.c_str());
-        g_state->systemPak.reset();
-        g_state->system = nullptr;
-        return JNI_FALSE;
+/**
+ * Unload a running core in place, keeping g_state (texture binding, AV/pref
+ * atomics) alive so the next boot inherits them. Follows the nativeDestroy
+ * teardown order: flush saves, join worker threads via root->unload(), then
+ * clear the per-boot state that must not leak into a fresh core.
+ */
+static void unloadCore()
+{
+    if (g_state->romLoaded && g_state->cartridgePak) {
+        SaveIO::flush(g_state->cartridgePak, g_state->savePrefix);
+    }
+    if (g_state->root) {
+        g_state->root->unload();
+        g_state->root.reset();
+    }
+    SystemRegistry::clearStaleEntryPoints();
+
+    g_state->systemLoaded = false;
+    g_state->romLoaded    = false;
+    g_state->systemPak.reset();
+    g_state->cartridgePak.reset();
+    g_state->inputCache.clear();
+    g_state->audioStreams.clear();
+    {
+        std::lock_guard<std::mutex> lock(g_state->audioMutex);
+        g_state->audioRingBuffer.clear();
+    }
+    // Game knowledge dies with the core (plan 4b): cheats, rewind timeline,
+    // the stale refresh hint, and any paused flag from the old game.
+    g_state->cheats.clear();
+    g_state->rebuildCheatLookup();
+    g_state->rewind.rewinding = false;
+    g_state->rewind.counter   = 0;
+    g_state->rewind.history.clear();
+    g_state->refreshRateHint.store(0.0, std::memory_order_relaxed);
+    g_state->paused.store(false, std::memory_order_relaxed);
+}
+
+/**
+ * Returns 1 on success; 0 when the ROM was rejected BEFORE any teardown (a
+ * running game is untouched); -1 when a failure after teardown began left the
+ * emulator in the clean stopped state.
+ */
+JNIEXPORT jint JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadRom(
+    JNIEnv* env, jobject, jbyteArray romBytes, jstring savePrefixStr,
+    jstring regionOverrideStr, jstring preferredRegionsStr)
+{
+    if (!g_state || !g_state->system) {
+        LOGE("nativeLoadRom: no system staged");
+        return 0;
+    }
+    auto* def = g_state->system;
+
+    auto rom = jbyteArrayToVector(env, romBytes);
+    if (rom.empty()) {
+        LOGE("nativeLoadRom: empty ROM");
+        return 0;
     }
 
-    // Wire controllers and build the button cache + ports JSON.
+    // Analyze BEFORE any teardown — a ROM that fails analysis must leave a
+    // running game untouched (failures after teardown starts end in the clean
+    // stopped state instead).
+    auto built = def->makeCartridgePak(rom.data(), rom.size());
+    if (!built) {
+        LOGE("nativeLoadRom: %s", built.error.c_str());
+        return 0;
+    }
+
+    auto region = SystemRegistry::resolveRegion(
+        *def, built.region,
+        jstringToString(env, regionOverrideStr),
+        jstringToString(env, preferredRegionsStr));
+    auto loadName = SystemRegistry::loadNameFor(*def, region);
+    LOGI("ROM: title='%s' regions='%s' → boot '%s'",
+         built.title.c_str(), built.region.c_str(), loadName.c_str());
+
+    // Fresh core per game, like desktop.
+    if (g_state->systemLoaded) unloadCore();
+
+    g_state->systemPak = def->makeSystemPak(*def);
+    if (!def->load(g_state->root, *def, loadName)) {
+        LOGE("ares load failed: %s", loadName.c_str());
+        unloadCore();
+        return -1;
+    }
+
+    // Wire controllers and build the button cache. Ports JSON stays the
+    // registry's static form — same names, same order as the node walk.
     std::atomic<uint32_t>* masks[2] = {
         &g_state->inputMaskPort1, &g_state->inputMaskPort2,
     };
     if (def->ports == 0) {
-        // Built-in controls (e.g. Game Boy) — buttons live on the system node,
-        // reported as port 1.
+        // Built-in controls (e.g. Game Boy) — buttons live on the system node.
         cacheButtons(g_state->root, *def, g_state->inputMaskPort1);
-        g_state->portsJson =
-            std::string("[{\"port\":1,\"buttons\":") +
-            buttonsJson(g_state->root) + "}]";
     } else {
-        std::string json = "[";
         for (int i = 0; i < def->ports && i < 2; i++) {
             auto portName = std::string("Controller Port ") + std::to_string(i + 1);
             auto port = g_state->root->find<ares::Node::Port>(portName.c_str());
@@ -458,14 +527,8 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadSystem(
             port->allocate(def->device);
             port->connect();
             cacheButtons(port, *def, *masks[i]);
-            if (json.size() > 1) json += ",";
-            json += "{\"port\":" + std::to_string(i + 1) +
-                    ",\"buttons\":" + buttonsJson(port) + "}";
         }
-        json += "]";
-        g_state->portsJson = json;
     }
-    LOGI("cached %zu buttons for %s", g_state->inputCache.size(), def->id.c_str());
 
     // Desktop applies its overscan setting to every screen on load
     // (emulator.cpp:137 → setOverscan scan, emulator.cpp:242-246). Cores
@@ -473,35 +536,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadSystem(
     for (auto& screen : g_state->root->find<ares::Node::Video::Screen>()) {
         screen->setOverscan(g_state->overscan);
     }
-
     g_state->systemLoaded = true;
-    LOGI("%s system loaded", def->id.c_str());
-    return JNI_TRUE;
-}
-
-// Phase 4 — ROM loading -----------------------------------------------------
-
-JNIEXPORT jboolean JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadRom(
-    JNIEnv* env, jobject, jbyteArray romBytes, jstring savePrefixStr)
-{
-    if (!g_state || !g_state->systemLoaded) {
-        LOGE("nativeLoadRom: system not loaded");
-        return JNI_FALSE;
-    }
-
-    auto rom = jbyteArrayToVector(env, romBytes);
-    if (rom.empty()) {
-        LOGE("nativeLoadRom: empty ROM");
-        return JNI_FALSE;
-    }
-
-    auto built = g_state->system->makeCartridgePak(rom.data(), rom.size());
-    if (!built) {
-        LOGE("nativeLoadRom: %s", built.error.c_str());
-        return JNI_FALSE;
-    }
-    LOGI("ROM: title='%s' region='%s'", built.title.c_str(), built.region.c_str());
 
     g_state->cartridgePak = built.pak;
 
@@ -513,24 +548,19 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadRom(
         g_state->root->find<ares::Node::Port>("Cartridge Slot");
     if (!cartridgeSlot) {
         LOGE("nativeLoadRom: no Cartridge Slot port found");
-        return JNI_FALSE;
+        unloadCore();
+        return -1;
     }
-
-    // If a cartridge is already connected, disconnect it first.
-    cartridgeSlot->disconnect();
     cartridgeSlot->allocate();
     cartridgeSlot->connect();
 
-    // A new game starts a new timeline — snapshots of the old one are useless.
-    g_state->rewind.rewinding = false;
-    g_state->rewind.counter = 0;
-    g_state->rewind.history.clear();
-
     g_state->root->power(false);
-    g_state->romLoaded  = true;
-    g_state->romRegion  = built.region;
-    LOGI("ROM loaded and powered on — region=%s", built.region.c_str());
-    return JNI_TRUE;
+    g_state->romLoaded = true;
+    // Report the BOOTED region — for region-free systems (gb) fall back to
+    // whatever the analyzer said (usually empty).
+    g_state->romRegion = region.empty() ? built.region : region;
+    LOGI("ROM loaded and powered on — region=%s", g_state->romRegion.c_str());
+    return 1;
 }
 
 // Phase 4 — tick (real frame) -----------------------------------------------
@@ -998,7 +1028,8 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetRegion(JNIEnv* env
 JNIEXPORT jstring JNICALL
 Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetPortsJson(JNIEnv* env, jobject)
 {
-    if (!g_state || !g_state->systemLoaded) return env->NewStringUTF("[]");
+    // Registry data — available from staging on, no booted core required.
+    if (!g_state || !g_state->system) return env->NewStringUTF("[]");
     return env->NewStringUTF(g_state->portsJson.c_str());
 }
 
@@ -1073,6 +1104,26 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetSupportedSystems(
         ids += def->id;
     }
     return env->NewStringUTF(ids.c_str());
+}
+
+/**
+ * ROM file extensions valid for a system (CSV, no dots) — the LoadRom
+ * family-mismatch gate, mirroring desktop's per-emulator file-dialog filters.
+ * Empty string for unknown systems.
+ */
+JNIEXPORT jstring JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetSystemExtensions(
+    JNIEnv* env, jobject, jstring systemIdStr)
+{
+    auto* def = SystemRegistry::find(jstringToString(env, systemIdStr));
+    std::string exts;
+    if (def) {
+        for (auto& ext : def->extensions) {
+            if (!exts.empty()) exts += ",";
+            exts += ext;
+        }
+    }
+    return env->NewStringUTF(exts.c_str());
 }
 
 } // extern "C"

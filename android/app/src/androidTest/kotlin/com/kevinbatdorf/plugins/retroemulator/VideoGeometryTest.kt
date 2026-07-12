@@ -28,7 +28,7 @@ class VideoGeometryTest {
         try {
             assert(core.init())
             assert(core.loadSystem("sfc"))
-            assert(core.loadRom(makeLoRom(), null))
+            assert(core.loadRom(makeLoRom(), null) == AresCore.LOAD_OK)
             repeat(10) { core.tick() }
             assert(core.getFrameWidth() > 0) { "no frame produced" }
 
@@ -51,7 +51,7 @@ class VideoGeometryTest {
         try {
             assert(core.init())
             assert(core.loadSystem("sfc"))
-            assert(core.loadRom(makeLoRom(), null))
+            assert(core.loadRom(makeLoRom(), null) == AresCore.LOAD_OK)
             repeat(10) { core.tick() }
 
             core.setVideo(

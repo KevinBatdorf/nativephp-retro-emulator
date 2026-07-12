@@ -19,21 +19,37 @@ void         ares_destroy(AresContext* ctx);
 
 // System / ROM loading --------------------------------------------------------
 
-// Load a system core by ares id ("fc", "sfc", "gb", "md").  System firmware
-// (SFC ipl.rom + boards.bml, GB boot ROM, MD TMSS) is embedded in the library
-// — no assets required.  Returns false for ids not compiled into this build.
+// STAGE a system declaration by ares id ("fc", "sfc", "gb", "md") — no core
+// boots until ares_load_rom arrives with a ROM (every boot is ROM-first so
+// the region variant is always right).  Re-staging over a running core is
+// legal; the running game continues until the next ares_load_rom.  System
+// firmware (SFC ipl.rom + boards.bml, GB boot ROM, MD TMSS) is embedded in
+// the library — no assets required.  Returns false for ids not compiled into
+// this build.
 bool ares_load_system(AresContext* ctx, const char* system_id);
 
 // Comma-separated ids of the systems compiled into this build, e.g.
 // "fc,sfc,gb,md".  Static storage — do not free.
 const char* ares_supported_systems(void);
 
-// Load and power a ROM image for the loaded system.  Returns false on bad header.
+// Comma-separated ROM file extensions (no dots) valid for a system id —
+// the LoadRom family-mismatch gate.  Empty string for unknown ids.
+// Thread-local storage — copy before the next call on the same thread.
+const char* ares_system_extensions(AresContext* ctx, const char* system_id);
+
+// Boot the staged system with this ROM — the ONE boot path, first load and
+// every swap alike.  Analyzes the ROM, resolves the region variant like
+// desktop-ares (ROM region list × preferred_regions CSV, region_override
+// wins; empty/NULL = defaults), tears down any running core, boots fresh.
 // save_prefix: battery-save location — files are written as
 // "<prefix>.save.ram", "<prefix>.save.eeprom", etc., and existing files seed
 // the cartridge before boot.  NULL disables persistence.
-bool ares_load_rom(AresContext* ctx, const uint8_t* rom, size_t rom_size,
-                   const char* save_prefix);
+// Returns 1 on success; 0 when the ROM was rejected BEFORE any teardown (a
+// running game is untouched); -1 when a later failure left the emulator
+// cleanly stopped.
+int ares_load_rom(AresContext* ctx, const uint8_t* rom, size_t rom_size,
+                  const char* save_prefix,
+                  const char* region_override, const char* preferred_regions);
 
 // Write current battery-backed memory to disk under the prefix passed to
 // ares_load_rom.  Must run on the emulation thread.  Returns false when

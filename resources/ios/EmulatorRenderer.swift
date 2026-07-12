@@ -35,8 +35,14 @@ final class EmulatorRenderer: UIView {
     /// Current lifecycle status: "stopped", "loading", "running", or "paused".
     private(set) var currentStatus: String = "stopped"
 
-    /// The system id passed to the last `loadSystem` (e.g. "sfc"). Empty until loaded.
+    /// The system id passed to the last `loadSystem` (e.g. "sfc"). Empty until staged.
     private(set) var loadedSystem: String = ""
+
+    /// Staged region declaration (plan 4b): explicit override ("" = resolve
+    /// from the ROM analysis) and preference CSV for multi-region ROMs
+    /// ("" = desktop's default "NTSC-U"). Set by LoadSystem, consumed by loadRom.
+    var stagedRegion: String = ""
+    var stagedPreferredRegions: String = ""
 
     /// Installed by the surface registry so lifecycle/memory callbacks reach PHP.
     /// Strong: the forwarder holds only the surface name, so there is no retain cycle.
@@ -58,20 +64,16 @@ final class EmulatorRenderer: UIView {
 
     // MARK: - System / ROM loading
 
-    /// Initialise the ares core for `system` (an ares id such as "sfc", "fc",
-    /// "gb", "md"). System firmware is embedded in the native library — no
-    /// assets are required.
+    /// STAGE a system declaration (plan 4b) — no core boots until `loadRom`
+    /// arrives with a ROM, so the region variant is always resolved ROM-first.
+    /// Re-staging over a running core is legal; the running game continues
+    /// until the next `loadRom`. System firmware is embedded in the native
+    /// library — no assets are required.
     func loadSystem(_ system: String) -> Bool {
         emuLock.lock()
         let ok = ares_load_system(ctx, system)
-        // Fresh screen nodes boot with ares defaults — reapply the surface's
-        // options like desktop reapplies its settings.
-        if ok { applyVideoOptions() }
         emuLock.unlock()
-        if ok {
-            loadedSystem = system
-            currentStatus = "loading"
-        }
+        if ok { loadedSystem = system }
         return ok
     }
 
@@ -80,26 +82,57 @@ final class EmulatorRenderer: UIView {
         String(cString: ares_supported_systems()).components(separatedBy: ",")
     }
 
+    /// ROM file extensions (no dots) valid for a system id — the LoadRom
+    /// family-mismatch gate.
+    func systemExtensions(_ system: String) -> [String] {
+        emuLock.lock()
+        let exts = String(cString: ares_system_extensions(ctx, system))
+        emuLock.unlock()
+        return exts.isEmpty ? [] : exts.components(separatedBy: ",")
+    }
+
+    /// Boot the staged system with this ROM — the one boot path, first load
+    /// and every swap alike. A running game is torn down and a fresh core
+    /// boots with the region resolved from this ROM.
     /// - Parameter savePrefix: battery-save location — files are written as
     ///   "<prefix>.save.ram" etc., and existing files seed the cartridge before
     ///   boot. Nil disables persistence.
     func loadRom(_ romData: Data, path: String, savePrefix: String? = nil) -> Bool {
-        // A fresh ROM invalidates every watch baseline (spec: watches clear on loadRom).
+        // Game knowledge dies with the old game (plan 4b): watches are
+        // wrapper-held so clear them here; cheats clear natively in the reboot.
         clearMemoryWatches()
 
         emuLock.lock()
-        let ok = romData.withUnsafeBytes {
-            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, savePrefix)
+        let result = romData.withUnsafeBytes {
+            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count,
+                          savePrefix, stagedRegion, stagedPreferredRegions)
         }
+        // Fresh screen nodes boot with ares defaults — reapply the surface's
+        // options like desktop reapplies its settings. (Context-side prefs —
+        // volume, DRC, run-ahead, rewind config, rumble — survive the
+        // in-place reboot.)
+        if result == 1 { applyVideoOptions() }
         emuLock.unlock()
 
-        if ok {
+        switch result {
+        case 1:
             romPath = path
             currentStatus = "loading"
             pendingStarted = true
             startLoop()
+            return true
+        case -1:
+            // Failure after teardown began — the emulator is cleanly stopped.
+            stopLoop()
+            audio.stop()
+            currentStatus = "stopped"
+            eventListener?.onError(code: "LOAD_FAILED", message: "boot failed; emulator stopped")
+            return false
+        default:
+            // Pre-teardown rejection: a running game is untouched.
+            eventListener?.onError(code: "LOAD_FAILED", message: "ROM rejected by analyzer")
+            return false
         }
-        return ok
     }
 
     // MARK: - Lifecycle

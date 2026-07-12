@@ -26,7 +26,7 @@ final class StateAndOptionsTests: XCTestCase {
         XCTAssertTrue(ares_load_system(ctx, "sfc"))
         let rom = BootTests.makeMinimalLoRom()
         let ok = rom.withUnsafeBytes {
-            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil)
+            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil, nil, nil) == 1
         }
         XCTAssertTrue(ok)
         for _ in 0..<5 { _ = ares_tick(ctx) }

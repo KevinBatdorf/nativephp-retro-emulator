@@ -5,8 +5,12 @@ use KevinBatdorf\RetroEmulator\Buttons\GbButton;
 use KevinBatdorf\RetroEmulator\Buttons\MdButton;
 use KevinBatdorf\RetroEmulator\Buttons\SfcButton;
 use KevinBatdorf\RetroEmulator\Components\Emulator as EmulatorComponent;
+use KevinBatdorf\RetroEmulator\Config\GbConfig;
+use KevinBatdorf\RetroEmulator\Config\MdConfig;
+use KevinBatdorf\RetroEmulator\Config\RegionalSystemConfig;
 use KevinBatdorf\RetroEmulator\Config\SfcConfig;
 use KevinBatdorf\RetroEmulator\Elements\Emulator as EmulatorElement;
+use KevinBatdorf\RetroEmulator\Region;
 use KevinBatdorf\RetroEmulator\AspectCorrection;
 use KevinBatdorf\RetroEmulator\Emulator;
 use KevinBatdorf\RetroEmulator\Events\EmulatorError;
@@ -532,6 +536,26 @@ describe('Typed layer', function () {
         $config = new SfcConfig(dynamicRateControl: false);
 
         expect($config->toArray())->toBe(['dynamicRateControl' => false]);
+    });
+
+    it('regional configs send region knobs as wire strings', function () {
+        $config = new SfcConfig(
+            region: Region::Pal,
+            preferredRegions: [Region::NtscJ, Region::Pal],
+        );
+
+        expect($config->toArray())->toBe([
+            'region' => 'PAL',
+            'preferredRegions' => ['NTSC-J', 'PAL'],
+        ]);
+    });
+
+    it('regional configs omit region knobs unless set', function () {
+        expect((new MdConfig(autoSave: true))->toArray())->toBe(['autoSave' => true]);
+    });
+
+    it('the region-free GbConfig has no region knobs', function () {
+        expect(is_subclass_of(GbConfig::class, RegionalSystemConfig::class))->toBeFalse();
     });
 
     it('loadSystem accepts a System enum and a config object', function () {

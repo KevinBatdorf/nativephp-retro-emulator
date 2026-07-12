@@ -26,8 +26,10 @@ class Emulator
     }
 
     /**
-     * Initialise ares core for a system with system-level config.
-     * This is the expensive call; call once per system, then swap ROMs via loadRom().
+     * Declare the system and its config. Nothing boots until loadRom() —
+     * every ROM load boots a fresh core with the region resolved from the
+     * ROM itself, so PAL games run at PAL speed automatically. Use the
+     * config's region/preferredRegions knobs to override.
      *
      * @param  SystemConfig|array{
      *     biosPath?: string|null,
@@ -37,6 +39,8 @@ class Emulator
      *     rewindBufferSeconds?: int,
      *     speed?: float,
      *     dynamicRateControl?: bool,
+     *     region?: string,
+     *     preferredRegions?: string[],
      * }  $config
      */
     public function loadSystem(System|string $system, SystemConfig|array $config = []): static

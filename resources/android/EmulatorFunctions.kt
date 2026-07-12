@@ -177,13 +177,17 @@ object EmulatorFunctions {
     }
 
     /**
-     * Initialise the ares core for a system and queue a system load.
-     * Supported systems are the ones compiled into the native library —
-     * reported by [GetSystems] with `supported: true`. System firmware
-     * (SFC ipl.rom + boards.bml, GB boot ROM, MD TMSS) is embedded; no
-     * biosPath is needed for these systems.
+     * STAGE a system declaration — no core boots until LoadRom arrives with a
+     * ROM (plan 4b: every boot is ROM-first so the region variant is always
+     * right). Supported systems are the ones compiled into the native
+     * library — reported by [GetSystems] with `supported: true`. System
+     * firmware (SFC ipl.rom + boards.bml, GB boot ROM, MD TMSS) is embedded;
+     * no biosPath is needed for these systems.
      * config keys: biosPath (String?), autoSave (Bool), speed (Float), runAhead (Int),
-     *              rewind (Bool), rewindBufferSeconds (Int), dynamicRateControl (Bool).
+     *              rewind (Bool), rewindBufferSeconds (Int), dynamicRateControl (Bool),
+     *              region (String, e.g. "PAL" — overrides ROM analysis),
+     *              preferredRegions (List<String> — preference order for
+     *              multi-region ROMs; default matches desktop's "NTSC-U").
      */
     class LoadSystem(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
@@ -211,6 +215,10 @@ object EmulatorFunctions {
             val renderer = entry!!.renderer
             renderer.fastForward = false
             renderer.autoSave = config["autoSave"] as? Boolean ?: true
+            renderer.stagedRegion = config["region"] as? String ?: ""
+            renderer.stagedPreferredRegions =
+                (paramList(config, "preferredRegions") ?: emptyList())
+                    .filterIsInstance<String>().joinToString(",")
             renderer.queueSetRunAhead(runAhead == 1)
             renderer.queueSetDynamicRateControl(config["dynamicRateControl"] as? Boolean ?: true)
             renderer.queueConfigureRewind(
@@ -222,14 +230,18 @@ object EmulatorFunctions {
             }
             renderer.queueSystemLoad(system)
 
-            Log.d(TAG, "LoadSystem: queued system=$system")
-            return BridgeResponse.success(mapOf("status" to "loading", "system" to system))
+            Log.d(TAG, "LoadSystem: staged system=$system")
+            return BridgeResponse.success(mapOf("status" to "staged", "system" to system))
         }
     }
 
     /**
-     * Load a ROM from [path] and start emulation. Fire-and-forget — PHP receives
-     * `{"status":"loading"}` immediately; [EmulatorStarted] fires on the first frame.
+     * Boot the staged system with the ROM at [path] — the one boot path, first
+     * load and every swap alike (plan 4b). The ROM's extension is gated
+     * against the staged system's list (desktop's file-dialog filters); a
+     * wrong-family ROM errors, it never auto-switches systems. Fire-and-forget —
+     * PHP receives `{"status":"loading"}` immediately; [EmulatorStarted] fires
+     * on the first frame.
      */
     class LoadRom(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
@@ -244,9 +256,22 @@ object EmulatorFunctions {
                 return BridgeResponse.error("ROM_NOT_FOUND", "ROM not found: $path")
             }
 
+            val system = entry!!.renderer.stagedSystemId
+            if (system.isEmpty()) {
+                return BridgeResponse.error("SYSTEM_NOT_LOADED", "Call LoadSystem before LoadRom")
+            }
+            val extensions = AresCore().systemExtensions(system).split(",")
+            val ext = file.extension.lowercase()
+            if (ext !in extensions) {
+                return BridgeResponse.error(
+                    "INVALID_ROM",
+                    "'.$ext' is not a $system ROM — expected one of: " +
+                        extensions.joinToString(", ") { ".$it" },
+                )
+            }
+
             return try {
                 val romBytes = file.readBytes()
-                val system   = entry!!.renderer.loadedSystem.ifEmpty { "sfc" }
                 // Battery saves live in app storage, keyed by surface + ROM
                 // basename: "<filesDir>/saves/<surface>/<rom>.save.ram", etc.
                 // A savePath parameter overrides the prefix entirely.

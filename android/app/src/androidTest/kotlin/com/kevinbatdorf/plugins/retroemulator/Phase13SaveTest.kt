@@ -30,7 +30,7 @@ class Phase13SaveTest {
         try {
             assert(core.init())
             assert(core.loadSystem("sfc")) { "loadSystem failed" }
-            assert(core.loadRom(makeSramLoRom(), prefix)) { "SRAM LoROM must load" }
+            assert(core.loadRom(makeSramLoRom(), prefix) == AresCore.LOAD_OK) { "SRAM LoROM must load" }
             core.tick()
             assert(core.flushSaves()) { "flush must succeed with a save prefix" }
 
@@ -49,7 +49,7 @@ class Phase13SaveTest {
         try {
             assert(core.init())
             assert(core.loadSystem("sfc"))
-            assert(core.loadRom(makeSramLoRom(), null))
+            assert(core.loadRom(makeSramLoRom(), null) == AresCore.LOAD_OK)
             assert(!core.flushSaves()) { "no prefix → nothing persisted" }
         } finally {
             core.destroy()

@@ -274,20 +274,6 @@ static void cacheButtons(ares::Node::Object parent,
     }
 }
 
-static std::string buttonsJson(ares::Node::Object parent) {
-    std::string json = "[";
-    bool first = true;
-    for (auto& btn : parent->find<ares::Node::Input::Button>()) {
-        if (!first) json += ",";
-        first = false;
-        json += "\"";
-        json += std::string((const char*)btn->name());
-        json += "\"";
-    }
-    json += "]";
-    return json;
-}
-
 // ---------------------------------------------------------------------------
 // C API implementation
 // ---------------------------------------------------------------------------
@@ -332,9 +318,14 @@ const char* ares_supported_systems(void) {
     return ids.c_str();
 }
 
+// 4b — system staging + ROM-first boot. No core boots without a ROM:
+// ares_load_system only STAGES the declaration, ares_load_rom is the one boot
+// path — first load and every swap alike — mirroring desktop, which builds a
+// fresh system per game load with the region already known from the ROM
+// analysis (desktop-ui/emulator/emulator.cpp:40-60, super-famicom.cpp:125-126).
+
 bool ares_load_system(AresContext* ctx, const char* system_id) {
     if (!ctx || !system_id) return false;
-    if (ctx->systemLoaded) return true;
 
     auto* def = SystemRegistry::find(system_id);
     if (!def) {
@@ -342,28 +333,91 @@ bool ares_load_system(AresContext* ctx, const char* system_id) {
         return false;
     }
 
+    // Stage only — re-staging over a running core is legal; the running game
+    // continues until the next ares_load_rom boots the new declaration.
     ctx->system    = def;
-    ctx->systemPak = def->makeSystemPak(*def);
+    ctx->portsJson = SystemRegistry::staticPortsJson(*def);
+    return true;
+}
 
-    if (!def->load(ctx->root, *def)) {
-        ctx->systemPak.reset();
-        ctx->system = nullptr;
-        return false;
+/**
+ * Unload a running core in place, keeping the context (frame buffers, AV/pref
+ * atomics) alive so the next boot inherits them. Follows the ares_destroy
+ * teardown order: flush saves, join worker threads via root->unload(), then
+ * clear the per-boot state that must not leak into a fresh core.
+ */
+static void unloadCore(AresContext* ctx)
+{
+    if (ctx->romLoaded && ctx->cartridgePak) {
+        SaveIO::flush(ctx->cartridgePak, ctx->savePrefix);
+    }
+    if (ctx->root) {
+        ctx->root->unload();
+        ctx->root.reset();
+    }
+    SystemRegistry::clearStaleEntryPoints();
+
+    ctx->systemLoaded = false;
+    ctx->romLoaded    = false;
+    ctx->systemPak.reset();
+    ctx->cartridgePak.reset();
+    ctx->inputCache.clear();
+    ctx->audioStreams.clear();
+    {
+        std::lock_guard<std::mutex> lock(ctx->audioMutex);
+        ctx->audioRingBuffer.clear();
+    }
+    // Game knowledge dies with the core (plan 4b): cheats, rewind timeline,
+    // the stale refresh hint, and any paused flag from the old game.
+    ctx->cheats.clear();
+    ctx->cheatLookup.clear();
+    ctx->rewind.rewinding = false;
+    ctx->rewind.counter   = 0;
+    ctx->rewind.history.clear();
+    ctx->refreshRateHint.store(0.0, std::memory_order_relaxed);
+    ctx->paused.store(false, std::memory_order_relaxed);
+}
+
+int ares_load_rom(AresContext* ctx, const uint8_t* rom, size_t rom_size,
+                  const char* save_prefix,
+                  const char* region_override, const char* preferred_regions) {
+    if (!ctx || !ctx->system || !rom || rom_size == 0) return 0;
+    auto* def = ctx->system;
+
+    // Analyze BEFORE any teardown — a ROM that fails analysis must leave a
+    // running game untouched (failures after teardown starts end in the clean
+    // stopped state instead).
+    auto built = def->makeCartridgePak(rom, rom_size);
+    if (!built) {
+        fprintf(stderr, "ares_load_rom: %s\n", built.error.c_str());
+        return 0;
     }
 
-    // Wire controllers and build the button cache + ports JSON.
+    auto region = SystemRegistry::resolveRegion(
+        *def, built.region,
+        region_override ? region_override : "",
+        preferred_regions ? preferred_regions : "");
+    auto loadName = SystemRegistry::loadNameFor(*def, region);
+
+    // Fresh core per game, like desktop.
+    if (ctx->systemLoaded) unloadCore(ctx);
+
+    ctx->systemPak = def->makeSystemPak(*def);
+    if (!def->load(ctx->root, *def, loadName)) {
+        fprintf(stderr, "ares_load_rom: ares load failed: %s\n", loadName.c_str());
+        unloadCore(ctx);
+        return -1;
+    }
+
+    // Wire controllers and build the button cache. Ports JSON stays the
+    // registry's static form — same names, same order as the node walk.
     std::atomic<uint32_t>* masks[2] = {
         &ctx->inputMaskPort1, &ctx->inputMaskPort2,
     };
     if (def->ports == 0) {
-        // Built-in controls (e.g. Game Boy) — buttons live on the system node,
-        // reported as port 1.
+        // Built-in controls (e.g. Game Boy) — buttons live on the system node.
         cacheButtons(ctx->root, *def, ctx->inputMaskPort1);
-        ctx->portsJson =
-            std::string("[{\"port\":1,\"buttons\":") +
-            buttonsJson(ctx->root) + "}]";
     } else {
-        std::string json = "[";
         for (int i = 0; i < def->ports && i < 2; i++) {
             auto portName = std::string("Controller Port ") + std::to_string(i + 1);
             auto port = ctx->root->find<ares::Node::Port>(portName.c_str());
@@ -371,12 +425,7 @@ bool ares_load_system(AresContext* ctx, const char* system_id) {
             port->allocate(def->device);
             port->connect();
             cacheButtons(port, *def, *masks[i]);
-            if (json.size() > 1) json += ",";
-            json += "{\"port\":" + std::to_string(i + 1) +
-                    ",\"buttons\":" + buttonsJson(port) + "}";
         }
-        json += "]";
-        ctx->portsJson = json;
     }
 
     // Desktop applies its overscan setting to every screen on load
@@ -385,48 +434,40 @@ bool ares_load_system(AresContext* ctx, const char* system_id) {
     for (auto& screen : ctx->root->find<ares::Node::Video::Screen>()) {
         screen->setOverscan(ctx->overscan);
     }
-
     ctx->systemLoaded = true;
-    return true;
-}
-
-bool ares_load_rom(AresContext* ctx, const uint8_t* rom, size_t rom_size,
-                   const char* save_prefix) {
-    if (!ctx || !ctx->systemLoaded || !rom || rom_size == 0) return false;
-
-    auto built = ctx->system->makeCartridgePak(rom, rom_size);
-    if (!built) {
-        fprintf(stderr, "ares_load_rom: %s\n", built.error.c_str());
-        return false;
-    }
 
     ctx->cartridgePak = built.pak;
-    ctx->romRegion    = built.region;
 
     // Seed battery saves from disk before the boards read the pak at connect.
     ctx->savePrefix = save_prefix ? save_prefix : "";
     SaveIO::seed(ctx->cartridgePak, ctx->savePrefix);
 
     auto cartridgeSlot = ctx->root->find<ares::Node::Port>("Cartridge Slot");
-    if (!cartridgeSlot) return false;
-
-    cartridgeSlot->disconnect();
+    if (!cartridgeSlot) {
+        unloadCore(ctx);
+        return -1;
+    }
     cartridgeSlot->allocate();
     cartridgeSlot->connect();
 
-    // Cheat addresses are game knowledge — stale codes applied to a new ROM
-    // would corrupt it unpredictably.
-    ctx->cheats.clear();
-    ctx->cheatLookup.clear();
-
-    // A new game starts a new timeline — snapshots of the old one are useless.
-    ctx->rewind.rewinding = false;
-    ctx->rewind.counter = 0;
-    ctx->rewind.history.clear();
-
     ctx->root->power(false);
     ctx->romLoaded = true;
-    return true;
+    // Report the BOOTED region — for region-free systems (gb) fall back to
+    // whatever the analyzer said (usually empty).
+    ctx->romRegion = region.empty() ? built.region : region;
+    return 1;
+}
+
+const char* ares_system_extensions(AresContext*, const char* system_id) {
+    static thread_local std::string exts;
+    exts.clear();
+    if (auto* def = SystemRegistry::find(system_id ? system_id : "")) {
+        for (auto& ext : def->extensions) {
+            if (!exts.empty()) exts += ",";
+            exts += ext;
+        }
+    }
+    return exts.c_str();
 }
 
 bool ares_add_cheat(AresContext* ctx, const char* code) {
@@ -718,7 +759,8 @@ const char* ares_get_region(AresContext* ctx) {
 }
 
 const char* ares_get_ports_json(AresContext* ctx) {
-    if (!ctx || !ctx->systemLoaded) return "[]";
+    // Registry data — available from staging on, no booted core required.
+    if (!ctx || !ctx->system) return "[]";
     return ctx->portsJson.c_str();
 }
 

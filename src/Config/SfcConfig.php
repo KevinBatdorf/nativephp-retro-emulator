@@ -2,4 +2,4 @@
 
 namespace KevinBatdorf\RetroEmulator\Config;
 
-class SfcConfig extends SystemConfig {}
+class SfcConfig extends RegionalSystemConfig {}

@@ -96,7 +96,14 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
     @Volatile var pendingRomBytes: ByteArray? = null
     @Volatile var pendingSavePrefix: String?  = null
 
-    @Volatile private var systemLoaded = false
+    // Staged system declaration (plan 4b) — LoadSystem never boots a core;
+    // these carry the declaration until a ROM arrives and triggers the boot.
+    @Volatile var stagedSystemId: String = ""
+        private set
+    @Volatile var stagedRegion: String = ""            // explicit override, "" = auto
+    @Volatile var stagedPreferredRegions: String = ""  // CSV, "" = desktop default NTSC-U
+
+    @Volatile private var systemStaged = false
     @Volatile private var romLoaded    = false
     @Volatile private var audioStarted = false
     @Volatile private var firstFrameSent = false
@@ -281,37 +288,50 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
         }
 
         override fun onDrawFrame(gl: GL10?) {
-            // --- Consume pending system load ---
+            // --- Consume pending system staging (never boots — plan 4b) ---
             val systemId = pendingSystemId
-            if (!systemLoaded && systemId != null) {
+            if (systemId != null) {
                 // Consume on success too: a stale request left behind would
-                // silently reload the system on the frame after a stop.
+                // silently re-stage on the frame after a stop.
                 pendingSystemId = null
-                systemLoaded = core.loadSystem(systemId)
-                if (systemLoaded) {
-                    // Fresh screen nodes boot with ares defaults — reapply the
-                    // surface's options like desktop reapplies its settings.
-                    applyVideoOptions()
-                } else {
-                    Log.e(TAG, "loadSystem($systemId) failed")
-                }
+                systemStaged = core.loadSystem(systemId)
+                if (!systemStaged) Log.e(TAG, "loadSystem($systemId) failed")
             }
 
-            // --- Service pending ports read here so it orders after a queued system load ---
+            // --- Service pending ports read here so it orders after a queued staging ---
             pendingPortsRead.getAndSet(null)?.let { req ->
-                req.result = if (systemLoaded) core.getPortsJson() else null
+                req.result = if (systemStaged) core.getPortsJson() else null
                 req.latch.countDown()
             }
 
-            // --- Consume pending ROM load ---
+            // --- Consume pending ROM load — the one boot path, swaps included ---
             val rom = pendingRomBytes
-            if (systemLoaded && !romLoaded && rom != null) {
-                romLoaded = core.loadRom(rom, pendingSavePrefix)
+            if (systemStaged && rom != null) {
                 pendingRomBytes = null
-                if (romLoaded) {
-                    currentStatus = "loading"
-                } else {
-                    Log.e(TAG, "loadRom failed")
+                when (core.loadRom(rom, pendingSavePrefix, stagedRegion, stagedPreferredRegions)) {
+                    AresCore.LOAD_OK -> {
+                        romLoaded = true
+                        currentStatus = "loading"
+                        // Fresh screen nodes boot with ares defaults — reapply
+                        // the surface's options like desktop reapplies its
+                        // settings. (Core-side prefs — volume, DRC, run-ahead,
+                        // rewind config, rumble — live in g_state atomics that
+                        // survive the in-place reboot.)
+                        applyVideoOptions()
+                    }
+                    AresCore.LOAD_REJECTED -> {
+                        // Pre-teardown rejection: a running game is untouched.
+                        Log.e(TAG, "loadRom rejected — prior state kept")
+                        eventListener?.onError("LOAD_FAILED", "ROM rejected by analyzer")
+                    }
+                    AresCore.LOAD_FAILED_STOPPED -> {
+                        romLoaded = false
+                        audioStarted = false
+                        audio.stop()
+                        currentStatus = "stopped"
+                        Log.e(TAG, "loadRom failed after teardown — emulator stopped")
+                        eventListener?.onError("LOAD_FAILED", "boot failed; emulator stopped")
+                    }
                 }
             }
 
@@ -461,16 +481,21 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
     // ---------------------------------------------------------------------------
 
     /**
-     * Queue a system load; it executes on the next [onDrawFrame].
+     * Queue a system STAGING; it executes on the next [onDrawFrame]. No core
+     * boots until a ROM arrives (plan 4b) — re-staging over a running core is
+     * legal and leaves the running game untouched until the next ROM load.
      * @param systemId ares system ID — one of [AresCore.supportedSystems].
      */
     fun queueSystemLoad(systemId: String) {
+        stagedSystemId = systemId
         pendingSystemId = systemId
         requestRender()
     }
 
     /**
-     * Queue a ROM load; it executes on the next [onDrawFrame] after the system is ready.
+     * Queue a ROM load; it executes on the next [onDrawFrame] after a system
+     * is staged. This is the one boot path — a running game is torn down and
+     * a fresh core boots with the region resolved from this ROM.
      * @param system     ares system ID (e.g. "sfc") — stored for [EmulatorStarted] event.
      * @param romPath    Absolute file path — stored for [EmulatorStarted] event.
      * @param savePrefix Battery-save file prefix (see [AresCore.loadRom]); null
@@ -482,10 +507,10 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
         romPath: String = "",
         savePrefix: String? = null,
     ) {
-        // Cheat addresses are game knowledge — stale codes applied to a new ROM
-        // would corrupt it unpredictably. Queued before pendingRomBytes so any
-        // addCheat issued after this call survives the swap.
-        queueEvent { core.clearCheats() }
+        // Game knowledge dies with the old game (plan 4b): cheat addresses and
+        // watched addresses belong to the outgoing ROM. Cheats clear natively
+        // inside the reboot; watches are wrapper-held so clear them here.
+        watchedAddresses.clear()
         loadedSystem  = system
         loadedRomPath = romPath
         firstFrameSent = false
@@ -529,7 +554,7 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
             // follow-up loadSystem works — system switching goes through here.
             core.init()
             romLoaded     = false
-            systemLoaded  = false
+            systemStaged  = false
             audioStarted  = false
             firstFrameSent = false
         }
@@ -725,8 +750,8 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
 
     /**
      * Add or merge address watches. Each entry is either a plain bus address (Int)
-     * or a map with "address" and "length" keys. Watches are preserved across ROM swaps
-     * — call [clearMemoryWatches] explicitly if needed.
+     * or a map with "address" and "length" keys. Watches are game knowledge and
+     * clear automatically when a new ROM loads (plan 4b).
      *
      * @param entries List of addresses: each element is Int or Map<String,Int>.
      */
@@ -830,8 +855,8 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
     fun videoGeometry(): DoubleArray = core.getVideoGeometry()
 
     /**
-     * JSON array of controller ports with button names. Safe from any thread after
-     * [systemLoaded] is true — built once during system load and read-only afterward.
+     * JSON array of controller ports with button names. Registry data — safe
+     * from any thread once a system is staged; no booted core required.
      */
     fun getPortsJson(): String = core.getPortsJson()
 

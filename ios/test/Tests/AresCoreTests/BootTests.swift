@@ -72,7 +72,7 @@ final class BootTests: XCTestCase {
 
         let rom = Self.makeMinimalLoRom()
         let ok  = rom.withUnsafeBytes {
-            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil)
+            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil, nil, nil) == 1
         }
         XCTAssertTrue(ok, "ares_load_rom() must accept a valid synthetic LoROM")
     }
@@ -80,9 +80,9 @@ final class BootTests: XCTestCase {
     func testLoadRomFailsWithoutSystem() {
         let rom = Self.makeMinimalLoRom()
         let ok  = rom.withUnsafeBytes {
-            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil)
+            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil, nil, nil) == 1
         }
-        XCTAssertFalse(ok, "ares_load_rom() must fail when no system is loaded")
+        XCTAssertFalse(ok, "ares_load_rom() must fail when no system is staged")
     }
 
     func testLoadRomFailsWithTooSmallData() {
@@ -90,7 +90,7 @@ final class BootTests: XCTestCase {
 
         let tiny = Data(count: 100)
         let ok   = tiny.withUnsafeBytes {
-            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil)
+            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil, nil, nil) == 1
         }
         XCTAssertFalse(ok)
     }
@@ -167,26 +167,47 @@ final class BootTests: XCTestCase {
                        "hint must be 0 before a system loads")
     }
 
-    func testRefreshRateHintIsRegionAwarePerSystem() {
-        // Screens register at system load (each core's ppu/vdp load()), so no
-        // ROM is needed. Expected values follow the core formulas at the
-        // pinned submodule — see RefreshRateHintTest.kt for the derivations.
-        // These load-without-power destroy cycles also exercise the
-        // stale-EntryPoints workaround in ares_destroy (see
-        // system_registry.hpp) — without it they strand dangling Thread entry
-        // points that can wedge the next core booted in this process.
-        let cases: [(String, Double)] = [
-            ("fc", 60.09848), ("sfc", 60.09848), ("gb", 59.72750), ("md", 59.92275),
-        ]
-        for (id, expected) in cases {
-            let localCtx = ares_create()
-            XCTAssertTrue(ares_load_system(localCtx, id), "\(id): loadSystem failed")
-            XCTAssertEqual(ares_get_refresh_rate_hint(localCtx), expected,
-                           accuracy: 0.001, "\(id): wrong refresh hint")
-            ares_destroy(localCtx)
+    func testRefreshRateHintArrivesAtBootAndStagingLeavesItZero() {
+        // Under ROM-first boot (plan 4b) screens register inside ares_load_rom
+        // — staging must leave the hint at 0. Expected value follows the core
+        // formula at the pinned submodule (sfc/ppu/ppu.cpp:47, NTSC 262 lines).
+        XCTAssertEqual(ares_get_refresh_rate_hint(ctx), 0.0)
+        XCTAssertTrue(ares_load_system(ctx, "sfc"))
+        XCTAssertEqual(ares_get_refresh_rate_hint(ctx), 0.0,
+                       "staging must not boot a core")
+        boot()
+        XCTAssertEqual(ares_get_refresh_rate_hint(ctx), 60.09848,
+                       accuracy: 0.001, "sfc NTSC refresh hint")
+    }
+
+    func testPalRomBootsPalCore() {
+        // The 4b headline: a PAL ROM must boot the PAL system variant, not
+        // just report PAL. The header country byte drives the sfc analyzer
+        // ($02 = Europe → PAL, sfc_pak region detection); PAL SFC refresh =
+        // cpuFrequency(PAL colorburst · 4.8) / (1364 · 312) ≈ 50.0070
+        // (sfc/ppu/ppu.cpp, 312-line PAL frame).
+        XCTAssertTrue(ares_load_system(ctx, "sfc"))
+        let rom = Self.makeMinimalLoRom(region: .pal)
+        let ok = rom.withUnsafeBytes {
+            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil, nil, nil) == 1
         }
-        // Re-create for tearDown symmetry.
-        ctx = ares_create()
+        XCTAssertTrue(ok, "PAL LoROM must load")
+        XCTAssertEqual(String(cString: ares_get_region(ctx)), "PAL")
+        XCTAssertEqual(ares_get_refresh_rate_hint(ctx), 50.0070,
+                       accuracy: 0.001, "PAL boot must run PAL timing")
+    }
+
+    func testRegionOverrideWinsOverAnalysis() {
+        // Explicit region override (dev knows best — junk homebrew headers):
+        // an NTSC-headered ROM forced to PAL must boot PAL.
+        XCTAssertTrue(ares_load_system(ctx, "sfc"))
+        let rom = Self.makeMinimalLoRom()
+        let ok = rom.withUnsafeBytes {
+            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil, "PAL", nil) == 1
+        }
+        XCTAssertTrue(ok)
+        XCTAssertEqual(String(cString: ares_get_region(ctx)), "PAL")
+        XCTAssertEqual(ares_get_refresh_rate_hint(ctx), 50.0070, accuracy: 0.001)
     }
 
     // MARK: - Ports JSON
@@ -203,7 +224,7 @@ final class BootTests: XCTestCase {
         let rom = Self.makeMinimalLoRom()
         XCTAssertTrue(ares_load_system(ctx, "sfc"))
         let ok = rom.withUnsafeBytes {
-            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil)
+            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil, nil, nil) == 1
         }
         XCTAssertTrue(ok, "boot() failed at ares_load_rom()")
     }
@@ -222,7 +243,7 @@ final class BootTests: XCTestCase {
         XCTAssertTrue(ares_load_system(ctx, "sfc"))
         let rom = Self.makeMinimalLoRom(withSram: true)
         let ok = rom.withUnsafeBytes {
-            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, prefix)
+            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, prefix, nil, nil) == 1
         }
         XCTAssertTrue(ok, "SRAM LoROM must load")
 
@@ -239,7 +260,7 @@ final class BootTests: XCTestCase {
         XCTAssertTrue(ares_load_system(ctx, "sfc"))
         let rom = Self.makeMinimalLoRom()
         _ = rom.withUnsafeBytes {
-            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil)
+            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil, nil, nil) == 1
         }
         XCTAssertFalse(ares_flush_saves(ctx), "no prefix → nothing persisted")
     }
@@ -254,7 +275,9 @@ final class BootTests: XCTestCase {
     ///   $7FB0+ header    LoROM internal header
     ///   $7FFC  00 80     emulation-mode reset vector → $8000
     ///   $7FDC-$7FDF      checksum complement + checksum
-    static func makeMinimalLoRom(withSram: Bool = false) -> Data {
+    enum RomRegion { case ntsc, pal }
+
+    static func makeMinimalLoRom(withSram: Bool = false, region: RomRegion = .ntsc) -> Data {
         let size = 0x8000  // 32 KB
         var rom  = [UInt8](repeating: 0, count: size)
 
@@ -278,8 +301,9 @@ final class BootTests: XCTestCase {
         rom[hb + 0x27] = 0x05
         // $7FD8 — RAM size: SfcPakBuilder decodes 1 << (value-1) KB, so $04 = 8 KB.
         rom[hb + 0x28] = withSram ? 0x04 : 0x00
-        // $7FD9 — Country: USA ($01).
-        rom[hb + 0x29] = 0x01
+        // $7FD9 — Country: USA ($01) = NTSC; Europe ($02) = PAL (the sfc
+        // analyzer's region detection reads this byte).
+        rom[hb + 0x29] = region == .pal ? 0x02 : 0x01
         // $7FDA — Developer ID.
         rom[hb + 0x2A] = 0x00
         // $7FDB — Version.

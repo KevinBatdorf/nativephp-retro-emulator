@@ -28,7 +28,7 @@ class StateAndOptionsTest {
         try {
             assert(core.init())
             assert(core.loadSystem("sfc"))
-            assert(core.loadRom(makeLoRom(), null))
+            assert(core.loadRom(makeLoRom(), null) == AresCore.LOAD_OK)
             repeat(5) { core.tick() }
 
             core.writeMemory(scratch, byteArrayOf(0x5A, 0x3C))
@@ -56,7 +56,7 @@ class StateAndOptionsTest {
         try {
             assert(core.init())
             assert(core.loadSystem("sfc"))
-            assert(core.loadRom(makeLoRom(), null))
+            assert(core.loadRom(makeLoRom(), null) == AresCore.LOAD_OK)
             core.tick()
             assert(!core.stateLoad(File(context.cacheDir, "does-not-exist.bst").absolutePath)) {
                 "loading a missing state must fail, not crash"
@@ -72,7 +72,7 @@ class StateAndOptionsTest {
         try {
             assert(core.init())
             assert(core.loadSystem("sfc"))
-            assert(core.loadRom(makeLoRom(), null))
+            assert(core.loadRom(makeLoRom(), null) == AresCore.LOAD_OK)
             core.tick()
 
             core.setAudio(volume = 0.5f, balance = -1.0f)

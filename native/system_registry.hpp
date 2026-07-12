@@ -11,6 +11,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace SystemRegistry {
 
@@ -26,7 +27,19 @@ struct CartridgePak {
 struct SystemDef {
     std::string id;             // ares system id, e.g. "sfc"
     std::string name;           // display name, e.g. "SNES / Super Famicom"
-    std::string loadName;       // ares System::load() configuration name
+
+    // ares System::load() configuration name, composed per region exactly like
+    // desktop (super-famicom.cpp:126: "[Nintendo] Super Famicom (" + region + ")").
+    // regions lists the core's enumerate() variants in order; empty = the core
+    // has no region variants (gb) and loadNameBase is passed through unchanged.
+    std::string loadNameBase;
+    std::vector<std::string> regions;
+
+    // ROM file extensions accepted for this system (mia medium extensions()).
+    // The bridge layers gate LoadRom on these before analysis, like desktop's
+    // per-emulator file-dialog filters.
+    std::vector<std::string> extensions;
+
     std::string systemNode;     // Platform::pak() node name for the system
     std::string cartridgeNode;  // Platform::pak() node name for the cartridge
     const char* device;         // controller device to allocate, nullptr = system-level controls (gb)
@@ -45,12 +58,39 @@ struct SystemDef {
     uint32_t memBase;
     uint32_t memSize;
 
-    bool (*load)(ares::Node::System& root, const SystemDef& def);
+    bool (*load)(ares::Node::System& root, const SystemDef& def, const std::string& loadName);
     uint8_t (*memRead)(uint32_t offset);
     void (*memWrite)(uint32_t offset, uint8_t value);
     std::shared_ptr<vfs::directory> (*makeSystemPak)(const SystemDef& def);
     CartridgePak (*makeCartridgePak)(const uint8_t* rom, size_t romSize);
 };
+
+// Compose the System::load() name for a region ("" or region-free system
+// returns loadNameBase unchanged).
+auto loadNameFor(const SystemDef& def, const std::string& region) -> std::string;
+
+// Pick the boot region — a port of desktop's Emulator::region()
+// (desktop-ui/emulator/emulator.cpp:40-60): walk the preferred list against
+// the ROM's analyzed region list ("NTSC-J, NTSC-U" style CSV from the pak
+// attribute); NTSC-U/NTSC-J preferences also match a plain "NTSC" entry;
+// no preference hit falls back to the ROM's first listed region. Extensions
+// beyond the reference: a non-empty regionOverride wins outright (dev knows
+// best — junk homebrew headers), and an empty ROM list (desktop relies on
+// mia always providing one) falls back to the first preference the system
+// supports, then the system's first region. Region-free systems return "".
+auto resolveRegion(const SystemDef& def,
+                   const std::string& romRegionCsv,
+                   const std::string& regionOverride,
+                   const std::string& preferredCsv) -> std::string;
+
+// Whether a ROM file extension (lowercase, no dot) is valid for this system.
+auto extensionSupported(const SystemDef& def, const std::string& ext) -> bool;
+
+// Ports/buttons JSON from registry data alone — GetPorts must answer after
+// LoadSystem *stages* a system, before any core boots. Buttons are emitted in
+// bitmask order, which matches the node-tree walk order on every compiled
+// system.
+auto staticPortsJson(const SystemDef& def) -> std::string;
 
 // Compiled systems in display order. Stable pointers for the process lifetime.
 auto all() -> const std::vector<const SystemDef*>&;

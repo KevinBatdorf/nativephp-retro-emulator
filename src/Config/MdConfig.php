@@ -2,4 +2,4 @@
 
 namespace KevinBatdorf\RetroEmulator\Config;
 
-class MdConfig extends SystemConfig {}
+class MdConfig extends RegionalSystemConfig {}

@@ -167,6 +167,10 @@ enum EmulatorFunctions {
 
             renderer.fastForward = false
             renderer.autoSave = config["autoSave"] as? Bool ?? true
+            renderer.stagedRegion = config["region"] as? String ?? ""
+            renderer.stagedPreferredRegions =
+                ((config["preferredRegions"] as? [Any]) ?? [])
+                    .compactMap { $0 as? String }.joined(separator: ",")
             renderer.setRunAhead(enabled: runAhead == 1)
             renderer.setDynamicRateControl(enabled: config["dynamicRateControl"] as? Bool ?? true)
             renderer.configureRewind(
@@ -180,11 +184,14 @@ enum EmulatorFunctions {
                 return BridgeResponse.error(code: "LOAD_FAILED", message: "ares_load_system failed for '\(system)'")
             }
 
-            return BridgeResponse.success(data: ["status": "loading", "system": system])
+            return BridgeResponse.success(data: ["status": "staged", "system": system])
         }
     }
 
-    /// Load a ROM from `path` and start emulation. Fire-and-forget — PHP receives
+    /// Boot the staged system with the ROM at `path` — the one boot path, first
+    /// load and every swap alike (plan 4b). The ROM's extension is gated against
+    /// the staged system's list (desktop's file-dialog filters); a wrong-family
+    /// ROM errors, it never auto-switches systems. Fire-and-forget — PHP receives
     /// `{"status":"loading"}`; `EmulatorStarted` fires on the first rendered frame.
     class LoadRom: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
@@ -195,6 +202,20 @@ enum EmulatorFunctions {
             guard FileManager.default.fileExists(atPath: path),
                   let romData = try? Data(contentsOf: URL(fileURLWithPath: path)) else {
                 return BridgeResponse.error(code: "ROM_NOT_FOUND", message: "ROM not found: \(path)")
+            }
+
+            let system = renderer.loadedSystem
+            guard !system.isEmpty else {
+                return BridgeResponse.error(code: "SYSTEM_NOT_LOADED", message: "Call LoadSystem before LoadRom")
+            }
+            let extensions = renderer.systemExtensions(system)
+            let ext = URL(fileURLWithPath: path).pathExtension.lowercased()
+            guard extensions.contains(ext) else {
+                return BridgeResponse.error(
+                    code: "INVALID_ROM",
+                    message: "'.\(ext)' is not a \(system) ROM — expected one of: "
+                        + extensions.map { ".\($0)" }.joined(separator: ", ")
+                )
             }
 
             // Battery saves live in app support, keyed by surface + ROM basename.

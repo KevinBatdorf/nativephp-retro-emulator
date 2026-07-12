@@ -28,6 +28,7 @@ class EmulatorActivity : Activity() {
     companion object {
         const val EXTRA_ROM_PATH = "ROM_PATH"
         const val EXTRA_SYSTEM   = "SYSTEM"
+        const val EXTRA_REGION   = "REGION"
         const val EXTRA_OUTPUT   = "OUTPUT"
         const val EXTRA_FIXED_SCALE = "FIXED_SCALE"
         const val EXTRA_ASPECT_CORRECTION = "ASPECT_CORRECTION"
@@ -55,6 +56,7 @@ class EmulatorActivity : Activity() {
         intent.getStringExtra(EXTRA_OUTPUT)?.let { renderer.videoOutput = it }
         renderer.videoFixedScale = intent.getIntExtra(EXTRA_FIXED_SCALE, 2)
         intent.getStringExtra(EXTRA_ASPECT_CORRECTION)?.let { renderer.videoAspectCorrection = it }
+        intent.getStringExtra(EXTRA_REGION)?.let { renderer.stagedRegion = it }
 
         // Queue the system load (executes on GL thread).
         renderer.queueSystemLoad(system)

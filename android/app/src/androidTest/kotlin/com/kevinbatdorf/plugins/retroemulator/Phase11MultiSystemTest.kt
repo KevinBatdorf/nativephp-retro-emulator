@@ -50,7 +50,7 @@ class Phase11MultiSystemTest {
             try {
                 assert(core.init()) { "${case.id}: init failed" }
                 assert(core.loadSystem(case.id)) { "${case.id}: loadSystem failed" }
-                assert(core.loadRom(romFile.readBytes())) { "${case.id}: loadRom failed" }
+                assert(core.loadRom(romFile.readBytes()) == AresCore.LOAD_OK) { "${case.id}: loadRom failed" }
 
                 repeat(120) { core.tick() }
 
