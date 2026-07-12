@@ -126,6 +126,33 @@ class VideoGeometryTest {
     }
 
     @Test
+    fun videoOptionsMergeInsteadOfResetting() {
+        val romPath = "/data/local/tmp/test.sfc"
+        if (!File(romPath).exists()) {
+            android.util.Log.w("VideoGeometryTest",
+                "Skipping: no ROM at $romPath — push a .sfc ROM first")
+            return
+        }
+
+        val intent = Intent(context, EmulatorActivity::class.java).apply {
+            putExtra(EmulatorActivity.EXTRA_ROM_PATH, romPath)
+        }
+        ActivityScenario.launch<EmulatorActivity>(intent).use { scenario ->
+            Thread.sleep(2_000)
+            scenario.onActivity { activity ->
+                val renderer = activity.renderer
+                renderer.queueVideoOptions(output = "integer")
+                renderer.queueVideoOptions(luminance = 0.5f)
+                assert(renderer.videoOutput == "integer") {
+                    "setting luminance must not reset output — got ${renderer.videoOutput}"
+                }
+                renderer.stopEmulation()
+            }
+            Thread.sleep(1_000)
+        }
+    }
+
+    @Test
     fun aspectCorrectionNoneAndAnamorphic() {
         // none: square pixels — 256×224 best-fit into 1920×1080 → ×4.821.
         val none = sfcRect(1920, 1080, aspectCorrection = "none")

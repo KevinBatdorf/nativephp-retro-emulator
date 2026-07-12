@@ -7,8 +7,10 @@ use KevinBatdorf\RetroEmulator\Buttons\SfcButton;
 use KevinBatdorf\RetroEmulator\Components\Emulator as EmulatorComponent;
 use KevinBatdorf\RetroEmulator\Config\SfcConfig;
 use KevinBatdorf\RetroEmulator\Elements\Emulator as EmulatorElement;
+use KevinBatdorf\RetroEmulator\AspectCorrection;
 use KevinBatdorf\RetroEmulator\Emulator;
 use KevinBatdorf\RetroEmulator\Events\EmulatorError;
+use KevinBatdorf\RetroEmulator\VideoOutput;
 use KevinBatdorf\RetroEmulator\Events\EmulatorPaused;
 use KevinBatdorf\RetroEmulator\Events\EmulatorResumed;
 use KevinBatdorf\RetroEmulator\Events\EmulatorStarted;
@@ -579,8 +581,12 @@ describe('Typed layer', function () {
         expect($call['payload']['options'])->toBe(['luminance' => 90, 'colorBleed' => true]);
     });
 
-    it('setVideo sends presentation settings', function () {
-        Emulator::surface()->setVideo(output: 'integerFixed', fixedScale: 3, aspectCorrection: 'none');
+    it('setVideo sends presentation settings as wire strings', function () {
+        Emulator::surface()->setVideo(
+            output: VideoOutput::IntegerFixed,
+            fixedScale: 3,
+            aspectCorrection: AspectCorrection::None,
+        );
 
         $call = collect($GLOBALS['__nativephp_calls'])->firstWhere('function', 'Emulator.SetVideo');
         expect($call['payload']['options'])->toBe([

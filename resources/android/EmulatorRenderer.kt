@@ -187,6 +187,24 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
     @Volatile var videoFixedScale: Int = 2
     @Volatile var videoAspectCorrection: String = "standard"
 
+    // Current screen-node options, merged on the GL thread. Kept so setVideo
+    // has merge semantics (omitted options hold their value) and so a system
+    // reload can reapply them — desktop's settings persist the same way.
+    private class VideoOptions {
+        var luminance = 1f
+        var saturation = 1f
+        var gamma = 1f
+        var colorBleed = false
+        var interframeBlending = false
+        var overscan = false
+    }
+    private val videoOptions = VideoOptions()
+
+    private fun applyVideoOptions() = core.setVideo(
+        videoOptions.luminance, videoOptions.saturation, videoOptions.gamma,
+        videoOptions.colorBleed, videoOptions.interframeBlending, videoOptions.overscan,
+    )
+
     private val renderer = object : GLSurfaceView.Renderer {
 
         private var textureId   = 0
@@ -268,7 +286,11 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
                 // silently reload the system on the frame after a stop.
                 pendingSystemId = null
                 systemLoaded = core.loadSystem(systemId)
-                if (!systemLoaded) {
+                if (systemLoaded) {
+                    // Fresh screen nodes boot with ares defaults — reapply the
+                    // surface's options like desktop reapplies its settings.
+                    applyVideoOptions()
+                } else {
                     Log.e(TAG, "loadSystem($systemId) failed")
                 }
             }
@@ -748,26 +770,33 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
     fun setAudioOptions(volume: Float, balance: Float) = core.setAudio(volume, balance)
 
     /**
-     * Queue video post-processing options onto the GL thread. Presentation
-     * settings (output/fixedScale/aspectCorrection) apply on the next frame;
-     * screen-node options need a loaded system.
+     * Merge video options onto the GL thread — null keeps the current value.
+     * Presentation settings (output/fixedScale/aspectCorrection) apply on
+     * the next frame; screen-node options need a loaded system and are
+     * reapplied automatically when a new system loads.
      */
     fun queueVideoOptions(
-        luminance: Float,
-        saturation: Float,
-        gamma: Float,
-        colorBleed: Boolean,
-        interframeBlending: Boolean,
-        overscan: Boolean,
-        output: String,
-        fixedScale: Int,
-        aspectCorrection: String,
+        luminance: Float? = null,
+        saturation: Float? = null,
+        gamma: Float? = null,
+        colorBleed: Boolean? = null,
+        interframeBlending: Boolean? = null,
+        overscan: Boolean? = null,
+        output: String? = null,
+        fixedScale: Int? = null,
+        aspectCorrection: String? = null,
     ) {
-        videoOutput = output
-        videoFixedScale = fixedScale
-        videoAspectCorrection = aspectCorrection
+        output?.let { videoOutput = it }
+        fixedScale?.let { videoFixedScale = it }
+        aspectCorrection?.let { videoAspectCorrection = it }
         queueEvent {
-            core.setVideo(luminance, saturation, gamma, colorBleed, interframeBlending, overscan)
+            luminance?.let { videoOptions.luminance = it }
+            saturation?.let { videoOptions.saturation = it }
+            gamma?.let { videoOptions.gamma = it }
+            colorBleed?.let { videoOptions.colorBleed = it }
+            interframeBlending?.let { videoOptions.interframeBlending = it }
+            overscan?.let { videoOptions.overscan = it }
+            applyVideoOptions()
         }
     }
 

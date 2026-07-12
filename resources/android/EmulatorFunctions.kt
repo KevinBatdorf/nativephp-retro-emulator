@@ -501,14 +501,16 @@ object EmulatorFunctions {
     }
 
     /**
-     * Merge video options — luminance/saturation 0–100, gamma 1.0–2.0,
-     * colorBleed/interframeBlending/overscan booleans, applied on the ares
-     * screen node; presentation settings output (scale/integer/integerFixed/
-     * stretch), fixedScale, and aspectCorrection (none/standard/anamorphic)
-     * mirror ares desktop's Video settings. overscan false (default) trims
-     * the borders like desktop. Options ares has no post-processing hook for
-     * (colorEmulation, deepBlackBoost, pixelAccuracy) are reported back as
-     * ignored.
+     * Merge video options — omitted options keep their current values, and
+     * the surface's options persist across ROM/system reloads (desktop
+     * reapplies its settings at load the same way). luminance/saturation
+     * 0–100, gamma 1.0–2.0, colorBleed/interframeBlending/overscan booleans,
+     * applied on the ares screen node; presentation settings output
+     * (scale/integer/integerFixed/stretch), fixedScale, and aspectCorrection
+     * (none/standard/anamorphic) mirror ares desktop's Video settings.
+     * overscan false (default) trims the borders like desktop. Options ares
+     * has no post-processing hook for (colorEmulation, deepBlackBoost,
+     * pixelAccuracy) are reported back as ignored.
      */
     class SetVideo(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
@@ -516,29 +518,29 @@ object EmulatorFunctions {
             if (err != null) return err
             @Suppress("UNCHECKED_CAST")
             val options = paramMap(parameters, "options") ?: emptyMap()
-            val output = options["output"] as? String ?: "scale"
-            if (output !in setOf("scale", "integer", "integerFixed", "stretch")) {
+            val output = options["output"] as? String
+            if (output != null && output !in setOf("scale", "integer", "integerFixed", "stretch")) {
                 return BridgeResponse.error(
                     "INVALID_PARAMETERS",
                     "output must be scale, integer, integerFixed, or stretch — got '$output'",
                 )
             }
-            val aspectCorrection = options["aspectCorrection"] as? String ?: "standard"
-            if (aspectCorrection !in setOf("none", "standard", "anamorphic")) {
+            val aspectCorrection = options["aspectCorrection"] as? String
+            if (aspectCorrection != null && aspectCorrection !in setOf("none", "standard", "anamorphic")) {
                 return BridgeResponse.error(
                     "INVALID_PARAMETERS",
                     "aspectCorrection must be none, standard, or anamorphic — got '$aspectCorrection'",
                 )
             }
             entry!!.renderer.queueVideoOptions(
-                luminance  = ((options["luminance"]  as? Number)?.toFloat() ?: 100f) / 100f,
-                saturation = ((options["saturation"] as? Number)?.toFloat() ?: 100f) / 100f,
-                gamma      = (options["gamma"] as? Number)?.toFloat() ?: 1.0f,
-                colorBleed = options["colorBleed"] as? Boolean ?: false,
-                interframeBlending = options["interframeBlending"] as? Boolean ?: false,
-                overscan   = options["overscan"] as? Boolean ?: false,
+                luminance  = (options["luminance"]  as? Number)?.toFloat()?.div(100f),
+                saturation = (options["saturation"] as? Number)?.toFloat()?.div(100f),
+                gamma      = (options["gamma"] as? Number)?.toFloat(),
+                colorBleed = options["colorBleed"] as? Boolean,
+                interframeBlending = options["interframeBlending"] as? Boolean,
+                overscan   = options["overscan"] as? Boolean,
                 output     = output,
-                fixedScale = (options["fixedScale"] as? Number)?.toInt() ?: 2,
+                fixedScale = (options["fixedScale"] as? Number)?.toInt(),
                 aspectCorrection = aspectCorrection,
             )
             val ignored = options.keys.filter {

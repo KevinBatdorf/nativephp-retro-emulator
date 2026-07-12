@@ -64,6 +64,9 @@ final class EmulatorRenderer: UIView {
     func loadSystem(_ system: String) -> Bool {
         emuLock.lock()
         let ok = ares_load_system(ctx, system)
+        // Fresh screen nodes boot with ares defaults — reapply the surface's
+        // options like desktop reapplies its settings.
+        if ok { applyVideoOptions() }
         emuLock.unlock()
         if ok {
             loadedSystem = system
@@ -135,19 +138,36 @@ final class EmulatorRenderer: UIView {
         ares_set_audio(ctx, volume, balance)
     }
 
-    /// Video post-processing options, serialised on emuLock. overscan false
-    /// (default) trims the borders like desktop. Presentation settings
-    /// (output/fixedScale/aspectCorrection) apply on the next draw.
+    /// Merge video options — nil keeps the current value, and the surface's
+    /// options persist across ROM/system reloads (desktop reapplies its
+    /// settings at load the same way). overscan false (default) trims the
+    /// borders like desktop. Presentation settings apply on the next draw.
     func setVideoOptions(
-        luminance: Float, saturation: Float, gamma: Float,
-        colorBleed: Bool, interframeBlending: Bool, overscan: Bool,
-        output: String, fixedScale: Int, aspectCorrection: String
+        luminance: Float? = nil, saturation: Float? = nil, gamma: Float? = nil,
+        colorBleed: Bool? = nil, interframeBlending: Bool? = nil, overscan: Bool? = nil,
+        output: String? = nil, fixedScale: Int? = nil, aspectCorrection: String? = nil
     ) {
-        metalRenderer.setPresentation(PresentationSettings(
-            output: output, fixedScale: fixedScale, aspectCorrection: aspectCorrection))
         emuLock.lock()
-        ares_set_video(ctx, luminance, saturation, gamma, colorBleed, interframeBlending, overscan)
+        if let output { presentation.output = output }
+        if let fixedScale { presentation.fixedScale = fixedScale }
+        if let aspectCorrection { presentation.aspectCorrection = aspectCorrection }
+        if let luminance { videoOptions.luminance = luminance }
+        if let saturation { videoOptions.saturation = saturation }
+        if let gamma { videoOptions.gamma = gamma }
+        if let colorBleed { videoOptions.colorBleed = colorBleed }
+        if let interframeBlending { videoOptions.interframeBlending = interframeBlending }
+        if let overscan { videoOptions.overscan = overscan }
+        let pres = presentation
+        applyVideoOptions()
         emuLock.unlock()
+        metalRenderer.setPresentation(pres)
+    }
+
+    /// Push the merged screen-node options into ares. Callers hold emuLock.
+    private func applyVideoOptions() {
+        ares_set_video(
+            ctx, videoOptions.luminance, videoOptions.saturation, videoOptions.gamma,
+            videoOptions.colorBleed, videoOptions.interframeBlending, videoOptions.overscan)
     }
 
     // MARK: - Memory
@@ -409,6 +429,20 @@ final class EmulatorRenderer: UIView {
         let length: Int
         var lastValue: Int?
     }
+
+    /// Current screen-node options, merged under emuLock. Kept so setVideo
+    /// has merge semantics and a system reload can reapply them.
+    private struct VideoOptions {
+        var luminance: Float = 1
+        var saturation: Float = 1
+        var gamma: Float = 1
+        var colorBleed = false
+        var interframeBlending = false
+        var overscan = false
+    }
+
+    private var videoOptions = VideoOptions()
+    private var presentation = PresentationSettings()
 
     private let ctx: OpaquePointer
     private let metalView: MTKView

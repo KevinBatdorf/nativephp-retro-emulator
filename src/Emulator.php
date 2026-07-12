@@ -262,14 +262,16 @@ class Emulator
     }
 
     /**
-     * Merge video post-processing options. Overscan borders are trimmed by
-     * default; overscan: true shows the full canvas. Presentation follows
-     * ares desktop's Video settings: output 'scale' (best-fit, default),
-     * 'integer' (largest whole multiple), 'integerFixed' (exactly
-     * fixedScale×), or 'stretch'; aspectCorrection 'standard' (default),
-     * 'none' (square pixels), or 'anamorphic' (force 4:3). Options ares has
-     * no hook for (colorEmulation, deepBlackBoost, pixelAccuracy) are
-     * reported back as ignored by the bridge.
+     * Merge video post-processing options: omitted options keep their
+     * current values, and the surface's options persist across ROM/system
+     * swaps. Overscan borders are trimmed by default; overscan: true shows
+     * the full canvas. Presentation follows ares desktop's Video settings:
+     * output VideoOutput::Scale (best-fit, default), Integer (largest whole
+     * multiple), IntegerFixed (exactly fixedScale×), or Stretch;
+     * aspectCorrection AspectCorrection::Standard (default), None (square
+     * pixels), or Anamorphic (force 4:3). Options ares has no hook for
+     * (colorEmulation, deepBlackBoost, pixelAccuracy) are reported back as
+     * ignored by the bridge.
      */
     public function setVideo(
         ?int $luminance = null,
@@ -281,15 +283,24 @@ class Emulator
         ?bool $deepBlackBoost = null,
         ?bool $overscan = null,
         ?bool $pixelAccuracy = null,
-        ?string $output = null,
+        ?VideoOutput $output = null,
         ?int $fixedScale = null,
-        ?string $aspectCorrection = null,
+        ?AspectCorrection $aspectCorrection = null,
     ): static {
         $options = array_filter(compact(
             'luminance', 'saturation', 'gamma', 'colorBleed', 'interframeBlending',
             'colorEmulation', 'deepBlackBoost', 'overscan', 'pixelAccuracy',
-            'output', 'fixedScale', 'aspectCorrection',
         ), fn ($value) => $value !== null);
+
+        if ($output !== null) {
+            $options['output'] = $output->value;
+        }
+        if ($fixedScale !== null) {
+            $options['fixedScale'] = $fixedScale;
+        }
+        if ($aspectCorrection !== null) {
+            $options['aspectCorrection'] = $aspectCorrection->value;
+        }
 
         if (function_exists('nativephp_call')) {
             nativephp_call('Emulator.SetVideo', json_encode([
