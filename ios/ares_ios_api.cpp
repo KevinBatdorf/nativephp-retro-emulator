@@ -36,6 +36,21 @@ struct AresContext {
     uint32_t frameWidth  = 0;
     uint32_t frameHeight = 0;
 
+    // Screen-node geometry captured alongside each frame. The renderer
+    // computes presentation size from these exactly like
+    // desktop-ui/program/platform.cpp:95-115.
+    double nodeWidth  = 0.0;
+    double nodeHeight = 0.0;
+    double scaleX     = 1.0;
+    double scaleY     = 1.0;
+    double aspectX    = 1.0;
+    double aspectY    = 1.0;
+    uint32_t rotation = 0;
+
+    // Overscan borders trimmed by default; setVideo(overscan: true) shows
+    // them, mirroring desktop's Emulator::setOverscan.
+    bool overscan = false;
+
     // Audio — mixed stereo floats, written by Platform::audio().
     // ~125 ms cap; overflow drops the OLDEST samples so backlog (audio lag)
     // self-heals instead of persisting (see the Android counterpart).
@@ -148,6 +163,13 @@ struct IosPlatform : ares::Platform {
         const u32 stride = pitch / sizeof(u32);
         g_ctx->frameWidth  = width;
         g_ctx->frameHeight = height;
+        g_ctx->nodeWidth   = (double)node->width();
+        g_ctx->nodeHeight  = (double)node->height();
+        g_ctx->scaleX      = node->scaleX();
+        g_ctx->scaleY      = node->scaleY();
+        g_ctx->aspectX     = node->aspectX();
+        g_ctx->aspectY     = node->aspectY();
+        g_ctx->rotation    = node->rotation();
         g_ctx->frameBuffer.resize((size_t)width * height);
         for (u32 y = 0; y < height; y++) {
             std::memcpy(&g_ctx->frameBuffer[y * width],
@@ -337,6 +359,13 @@ bool ares_load_system(AresContext* ctx, const char* system_id) {
         ctx->portsJson = json;
     }
 
+    // Desktop applies its overscan setting to every screen on load
+    // (emulator.cpp:137 → setOverscan scan, emulator.cpp:242-246). Cores
+    // consult screen->overscan() per frame, so this takes effect immediately.
+    for (auto& screen : ctx->root->find<ares::Node::Video::Screen>()) {
+        screen->setOverscan(ctx->overscan);
+    }
+
     ctx->systemLoaded = true;
     return true;
 }
@@ -409,15 +438,31 @@ void ares_set_audio(AresContext* ctx, float volume, float balance) {
 }
 
 void ares_set_video(AresContext* ctx, float luminance, float saturation,
-                    float gamma, bool color_bleed, bool interframe_blending) {
+                    float gamma, bool color_bleed, bool interframe_blending,
+                    bool overscan) {
     if (!ctx || !ctx->systemLoaded) return;
+    ctx->overscan = overscan;
     for (auto& screen : ctx->root->find<ares::Node::Video::Screen>()) {
         screen->setLuminance((f64)luminance);
         screen->setSaturation((f64)saturation);
         screen->setGamma((f64)gamma);
         screen->setColorBleed(color_bleed);
         screen->setInterframeBlending(interframe_blending);
+        screen->setOverscan(overscan);
     }
+}
+
+void ares_get_video_geometry(AresContext* ctx, double out[7]) {
+    out[0] = 0; out[1] = 0; out[2] = 1; out[3] = 1;
+    out[4] = 1; out[5] = 1; out[6] = 0;
+    if (!ctx) return;
+    out[0] = ctx->nodeWidth;
+    out[1] = ctx->nodeHeight;
+    out[2] = ctx->scaleX;
+    out[3] = ctx->scaleY;
+    out[4] = ctx->aspectX;
+    out[5] = ctx->aspectY;
+    out[6] = (double)ctx->rotation;
 }
 
 bool ares_flush_saves(AresContext* ctx) {

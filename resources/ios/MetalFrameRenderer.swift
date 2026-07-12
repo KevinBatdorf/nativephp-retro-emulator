@@ -1,6 +1,50 @@
 import Metal
 import MetalKit
 
+/// Screen-node presentation geometry, captured alongside each frame
+/// (ares_get_video_geometry order).
+struct VideoGeometry {
+    var width: Double = 0
+    var height: Double = 0
+    var scaleX: Double = 1
+    var scaleY: Double = 1
+    var aspectX: Double = 1
+    var aspectY: Double = 1
+    var rotation: Int = 0
+
+    init() {}
+
+    init(values: [Double]) {
+        width = values[0]; height = values[1]
+        scaleX = values[2]; scaleY = values[3]
+        aspectX = values[4]; aspectY = values[5]
+        rotation = Int(values[6])
+    }
+
+    /// Port of ares desktop-ui/program/platform.cpp:95-115 with desktop's
+    /// default settings (output "Scale" = best-fit, aspect correction
+    /// "Standard"): video size is width·scaleX·aspectX/aspectY × height·scaleY
+    /// (swapped at 90°/270°), best-fit scaled into the viewport. The reference
+    /// truncates to u32 at each step — mirrored here. Returns the normalized
+    /// output scale for the centered quad, or nil when nothing can be sized.
+    func outputScale(viewportWidth: Double, viewportHeight: Double) -> SIMD2<Float>? {
+        var videoWidth  = (width * scaleX).rounded(.towardZero)
+        var videoHeight = (height * scaleY).rounded(.towardZero)
+        if aspectY > 0 { videoWidth = (videoWidth * aspectX / aspectY).rounded(.towardZero) }
+        if rotation == 90 || rotation == 270 { swap(&videoWidth, &videoHeight) }
+        guard videoWidth > 0, videoHeight > 0, viewportWidth > 0, viewportHeight > 0 else {
+            return nil
+        }
+        let frac = min(viewportWidth / videoWidth, viewportHeight / videoHeight)
+        let outputWidth  = (videoWidth * frac).rounded(.towardZero)
+        let outputHeight = (videoHeight * frac).rounded(.towardZero)
+        return SIMD2<Float>(
+            Float(outputWidth / viewportWidth),
+            Float(outputHeight / viewportHeight)
+        )
+    }
+}
+
 /// MTKViewDelegate that blits the latest ares ARGB8888 frame to screen via Metal.
 ///
 /// ares pixel format is 0xAARRGGBB; on little-endian ARM that is [BB,GG,RR,AA] in
@@ -20,6 +64,7 @@ final class MetalFrameRenderer: NSObject, MTKViewDelegate {
     private var pending: [UInt32]?
     private var pendingW = 0
     private var pendingH = 0
+    private var geometry = VideoGeometry()
 
     init?(device: MTLDevice, pixelFormat: MTLPixelFormat) {
         self.device = device
@@ -48,11 +93,12 @@ final class MetalFrameRenderer: NSObject, MTKViewDelegate {
     }
 
     /// Thread-safe. Called from the emulation loop thread after each ares_tick().
-    func submitFrame(_ pixels: [UInt32], width: Int, height: Int) {
+    func submitFrame(_ pixels: [UInt32], width: Int, height: Int, geometry: VideoGeometry) {
         lock.lock()
         pending  = pixels
         pendingW = width
         pendingH = height
+        self.geometry = geometry
         lock.unlock()
     }
 
@@ -65,6 +111,7 @@ final class MetalFrameRenderer: NSObject, MTKViewDelegate {
         let px = pending
         let pw = pendingW
         let ph = pendingH
+        let geom = geometry
         pending = nil
         lock.unlock()
 
@@ -76,10 +123,16 @@ final class MetalFrameRenderer: NSObject, MTKViewDelegate {
               let descriptor = view.currentRenderPassDescriptor,
               let tex        = texture else { return }
 
+        guard var posScale = geom.outputScale(
+            viewportWidth: Double(view.drawableSize.width),
+            viewportHeight: Double(view.drawableSize.height)
+        ) else { return }
+
         guard let cmd = commandQueue.makeCommandBuffer(),
               let enc = cmd.makeRenderCommandEncoder(descriptor: descriptor) else { return }
 
         enc.setRenderPipelineState(pipelineState)
+        enc.setVertexBytes(&posScale, length: MemoryLayout<SIMD2<Float>>.size, index: 0)
         enc.setFragmentTexture(tex, index: 0)
         enc.setFragmentSamplerState(sampler, index: 0)
         enc.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)

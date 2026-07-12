@@ -6,13 +6,15 @@ struct VertexOut {
     float2 uv;
 };
 
-// Full-screen triangle-strip quad covering NDC [-1,1]×[-1,1].
-// UV origin is top-left; ares frame origin is also top-left.
-vertex VertexOut blit_vert(uint vid [[vertex_id]]) {
+// Triangle-strip quad over NDC, shrunk to the letterboxed output rect by
+// posScale (centered — NDC scales about the origin, matching ruby's
+// centering). UV origin is top-left; ares frame origin is also top-left.
+vertex VertexOut blit_vert(uint vid [[vertex_id]],
+                           constant float2& posScale [[buffer(0)]]) {
     constexpr float2 pos[4] = { {-1,-1},{1,-1},{-1,1},{1,1} };
     constexpr float2 uvs[4] = { {0,1},{1,1},{0,0},{1,0} };
     VertexOut o;
-    o.position = float4(pos[vid], 0, 1);
+    o.position = float4(pos[vid] * posScale, 0, 1);
     o.uv = uvs[vid];
     return o;
 }

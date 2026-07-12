@@ -65,7 +65,7 @@ final class StateAndOptionsTests: XCTestCase {
 
         ares_set_audio(ctx, 0.5, -1.0)
         ares_set_audio(ctx, 1.0, 1.0)
-        ares_set_video(ctx, 0.5, 0.5, 1.5, true, true)
+        ares_set_video(ctx, 0.5, 0.5, 1.5, true, true, false)
         for _ in 0..<5 { _ = ares_tick(ctx) }
 
         var width: UInt32 = 0
@@ -73,5 +73,30 @@ final class StateAndOptionsTests: XCTestCase {
         var buffer = [UInt32](repeating: 0, count: 1024 * 1024)
         _ = ares_get_frame(ctx, &buffer, buffer.count, &width, &height)
         XCTAssertGreaterThan(width, 0, "frame must still be produced with options applied")
+    }
+
+    func testOverscanIsTrimmedByDefault() {
+        boot()
+        for _ in 0..<10 { _ = ares_tick(ctx) }
+
+        var g = [Double](repeating: 0, count: 7)
+        ares_get_video_geometry(ctx, &g)
+        // 564 is the full SFC overscan canvas; trimmed NTSC is 512×224.
+        XCTAssertEqual(g[0], 512.0, "node width must be trimmed to 512")
+        XCTAssertEqual(g[1], 224.0, "node height must be trimmed to 224")
+        XCTAssertEqual(g[2], 0.5, "SFC scaleX must be 0.5")
+        XCTAssertEqual(g[4] / g[5], 8.0 / 7.0, "SFC NTSC aspect must be 8:7")
+    }
+
+    func testOverscanToggleShowsFullCanvas() {
+        boot()
+        for _ in 0..<10 { _ = ares_tick(ctx) }
+
+        ares_set_video(ctx, 1.0, 1.0, 1.0, false, false, true)
+        for _ in 0..<5 { _ = ares_tick(ctx) }
+
+        var g = [Double](repeating: 0, count: 7)
+        ares_get_video_geometry(ctx, &g)
+        XCTAssertEqual(g[0], 564.0, "overscan: true must show the 564-wide canvas")
     }
 }

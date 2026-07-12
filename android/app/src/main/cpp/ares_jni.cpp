@@ -37,6 +37,21 @@ struct EmulatorState {
     u32    frameWidth  = 0;
     u32    frameHeight = 0;
 
+    // Screen-node geometry captured alongside each frame (guarded by
+    // frameMutex with it). The renderer computes presentation size from these
+    // exactly like desktop-ui/program/platform.cpp:95-115.
+    f64 nodeWidth   = 0.0;
+    f64 nodeHeight  = 0.0;
+    f64 scaleX      = 1.0;
+    f64 scaleY      = 1.0;
+    f64 aspectX     = 1.0;
+    f64 aspectY     = 1.0;
+    u32 rotation    = 0;
+
+    // Overscan borders trimmed by default; setVideo(overscan: true) shows
+    // them, mirroring desktop's Emulator::setOverscan. GL thread only.
+    bool overscan = false;
+
     // Frame hand-off. ares' screen node delivers frames from its own worker
     // thread ("dev.ares.screen"), where no GL context is current — video()
     // buffers pixels here and the GL thread uploads on the next tick.
@@ -179,6 +194,13 @@ struct AndroidPlatform : ares::Platform {
         std::lock_guard<std::mutex> lock(g_state->frameMutex);
         g_state->frameWidth  = width;
         g_state->frameHeight = height;
+        g_state->nodeWidth   = (f64)node->width();
+        g_state->nodeHeight  = (f64)node->height();
+        g_state->scaleX      = node->scaleX();
+        g_state->scaleY      = node->scaleY();
+        g_state->aspectX     = node->aspectX();
+        g_state->aspectY     = node->aspectY();
+        g_state->rotation    = node->rotation();
         g_state->frameBuffer.resize((size_t)width * height);
         for (u32 y = 0; y < height; y++) {
             std::memcpy(&g_state->frameBuffer[y * width],
@@ -425,6 +447,13 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadSystem(
     }
     LOGI("cached %zu buttons for %s", g_state->inputCache.size(), def->id.c_str());
 
+    // Desktop applies its overscan setting to every screen on load
+    // (emulator.cpp:137 → setOverscan scan, emulator.cpp:242-246). Cores
+    // consult screen->overscan() per frame, so this takes effect immediately.
+    for (auto& screen : g_state->root->find<ares::Node::Video::Screen>()) {
+        screen->setOverscan(g_state->overscan);
+    }
+
     g_state->systemLoaded = true;
     LOGI("%s system loaded", def->id.c_str());
     return JNI_TRUE;
@@ -587,6 +616,31 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetFrameHeight(
     JNIEnv*, jobject)
 {
     return g_state ? (jint)g_state->frameHeight : 0;
+}
+
+/**
+ * Screen-node presentation geometry for the latest frame:
+ * [width, height, scaleX, scaleY, aspectX, aspectY, rotation].
+ * All zeros before the first frame. Any thread (frameMutex-guarded).
+ */
+JNIEXPORT jdoubleArray JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetVideoGeometry(
+    JNIEnv* env, jobject)
+{
+    jdouble values[7] = {0, 0, 1, 1, 1, 1, 0};
+    if (g_state) {
+        std::lock_guard<std::mutex> lock(g_state->frameMutex);
+        values[0] = g_state->nodeWidth;
+        values[1] = g_state->nodeHeight;
+        values[2] = g_state->scaleX;
+        values[3] = g_state->scaleY;
+        values[4] = g_state->aspectX;
+        values[5] = g_state->aspectY;
+        values[6] = (jdouble)g_state->rotation;
+    }
+    jdoubleArray result = env->NewDoubleArray(7);
+    env->SetDoubleArrayRegion(result, 0, 7, values);
+    return result;
 }
 
 // Phase 5 — audio drain -----------------------------------------------------
@@ -924,15 +978,17 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetAudio(
 JNIEXPORT void JNICALL
 Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetVideo(
     JNIEnv*, jobject, jfloat luminance, jfloat saturation, jfloat gamma,
-    jboolean colorBleed, jboolean interframeBlending)
+    jboolean colorBleed, jboolean interframeBlending, jboolean overscan)
 {
     if (!g_state || !g_state->systemLoaded) return;
+    g_state->overscan = overscan;
     for (auto& screen : g_state->root->find<ares::Node::Video::Screen>()) {
         screen->setLuminance((f64)luminance);
         screen->setSaturation((f64)saturation);
         screen->setGamma((f64)gamma);
         screen->setColorBleed(colorBleed);
         screen->setInterframeBlending(interframeBlending);
+        screen->setOverscan(overscan);
     }
 }
 

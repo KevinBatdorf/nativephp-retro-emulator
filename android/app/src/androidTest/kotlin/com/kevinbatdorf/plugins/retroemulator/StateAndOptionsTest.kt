@@ -83,6 +83,7 @@ class StateAndOptionsTest {
                 gamma = 1.5f,
                 colorBleed = true,
                 interframeBlending = true,
+                overscan = false,
             )
             repeat(5) { core.tick() }
 

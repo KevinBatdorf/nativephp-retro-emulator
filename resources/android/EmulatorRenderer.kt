@@ -175,23 +175,31 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
     private var uvW = 1f
     private var uvH = 1f
 
+    // Letterboxed output rect in surface pixels, recomputed per frame from the
+    // screen-node geometry (GL thread only). Screenshot reads this region.
+    private var surfaceW = 0
+    private var surfaceH = 0
+    private var outputRect = OutputRect(0, 0, 0, 0)
+
     private val renderer = object : GLSurfaceView.Renderer {
 
-        private var textureId  = 0
-        private var program    = 0
-        private var posLoc     = 0
-        private var texLoc     = 0
-        private var uvScaleLoc = 0
-        private var vbo        = 0
+        private var textureId   = 0
+        private var program     = 0
+        private var posLoc      = 0
+        private var texLoc      = 0
+        private var uvScaleLoc  = 0
+        private var posScaleLoc = 0
+        private var vbo         = 0
 
         override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
             GLES20.glClearColor(0f, 0f, 0f, 1f)
 
             // Compile shaders.
-            program    = buildProgram(VERTEX_SRC, FRAGMENT_SRC)
-            posLoc     = GLES20.glGetAttribLocation(program,  "aPos")
-            texLoc     = GLES20.glGetUniformLocation(program, "uTex")
-            uvScaleLoc = GLES20.glGetUniformLocation(program, "uUvScale")
+            program     = buildProgram(VERTEX_SRC, FRAGMENT_SRC)
+            posLoc      = GLES20.glGetAttribLocation(program,  "aPos")
+            texLoc      = GLES20.glGetUniformLocation(program, "uTex")
+            uvScaleLoc  = GLES20.glGetUniformLocation(program, "uUvScale")
+            posScaleLoc = GLES20.glGetUniformLocation(program, "uPosScale")
 
             // Full-screen quad (two triangles as a triangle strip, NDC coords).
             val verts = floatArrayOf(
@@ -242,17 +250,19 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
 
         override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
             GLES20.glViewport(0, 0, width, height)
+            surfaceW = width
+            surfaceH = height
         }
 
         override fun onDrawFrame(gl: GL10?) {
             // --- Consume pending system load ---
             val systemId = pendingSystemId
             if (!systemLoaded && systemId != null) {
+                // Consume on success too: a stale request left behind would
+                // silently reload the system on the frame after a stop.
+                pendingSystemId = null
                 systemLoaded = core.loadSystem(systemId)
                 if (!systemLoaded) {
-                    // Consume the request — retrying an id ares rejected
-                    // once would fail identically every frame, forever.
-                    pendingSystemId = null
                     Log.e(TAG, "loadSystem($systemId) failed")
                 }
             }
@@ -327,10 +337,18 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
                 eventListener?.onStarted(loadedSystem, loadedRomPath)
             }
 
-            // --- Update UV scale ---
+            // --- Update UV scale and letterboxed output rect ---
             if (fw > 0 && fh > 0) {
                 uvW = fw.toFloat() / TEX_W.toFloat()
                 uvH = fh.toFloat() / TEX_H.toFloat()
+                val g = core.getVideoGeometry()
+                outputRect = computeOutputRect(
+                    nodeWidth = g[0], nodeHeight = g[1],
+                    scaleX = g[2], scaleY = g[3],
+                    aspectX = g[4], aspectY = g[5],
+                    rotation = g[6].toInt(),
+                    viewportWidth = surfaceW, viewportHeight = surfaceH,
+                )
             }
 
             // --- Service pending memory read ---
@@ -345,9 +363,9 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
                 req.latch.countDown()
             }
 
-            // --- Service pending screenshot ---
+            // --- Service pending screenshot (after the rect update above) ---
             pendingScreenshot.getAndSet(null)?.let { req ->
-                req.result = captureFramebuffer(fw, fh)
+                req.result = captureFramebuffer(outputRect)
                 req.latch.countDown()
             }
 
@@ -382,6 +400,11 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textureId)
             GLES20.glUniform1i(texLoc, 0)
             GLES20.glUniform2f(uvScaleLoc, uvW, uvH)
+            // Shrink the quad to the letterboxed output rect (centered, so
+            // scaling NDC about the origin is exactly ruby's centering).
+            val sx = if (surfaceW > 0) outputRect.w.toFloat() / surfaceW else 1f
+            val sy = if (surfaceH > 0) outputRect.h.toFloat() / surfaceH else 1f
+            GLES20.glUniform2f(posScaleLoc, sx, sy)
 
             GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
 
@@ -683,11 +706,12 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
     // Phase 7 — GL-thread helpers (called from onDrawFrame)
     // ---------------------------------------------------------------------------
 
-    private fun captureFramebuffer(fw: Int, fh: Int): ByteArray? {
+    private fun captureFramebuffer(rect: OutputRect): ByteArray? {
+        val (x, y, fw, fh) = rect
         if (fw <= 0 || fh <= 0) return null
         return try {
             val buf = ByteBuffer.allocateDirect(fw * fh * 4).order(ByteOrder.nativeOrder())
-            GLES20.glReadPixels(0, 0, fw, fh, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, buf)
+            GLES20.glReadPixels(x, y, fw, fh, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, buf)
             // GL origin is bottom-left; flip vertically for correct top-down orientation.
             val src = ByteArray(fw * fh * 4).also { buf.get(it) }
             val flipped = ByteArray(src.size)
@@ -721,8 +745,11 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
         gamma: Float,
         colorBleed: Boolean,
         interframeBlending: Boolean,
+        overscan: Boolean,
     ) {
-        queueEvent { core.setVideo(luminance, saturation, gamma, colorBleed, interframeBlending) }
+        queueEvent {
+            core.setVideo(luminance, saturation, gamma, colorBleed, interframeBlending, overscan)
+        }
     }
 
     /**
@@ -730,6 +757,9 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
      * once the ROM is loaded — the native value is written before [romLoaded] is set.
      */
     fun getRegion(): String = core.getRegion()
+
+    /** Screen-node presentation geometry (see [AresCore.getVideoGeometry]). Any thread. */
+    fun videoGeometry(): DoubleArray = core.getVideoGeometry()
 
     /**
      * JSON array of controller ports with button names. Safe from any thread after
@@ -761,6 +791,54 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
 }
 
 // ---------------------------------------------------------------------------
+// Presentation geometry
+// ---------------------------------------------------------------------------
+
+/** Letterboxed output rect in surface pixels (GL origin, bottom-left). */
+internal data class OutputRect(val x: Int, val y: Int, val w: Int, val h: Int)
+
+/**
+ * Port of ares desktop-ui/program/platform.cpp:95-115 with desktop's default
+ * settings (output "Scale" = best-fit, aspect correction "Standard"): the
+ * emulated video size is width·scaleX·aspectX/aspectY × height·scaleY
+ * (dimensions swapped for 90°/270° rotation), scaled by the best-fit
+ * fraction and centered in the viewport (ruby::video.output centering).
+ */
+internal fun computeOutputRect(
+    nodeWidth: Double, nodeHeight: Double,
+    scaleX: Double, scaleY: Double,
+    aspectX: Double, aspectY: Double,
+    rotation: Int,
+    viewportWidth: Int, viewportHeight: Int,
+): OutputRect {
+    // The reference truncates to u32 at each step — mirror that exactly.
+    var videoWidth  = (nodeWidth * scaleX).toInt()
+    var videoHeight = (nodeHeight * scaleY).toInt()
+    if (aspectY > 0) videoWidth = (videoWidth * aspectX / aspectY).toInt()
+    if (rotation == 90 || rotation == 270) {
+        val swap = videoWidth
+        videoWidth = videoHeight
+        videoHeight = swap
+    }
+    if (videoWidth <= 0 || videoHeight <= 0 || viewportWidth <= 0 || viewportHeight <= 0) {
+        return OutputRect(0, 0, 0, 0)
+    }
+
+    val frac = minOf(
+        viewportWidth.toFloat() / videoWidth,
+        viewportHeight.toFloat() / videoHeight,
+    )
+    val outputWidth  = (videoWidth * frac).toInt()
+    val outputHeight = (videoHeight * frac).toInt()
+    return OutputRect(
+        (viewportWidth - outputWidth) / 2,
+        (viewportHeight - outputHeight) / 2,
+        outputWidth,
+        outputHeight,
+    )
+}
+
+// ---------------------------------------------------------------------------
 // GL shader sources
 // ---------------------------------------------------------------------------
 
@@ -770,6 +848,7 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
 private const val VERTEX_SRC = """
     attribute vec2 aPos;
     uniform   vec2 uUvScale;
+    uniform   vec2 uPosScale;
     varying   vec2 vUv;
     void main() {
         // Flip Y so row 0 of the ares output (screen top) maps to the top of
@@ -778,7 +857,9 @@ private const val VERTEX_SRC = """
             (aPos.x * 0.5 + 0.5) * uUvScale.x,
             (0.5 - aPos.y * 0.5) * uUvScale.y
         );
-        gl_Position = vec4(aPos, 0.0, 1.0);
+        // uPosScale letterboxes: the quad shrinks to the aspect-correct
+        // output rect, centered because NDC scales about the origin.
+        gl_Position = vec4(aPos * uPosScale, 0.0, 1.0);
     }
 """
 

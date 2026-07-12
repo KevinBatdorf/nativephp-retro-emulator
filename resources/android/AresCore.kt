@@ -87,7 +87,9 @@ class AresCore {
 
     /**
      * Video post-processing on the ares screen node. Ranges follow ares:
-     * luminance/saturation 0–1, gamma 1.0–2.0. GL thread only.
+     * luminance/saturation 0–1, gamma 1.0–2.0. overscan false trims the
+     * borders (our default); true shows the full overscan canvas.
+     * GL thread only.
      */
     fun setVideo(
         luminance: Float,
@@ -95,7 +97,8 @@ class AresCore {
         gamma: Float,
         colorBleed: Boolean,
         interframeBlending: Boolean,
-    ) = nativeSetVideo(luminance, saturation, gamma, colorBleed, interframeBlending)
+        overscan: Boolean,
+    ) = nativeSetVideo(luminance, saturation, gamma, colorBleed, interframeBlending, overscan)
 
     // -------------------------------------------------------------------------
     // Phase 4 — per-frame operations (GL thread only)
@@ -113,6 +116,13 @@ class AresCore {
 
     /** Height of the most recently rendered frame in pixels (0 before first frame). */
     fun getFrameHeight(): Int = nativeGetFrameHeight()
+
+    /**
+     * Screen-node presentation geometry for the latest frame:
+     * `[width, height, scaleX, scaleY, aspectX, aspectY, rotation]`.
+     * All zeros before the first frame. Safe from any thread.
+     */
+    fun getVideoGeometry(): DoubleArray = nativeGetVideoGeometry()
 
     // -------------------------------------------------------------------------
     // Phase 5 — audio
@@ -274,12 +284,13 @@ class AresCore {
     private external fun nativeSetAudio(volume: Float, balance: Float)
     private external fun nativeSetVideo(
         luminance: Float, saturation: Float, gamma: Float,
-        colorBleed: Boolean, interframeBlending: Boolean,
+        colorBleed: Boolean, interframeBlending: Boolean, overscan: Boolean,
     )
 
     private external fun nativeTick()
     private external fun nativeGetFrameWidth(): Int
     private external fun nativeGetFrameHeight(): Int
+    private external fun nativeGetVideoGeometry(): DoubleArray
 
     private external fun nativeReadAudio(buffer: FloatArray): Int
 

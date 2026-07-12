@@ -411,7 +411,8 @@ enum EmulatorFunctions {
     }
 
     /// Merge video options — luminance/saturation 0–100, gamma 1.0–2.0,
-    /// colorBleed/interframeBlending booleans, applied on the ares screen node.
+    /// colorBleed/interframeBlending/overscan booleans, applied on the ares
+    /// screen node. overscan false (default) trims the borders like desktop.
     /// Options ares has no post-processing hook for are reported back as ignored.
     class SetVideo: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
@@ -422,10 +423,11 @@ enum EmulatorFunctions {
                 saturation: ((options["saturation"] as? NSNumber)?.floatValue ?? 100) / 100,
                 gamma:      (options["gamma"] as? NSNumber)?.floatValue ?? 1.0,
                 colorBleed: options["colorBleed"] as? Bool ?? false,
-                interframeBlending: options["interframeBlending"] as? Bool ?? false
+                interframeBlending: options["interframeBlending"] as? Bool ?? false,
+                overscan:   options["overscan"] as? Bool ?? false
             )
             let ignored = options.keys.filter {
-                ["colorEmulation", "deepBlackBoost", "overscan", "pixelAccuracy"].contains($0)
+                ["colorEmulation", "deepBlackBoost", "pixelAccuracy"].contains($0)
             }
             return ignored.isEmpty
                 ? BridgeResponse.success(data: ["status": "ok"])

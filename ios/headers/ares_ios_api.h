@@ -57,9 +57,12 @@ void ares_resume(AresContext* ctx);
 void ares_set_audio(AresContext* ctx, float volume, float balance);
 
 // Video post-processing on the ares screen node.  Ranges follow ares:
-// luminance/saturation 0–1, gamma 1.0–2.0.  Emulation thread only.
+// luminance/saturation 0–1, gamma 1.0–2.0.  overscan false trims the
+// borders (our default); true shows the full overscan canvas.
+// Emulation thread only.
 void ares_set_video(AresContext* ctx, float luminance, float saturation,
-                    float gamma, bool color_bleed, bool interframe_blending);
+                    float gamma, bool color_bleed, bool interframe_blending,
+                    bool overscan);
 
 // Video -----------------------------------------------------------------------
 
@@ -69,6 +72,14 @@ void ares_set_video(AresContext* ctx, float luminance, float saturation,
 bool ares_get_frame(AresContext* ctx,
                     uint32_t* out_buf, size_t buf_capacity,
                     uint32_t* out_width, uint32_t* out_height);
+
+// Screen-node presentation geometry for the latest frame:
+// out[7] = {width, height, scaleX, scaleY, aspectX, aspectY, rotation}.
+// Presentation size follows ares desktop-ui/program/platform.cpp:95-115:
+// videoWidth = width·scaleX·aspectX/aspectY, videoHeight = height·scaleY,
+// swap when rotation is 90/270, then best-fit into the viewport.
+// All zeros before the first frame.  Emulation thread only.
+void ares_get_video_geometry(AresContext* ctx, double out[7]);
 
 // Audio -----------------------------------------------------------------------
 

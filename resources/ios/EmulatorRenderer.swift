@@ -135,13 +135,14 @@ final class EmulatorRenderer: UIView {
         ares_set_audio(ctx, volume, balance)
     }
 
-    /// Video post-processing options, serialised on emuLock.
+    /// Video post-processing options, serialised on emuLock. overscan false
+    /// (default) trims the borders like desktop.
     func setVideoOptions(
         luminance: Float, saturation: Float, gamma: Float,
-        colorBleed: Bool, interframeBlending: Bool
+        colorBleed: Bool, interframeBlending: Bool, overscan: Bool
     ) {
         emuLock.lock()
-        ares_set_video(ctx, luminance, saturation, gamma, colorBleed, interframeBlending)
+        ares_set_video(ctx, luminance, saturation, gamma, colorBleed, interframeBlending, overscan)
         emuLock.unlock()
     }
 
@@ -508,6 +509,7 @@ final class EmulatorRenderer: UIView {
 
             var w: UInt32 = 0, h: UInt32 = 0
             var pixels: [UInt32] = []
+            var geometry = [Double](repeating: 0, count: 7)
             if ticks > 0 {
                 emuLock.lock()
                 for _ in 0..<ticks { ares_tick(ctx) }
@@ -527,6 +529,7 @@ final class EmulatorRenderer: UIView {
                     pixels.withUnsafeMutableBufferPointer {
                         _ = ares_get_frame(ctx, $0.baseAddress, $0.count, &w, &h)
                     }
+                    ares_get_video_geometry(ctx, &geometry)
                 }
                 emuLock.unlock()
 
@@ -534,7 +537,9 @@ final class EmulatorRenderer: UIView {
             }
 
             if w > 0 && h > 0 {
-                metalRenderer.submitFrame(pixels, width: Int(w), height: Int(h))
+                metalRenderer.submitFrame(
+                    pixels, width: Int(w), height: Int(h),
+                    geometry: VideoGeometry(values: geometry))
                 metalView.draw()
 
                 // EmulatorStarted fires once, on the first rendered frame.

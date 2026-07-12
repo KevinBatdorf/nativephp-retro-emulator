@@ -262,8 +262,9 @@ class Emulator
     }
 
     /**
-     * Merge video post-processing options. Options ares has no hook for
-     * (colorEmulation, deepBlackBoost, overscan, pixelAccuracy) are reported
+     * Merge video post-processing options. Overscan borders are trimmed by
+     * default; overscan: true shows the full canvas. Options ares has no
+     * hook for (colorEmulation, deepBlackBoost, pixelAccuracy) are reported
      * back as ignored by the bridge.
      */
     public function setVideo(

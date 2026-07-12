@@ -502,9 +502,10 @@ object EmulatorFunctions {
 
     /**
      * Merge video options — luminance/saturation 0–100, gamma 1.0–2.0,
-     * colorBleed/interframeBlending booleans, applied on the ares screen node.
+     * colorBleed/interframeBlending/overscan booleans, applied on the ares
+     * screen node. overscan false (default) trims the borders like desktop.
      * Options ares has no post-processing hook for (colorEmulation,
-     * deepBlackBoost, overscan, pixelAccuracy) are reported back as ignored.
+     * deepBlackBoost, pixelAccuracy) are reported back as ignored.
      */
     class SetVideo(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
@@ -518,9 +519,10 @@ object EmulatorFunctions {
                 gamma      = (options["gamma"] as? Number)?.toFloat() ?: 1.0f,
                 colorBleed = options["colorBleed"] as? Boolean ?: false,
                 interframeBlending = options["interframeBlending"] as? Boolean ?: false,
+                overscan   = options["overscan"] as? Boolean ?: false,
             )
             val ignored = options.keys.filter {
-                it in setOf("colorEmulation", "deepBlackBoost", "overscan", "pixelAccuracy")
+                it in setOf("colorEmulation", "deepBlackBoost", "pixelAccuracy")
             }
             return BridgeResponse.success(
                 if (ignored.isEmpty()) mapOf("status" to "ok")
