@@ -147,8 +147,6 @@ static auto assembleMegaDrive(Markup::Node document, string& manifest,
     return pak;
 }
 
-// --- public API --------------------------------------------------------------
-
 auto makeSystemPak(const std::string& systemId) -> std::shared_ptr<vfs::directory> {
     auto pak = std::make_shared<vfs::directory>();
     if(systemId == "gb") {

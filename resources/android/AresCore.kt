@@ -23,10 +23,6 @@ class AresCore {
         System.loadLibrary("retro_emulator")
     }
 
-    // -------------------------------------------------------------------------
-    // Phase 3 — core lifecycle
-    // -------------------------------------------------------------------------
-
     /** Initialise the ares platform singleton. Returns false if already initialised. */
     fun init(): Boolean = nativeInit()
 
@@ -36,19 +32,11 @@ class AresCore {
     /** Returns the ares version string (e.g. "v140-android"). */
     fun version(): String = nativeVersion()
 
-    // -------------------------------------------------------------------------
-    // Phase 4 — rendering
-    // -------------------------------------------------------------------------
-
     /**
      * Bind a GL texture for frame delivery. Must be called from the GL thread
      * after the texture has been allocated with glTexImage2D.
      */
     fun setupRenderer(textureId: Int) = nativeSetupRenderer(textureId)
-
-    // -------------------------------------------------------------------------
-    // Phase 4 — system and ROM loading (GL thread only)
-    // -------------------------------------------------------------------------
 
     /**
      * STAGE a system declaration — no core boots until [loadRom] arrives with
@@ -105,10 +93,6 @@ class AresCore {
      */
     fun flushSaves(): Boolean = nativeFlushSaves()
 
-    // -------------------------------------------------------------------------
-    // Phase 14 — audio / video options
-    // -------------------------------------------------------------------------
-
     /** Master volume (0–1) and stereo balance (−1 left … +1 right). Any thread. */
     fun setAudio(volume: Float, balance: Float) = nativeSetAudio(volume, balance)
 
@@ -131,10 +115,6 @@ class AresCore {
 
     /** Test seam: a toggle's current node value (1/0), or -1 if absent. */
     fun getCoreBoolean(key: String): Int = nativeGetCoreBoolean(key)
-
-    // -------------------------------------------------------------------------
-    // Phase 4 — per-frame operations (GL thread only)
-    // -------------------------------------------------------------------------
 
     /**
      * Run one emulated frame. The video callback fires synchronously and uploads
@@ -163,10 +143,6 @@ class AresCore {
      */
     fun refreshRateHint(): Double = nativeGetRefreshRateHint()
 
-    // -------------------------------------------------------------------------
-    // Phase 5 — audio
-    // -------------------------------------------------------------------------
-
     /**
      * Drain mixed stereo audio samples from the native ring buffer into
      * [buffer] (interleaved L/R float pairs, range −1..+1).
@@ -175,10 +151,6 @@ class AresCore {
      *         May be called from any thread.
      */
     fun readAudio(buffer: FloatArray): Int = nativeReadAudio(buffer)
-
-    // -------------------------------------------------------------------------
-    // Phase 6 — input
-    // -------------------------------------------------------------------------
 
     /**
      * Write the current button bitmask for one controller port. Safe to call
@@ -196,10 +168,6 @@ class AresCore {
      */
     fun getInputState(port: Int): Int = nativeGetInputState(port)
 
-    // -------------------------------------------------------------------------
-    // Phase 7 — emulator control (any thread)
-    // -------------------------------------------------------------------------
-
     /** Pause emulation — tick() becomes a no-op until resume(). Safe to call from any thread. */
     fun pause() = nativePause()
 
@@ -207,7 +175,7 @@ class AresCore {
     fun resume() = nativeResume()
 
     // -------------------------------------------------------------------------
-    // Phase 7 — state save / load (GL thread only — ares serializer uses libco)
+    // State save / load — GL thread only (ares serializer uses libco)
     // -------------------------------------------------------------------------
 
     /** Serialize full emulator state to [path]. Returns true on success. */
@@ -217,7 +185,7 @@ class AresCore {
     fun stateLoad(path: String): Boolean = nativeStateLoad(path)
 
     // -------------------------------------------------------------------------
-    // Phase 7 — work-RAM access (GL thread only — avoids data race with tick)
+    // Work-RAM access — GL thread only (avoids data race with tick)
     // -------------------------------------------------------------------------
 
     /**
@@ -271,10 +239,6 @@ class AresCore {
      */
     fun setDynamicRateControl(enabled: Boolean) = nativeSetDynamicRateControl(enabled)
 
-    // -------------------------------------------------------------------------
-    // Rumble (any thread)
-    // -------------------------------------------------------------------------
-
     /** Gate rumble forwarding from ares' motor nodes. Disabling zeroes the state. */
     fun setRumbleEnabled(enabled: Boolean) = nativeSetRumbleEnabled(enabled)
 
@@ -298,10 +262,6 @@ class AresCore {
     /** Deactivate all cheats. */
     fun clearCheats() = nativeClearCheats()
 
-    // -------------------------------------------------------------------------
-    // Phase 7 — ROM metadata (safe from any thread after loadRom)
-    // -------------------------------------------------------------------------
-
     /** Region of the loaded ROM (e.g. "NTSC", "PAL"). Empty if no ROM is loaded. */
     fun getRegion(): String = nativeGetRegion()
 
@@ -311,10 +271,6 @@ class AresCore {
      * Returns "[]" if called before [loadSystem].
      */
     fun getPortsJson(): String = nativeGetPortsJson()
-
-    // -------------------------------------------------------------------------
-    // Native declarations
-    // -------------------------------------------------------------------------
 
     private external fun nativeInit(): Boolean
     private external fun nativeDestroy()

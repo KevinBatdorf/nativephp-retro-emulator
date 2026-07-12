@@ -124,10 +124,6 @@ class EmulatorInput(private val core: AresCore) {
         pushPort2()
     }
 
-    // -------------------------------------------------------------------------
-    // Phase 7 — software (PHP-controlled) button state
-    // -------------------------------------------------------------------------
-
     /** Set a button to pressed in the software state map for [port] (1 or 2). */
     fun pressSoftwareButton(port: Int, bit: Int) {
         when (port) {

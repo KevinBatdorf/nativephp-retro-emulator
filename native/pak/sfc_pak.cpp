@@ -2,10 +2,8 @@
 #include <algorithm>
 #include <cstring>
 
-// ---------------------------------------------------------------------------
 // Header scoring (mirrors mia's SuperFamicom::scoreHeader logic)
 // base is the offset of the 64-byte header block in the ROM image.
-// ---------------------------------------------------------------------------
 uint32_t SfcPakBuilder::scoreHeader(const uint8_t* rom, size_t size, uint32_t base) {
     int score = 0;
     // Need at least base + 0x50 bytes to read reset vector.
@@ -46,9 +44,7 @@ uint32_t SfcPakBuilder::scoreHeader(const uint8_t* rom, size_t size, uint32_t ba
     return (uint32_t)std::max(0, score);
 }
 
-// ---------------------------------------------------------------------------
 // Extract 21-char ASCII title from the header block (at offset 0x10).
-// ---------------------------------------------------------------------------
 std::string SfcPakBuilder::extractTitle(const uint8_t* header) {
     std::string title;
     for (int i = 0; i < 21; i++) {
@@ -56,14 +52,10 @@ std::string SfcPakBuilder::extractTitle(const uint8_t* header) {
         if (c == 0x00) break;
         if (c >= 0x20 && c <= 0x7e) title += char(c);
     }
-    // Trim trailing spaces.
     while (!title.empty() && title.back() == ' ') title.pop_back();
     return title;
 }
 
-// ---------------------------------------------------------------------------
-// Detect ROM format and return a CartridgeInfo.
-// ---------------------------------------------------------------------------
 SfcPakBuilder::CartridgeInfo SfcPakBuilder::detectHeader(const uint8_t* rom, size_t size) {
     CartridgeInfo info;
     if (!rom || size < 0x8000) return info;
@@ -85,11 +77,9 @@ SfcPakBuilder::CartridgeInfo SfcPakBuilder::detectHeader(const uint8_t* rom, siz
 
     const uint8_t* h = data + headerBase;
 
-    // Title.
     info.title = extractTitle(h);
     if (info.title.empty()) info.title = "Unknown";
 
-    // Region (byte 0x29).
     uint8_t regionByte = h[0x29];
     info.region = (regionByte == 0x02 || (regionByte >= 0x03 && regionByte <= 0x0c))
                   ? "PAL" : "NTSC";
@@ -98,7 +88,6 @@ SfcPakBuilder::CartridgeInfo SfcPakBuilder::detectHeader(const uint8_t* rom, siz
     uint8_t sramByte = h[0x28];
     info.sramSize = sramByte ? (1u << ((sramByte - 1) & 7)) * 1024 : 0;
 
-    // Board string.
     bool hasRam = (info.sramSize > 0);
     if (isHiRom) {
         info.board = hasRam ? "HIROM-RAM" : "HIROM";
@@ -115,9 +104,6 @@ SfcPakBuilder::CartridgeInfo SfcPakBuilder::detectHeader(const uint8_t* rom, siz
     return info;
 }
 
-// ---------------------------------------------------------------------------
-// Build the system pak: ipl.rom + boards.bml.
-// ---------------------------------------------------------------------------
 std::shared_ptr<vfs::directory> SfcPakBuilder::makeSystemPak(
     const uint8_t* iplRom,    size_t iplSize,
     const uint8_t* boardsBml, size_t bmlSize)
@@ -140,9 +126,6 @@ std::shared_ptr<vfs::directory> SfcPakBuilder::makeSystemPak(
     return pak;
 }
 
-// ---------------------------------------------------------------------------
-// Build the cartridge pak: program.rom + optional save.ram + attributes.
-// ---------------------------------------------------------------------------
 std::shared_ptr<vfs::directory> SfcPakBuilder::makeCartridgePak(
     const CartridgeInfo& info,
     const uint8_t* rom, size_t romSize)

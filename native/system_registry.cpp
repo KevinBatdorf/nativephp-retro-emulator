@@ -13,8 +13,6 @@
 
 namespace SystemRegistry {
 
-// --- load thunks -------------------------------------------------------------
-
 static auto loadSfc(ares::Node::System& root, const SystemDef&, const std::string& loadName) -> bool {
     // PPUBase dispatches through an implementation pointer that is NULL until
     // setAccurate() picks one — the desktop frontend always sets the
@@ -33,7 +31,6 @@ static auto loadMd(ares::Node::System& root, const SystemDef&, const std::string
     return ares::MegaDrive::load(root, nall::string(loadName.c_str()));
 }
 
-// --- memory windows ----------------------------------------------------------
 // Offsets are relative to memBase; bounds are enforced by the caller against
 // memSize before these are invoked.
 
@@ -56,8 +53,6 @@ static auto mdMemWrite(uint32_t o, uint8_t v) -> void {
     if(o & 1) word.byte(0) = v;
     else      word.byte(1) = v;
 }
-
-// --- pak thunks ---------------------------------------------------------------
 
 static auto sfcSystemPak(const SystemDef&) -> std::shared_ptr<vfs::directory> {
     return SfcPakBuilder::makeSystemPak(
@@ -90,8 +85,6 @@ static auto miaCartridgePak(const uint8_t* rom, size_t romSize) -> CartridgePak 
 static constexpr char kFc[] = "fc";
 static constexpr char kGb[] = "gb";
 static constexpr char kMd[] = "md";
-
-// --- the registry --------------------------------------------------------------
 
 static const SystemDef kSfcDef = {
     .id            = "sfc",
@@ -199,8 +192,6 @@ auto all() -> const std::vector<const SystemDef*>& {
     static const std::vector<const SystemDef*> systems = {&kFcDef, &kSfcDef, &kGbDef, &kMdDef};
     return systems;
 }
-
-// --- region resolution ---------------------------------------------------------
 
 // nall::split_and_strip equivalent for the "NTSC-J, NTSC-U" CSV form used by
 // the pak "region" attribute and desktop's settings.boot.prefer.

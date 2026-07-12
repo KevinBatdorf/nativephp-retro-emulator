@@ -5,7 +5,7 @@
 // per the BML manifest — without any disk I/O. System pak firmware comes from
 // the generated embedded_firmware blobs.
 //
-// SFC stays on SfcPakBuilder (predates this file; converged later).
+// SFC stays on SfcPakBuilder.
 #pragma once
 
 #include <nall/nall.hpp>

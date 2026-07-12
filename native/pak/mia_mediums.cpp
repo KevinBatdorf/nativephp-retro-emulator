@@ -22,7 +22,6 @@ auto Pak::save(Markup::Node, string, string) -> bool { return false; }
 auto Medium::loadDatabase() -> bool { return true; }
 auto Medium::manifestDatabase(string) -> string { return {}; }
 
-// --- the actual mia mediums ---
 #include <mia/medium/famicom.cpp>
 #include <mia/medium/game-boy.cpp>
 #include <mia/medium/mega-drive.cpp>

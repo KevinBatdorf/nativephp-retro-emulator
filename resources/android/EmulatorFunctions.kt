@@ -33,10 +33,6 @@ object EmulatorFunctions {
     // core doesn't declare it (see native/core_options.hpp).
     private val CORE_TOGGLE_KEYS = listOf("colorEmulation", "deepBlackBoost", "interframeBlending")
 
-    // -------------------------------------------------------------------------
-    // Surface registry
-    // -------------------------------------------------------------------------
-
     private data class SurfaceEntry(
         val renderer: EmulatorRenderer,
         val activity: FragmentActivity,
@@ -61,10 +57,6 @@ object EmulatorFunctions {
         surfaces.remove(name)?.renderer?.eventListener = null
         Log.d(TAG, "Surface unregistered: $name")
     }
-
-    // -------------------------------------------------------------------------
-    // Internal helpers
-    // -------------------------------------------------------------------------
 
     private fun surface(parameters: Map<String, Any>): String =
         parameters["surface"] as? String ?: "main"
@@ -100,10 +92,6 @@ object EmulatorFunctions {
             NativeActionCoordinator.dispatchEvent(activity, fqcn, payload.toString())
         }
     }
-
-    // -------------------------------------------------------------------------
-    // Event forwarder — translates EmulatorEventListener callbacks to NativePHP events
-    // -------------------------------------------------------------------------
 
     private class NativeEventForwarder(
         private val surface: String,
@@ -163,10 +151,6 @@ object EmulatorFunctions {
         }
     }
 
-    // =========================================================================
-    // Bridge functions
-    // =========================================================================
-
     /**
      * Bind to the named surface declared in the component tree.
      * The renderer is created by the NativePHP component system and registered
@@ -183,7 +167,7 @@ object EmulatorFunctions {
 
     /**
      * STAGE a system declaration — no core boots until LoadRom arrives with a
-     * ROM (plan 4b: every boot is ROM-first so the region variant is always
+     * ROM (every boot is ROM-first so the region variant is always
      * right). Supported systems are the ones compiled into the native
      * library — reported by [GetSystems] with `supported: true`. System
      * firmware (SFC ipl.rom + boards.bml, GB boot ROM, MD TMSS) is embedded;
@@ -246,7 +230,7 @@ object EmulatorFunctions {
 
     /**
      * Boot the staged system with the ROM at [path] — the one boot path, first
-     * load and every swap alike (plan 4b). The ROM's extension is gated
+     * load and every swap alike. The ROM's extension is gated
      * against the staged system's list (desktop's file-dialog filters); a
      * wrong-family ROM errors, it never auto-switches systems. Fire-and-forget —
      * PHP receives `{"status":"loading"}` immediately; [EmulatorStarted] fires
@@ -639,7 +623,7 @@ object EmulatorFunctions {
         }
     }
 
-    /** Merge system-specific options (e.g. expansionPak for N64). Stubbed. */
+    /** Apply per-system emulation toggles (colorEmulation, deepBlackBoost, interframeBlending). */
     class SetSystemOptions(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
             val (entry, err) = entry(parameters)

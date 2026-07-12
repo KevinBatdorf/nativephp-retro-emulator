@@ -27,10 +27,6 @@ use KevinBatdorf\RetroEmulator\Status;
 use KevinBatdorf\RetroEmulator\System;
 use KevinBatdorf\RetroEmulator\VideoOutput;
 
-// ---------------------------------------------------------------------------
-// nativephp.json manifest
-// ---------------------------------------------------------------------------
-
 describe('Plugin Manifest', function () {
     beforeEach(function () {
         $this->manifest = json_decode(
@@ -139,19 +135,11 @@ describe('Plugin Manifest', function () {
     });
 });
 
-// ---------------------------------------------------------------------------
-// Service provider
-// ---------------------------------------------------------------------------
-
 describe('Service provider', function () {
     it('class exists', function () {
         expect(class_exists(RetroEmulatorServiceProvider::class))->toBeTrue();
     });
 });
-
-// ---------------------------------------------------------------------------
-// Emulator class
-// ---------------------------------------------------------------------------
 
 describe('Emulator class', function () {
     it('exists', function () {
@@ -202,10 +190,6 @@ describe('Emulator class', function () {
     });
 });
 
-// ---------------------------------------------------------------------------
-// Events
-// ---------------------------------------------------------------------------
-
 describe('Events', function () {
     it('EmulatorStarted has correct properties', function () {
         $event = new EmulatorStarted('main', 'sfc', '/path/to/rom.sfc');
@@ -252,10 +236,6 @@ describe('Events', function () {
     });
 });
 
-// ---------------------------------------------------------------------------
-// Component registry classes
-// ---------------------------------------------------------------------------
-
 describe('Component registry', function () {
     it('EmulatorElement exists with the emulator type', function () {
         expect(class_exists(EmulatorElement::class))->toBeTrue();
@@ -268,10 +248,6 @@ describe('Component registry', function () {
         expect(class_exists(EmulatorComponent::class))->toBeTrue();
     });
 });
-
-// ---------------------------------------------------------------------------
-// Composer config
-// ---------------------------------------------------------------------------
 
 describe('Composer config', function () {
     beforeEach(function () {
@@ -299,10 +275,6 @@ describe('Composer config', function () {
             ->toContain('KevinBatdorf\\RetroEmulator\\RetroEmulatorServiceProvider');
     });
 });
-
-// ---------------------------------------------------------------------------
-// Phase 7 — bridge response parsing (native layer mocked via nativephp_call stub)
-// ---------------------------------------------------------------------------
 
 describe('Bridge response parsing', function () {
     afterEach(function () {
@@ -422,10 +394,6 @@ describe('Bridge response parsing', function () {
     });
 });
 
-// ---------------------------------------------------------------------------
-// Cheats file (.cheats.bml)
-// ---------------------------------------------------------------------------
-
 describe('loadCheatsFile', function () {
     beforeEach(function () {
         $GLOBALS['__nativephp_calls'] = [];
@@ -482,10 +450,6 @@ describe('loadCheatsFile', function () {
         (new Emulator)->loadCheatsFile('/nonexistent/path.cheats.bml');
     })->throws(RuntimeException::class);
 });
-
-// ---------------------------------------------------------------------------
-// Typed layer — enums, config classes, button drift vs the native registry
-// ---------------------------------------------------------------------------
 
 describe('Typed layer', function () {
     beforeEach(function () {

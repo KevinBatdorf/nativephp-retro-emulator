@@ -38,7 +38,7 @@ final class EmulatorRenderer: UIView {
     /// The system id passed to the last `loadSystem` (e.g. "sfc"). Empty until staged.
     private(set) var loadedSystem: String = ""
 
-    /// Staged region declaration (plan 4b): explicit override ("" = resolve
+    /// Staged region declaration: explicit override ("" = resolve
     /// from the ROM analysis) and preference CSV for multi-region ROMs
     /// ("" = desktop's default "NTSC-U"). Set by LoadSystem, consumed by loadRom.
     var stagedRegion: String = ""
@@ -64,7 +64,7 @@ final class EmulatorRenderer: UIView {
 
     // MARK: - System / ROM loading
 
-    /// STAGE a system declaration (plan 4b) — no core boots until `loadRom`
+    /// STAGE a system declaration — no core boots until `loadRom`
     /// arrives with a ROM, so the region variant is always resolved ROM-first.
     /// Re-staging over a running core is legal; the running game continues
     /// until the next `loadRom`. System firmware is embedded in the native
@@ -98,7 +98,7 @@ final class EmulatorRenderer: UIView {
     ///   "<prefix>.save.ram" etc., and existing files seed the cartridge before
     ///   boot. Nil disables persistence.
     func loadRom(_ romData: Data, path: String, savePrefix: String? = nil) -> Bool {
-        // Game knowledge dies with the old game (plan 4b): watches are
+        // Game knowledge dies with the old game: watches are
         // wrapper-held so clear them here; cheats clear natively in the reboot.
         clearMemoryWatches()
 

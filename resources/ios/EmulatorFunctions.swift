@@ -138,10 +138,6 @@ enum EmulatorFunctions {
         }
     }
 
-    // =========================================================================
-    // Bridge functions
-    // =========================================================================
-
     /// Bind to the named surface declared in the component tree.
     class Boot: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
@@ -204,7 +200,7 @@ enum EmulatorFunctions {
     }
 
     /// Boot the staged system with the ROM at `path` — the one boot path, first
-    /// load and every swap alike (plan 4b). The ROM's extension is gated against
+    /// load and every swap alike. The ROM's extension is gated against
     /// the staged system's list (desktop's file-dialog filters); a wrong-family
     /// ROM errors, it never auto-switches systems. Fire-and-forget — PHP receives
     /// `{"status":"loading"}`; `EmulatorStarted` fires on the first rendered frame.
@@ -253,7 +249,6 @@ enum EmulatorFunctions {
         }
     }
 
-    /// Pause emulation.
     class Pause: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
@@ -262,7 +257,6 @@ enum EmulatorFunctions {
         }
     }
 
-    /// Resume emulation.
     class Resume: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
@@ -280,7 +274,6 @@ enum EmulatorFunctions {
         }
     }
 
-    /// Save state to slot.
     class StateSave: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
@@ -296,7 +289,6 @@ enum EmulatorFunctions {
         }
     }
 
-    /// Load state from slot.
     class StateLoad: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
@@ -424,7 +416,6 @@ enum EmulatorFunctions {
         }
     }
 
-    /// Clear all memory watches.
     class ClearMemoryWatches: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
@@ -547,7 +538,6 @@ enum EmulatorFunctions {
         }
     }
 
-    /// Toggle fast-forward mode.
     class FastForward: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
