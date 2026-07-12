@@ -558,6 +558,19 @@ describe('Typed layer', function () {
         expect(is_subclass_of(GbConfig::class, RegionalSystemConfig::class))->toBeFalse();
     });
 
+    it('SfcConfig carries deepBlackBoost as a per-system toggle', function () {
+        expect((new SfcConfig(deepBlackBoost: true))->toArray())->toBe(['deepBlackBoost' => true]);
+    });
+
+    it('GbConfig carries the Game Boy display toggles', function () {
+        $config = new GbConfig(colorEmulation: true, interframeBlending: true);
+
+        expect($config->toArray())->toBe([
+            'colorEmulation' => true,
+            'interframeBlending' => true,
+        ]);
+    });
+
     it('loadSystem accepts a System enum and a config object', function () {
         Emulator::surface()->loadSystem(
             System::Sfc,
@@ -603,6 +616,13 @@ describe('Typed layer', function () {
 
         $call = collect($GLOBALS['__nativephp_calls'])->firstWhere('function', 'Emulator.SetVideo');
         expect($call['payload']['options'])->toBe(['luminance' => 90, 'colorBleed' => true]);
+    });
+
+    it('setSystemOptions sends per-system toggles', function () {
+        Emulator::surface()->setSystemOptions(['deepBlackBoost' => true]);
+
+        $call = collect($GLOBALS['__nativephp_calls'])->firstWhere('function', 'Emulator.SetSystemOptions');
+        expect($call['payload']['options'])->toBe(['deepBlackBoost' => true]);
     });
 
     it('setVideo sends presentation settings as wire strings', function () {

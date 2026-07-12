@@ -56,8 +56,7 @@ class VideoGeometryTest {
 
             core.setVideo(
                 luminance = 1f, saturation = 1f, gamma = 1f,
-                colorBleed = false, interframeBlending = false,
-                overscan = true,
+                colorBleed = false, overscan = true,
             )
             repeat(5) { core.tick() }
 

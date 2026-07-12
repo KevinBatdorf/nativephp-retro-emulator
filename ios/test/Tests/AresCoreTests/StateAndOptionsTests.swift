@@ -65,7 +65,7 @@ final class StateAndOptionsTests: XCTestCase {
 
         ares_set_audio(ctx, 0.5, -1.0)
         ares_set_audio(ctx, 1.0, 1.0)
-        ares_set_video(ctx, 0.5, 0.5, 1.5, true, true, false)
+        ares_set_video(ctx, 0.5, 0.5, 1.5, true, false)
         for _ in 0..<5 { _ = ares_tick(ctx) }
 
         var width: UInt32 = 0
@@ -92,7 +92,7 @@ final class StateAndOptionsTests: XCTestCase {
         boot()
         for _ in 0..<10 { _ = ares_tick(ctx) }
 
-        ares_set_video(ctx, 1.0, 1.0, 1.0, false, false, true)
+        ares_set_video(ctx, 1.0, 1.0, 1.0, false, true)
         for _ in 0..<5 { _ = ares_tick(ctx) }
 
         var g = [Double](repeating: 0, count: 7)

@@ -6,6 +6,7 @@
 #include "save_io.hpp"
 #include "cheat_parse.hpp"
 #include "rate_control.hpp"
+#include "core_options.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -499,8 +500,7 @@ void ares_set_audio(AresContext* ctx, float volume, float balance) {
 }
 
 void ares_set_video(AresContext* ctx, float luminance, float saturation,
-                    float gamma, bool color_bleed, bool interframe_blending,
-                    bool overscan) {
+                    float gamma, bool color_bleed, bool overscan) {
     if (!ctx || !ctx->systemLoaded) return;
     ctx->overscan = overscan;
     for (auto& screen : ctx->root->find<ares::Node::Video::Screen>()) {
@@ -508,9 +508,20 @@ void ares_set_video(AresContext* ctx, float luminance, float saturation,
         screen->setSaturation((f64)saturation);
         screen->setGamma((f64)gamma);
         screen->setColorBleed(color_bleed);
-        screen->setInterframeBlending(interframe_blending);
         screen->setOverscan(overscan);
     }
+}
+
+// Apply a per-system emulation toggle; no-ops when the core lacks the node.
+void ares_set_core_boolean(AresContext* ctx, const char* key, bool value) {
+    if (!ctx || !ctx->systemLoaded || !key) return;
+    CoreOptions::applyBoolean(ctx->root, key, value);
+}
+
+// Test seam: a toggle's current node value (1/0), or -1 if absent.
+int ares_get_core_boolean(AresContext* ctx, const char* key) {
+    if (!ctx || !ctx->systemLoaded || !key) return -1;
+    return CoreOptions::readBoolean(ctx->root, key);
 }
 
 double ares_get_refresh_rate_hint(AresContext* ctx) {

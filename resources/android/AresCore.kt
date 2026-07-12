@@ -123,9 +123,14 @@ class AresCore {
         saturation: Float,
         gamma: Float,
         colorBleed: Boolean,
-        interframeBlending: Boolean,
         overscan: Boolean,
-    ) = nativeSetVideo(luminance, saturation, gamma, colorBleed, interframeBlending, overscan)
+    ) = nativeSetVideo(luminance, saturation, gamma, colorBleed, overscan)
+
+    /** Apply a per-system emulation toggle; no-ops if the core lacks the node. */
+    fun setCoreBoolean(key: String, value: Boolean) = nativeSetCoreBoolean(key, value)
+
+    /** Test seam: a toggle's current node value (1/0), or -1 if absent. */
+    fun getCoreBoolean(key: String): Int = nativeGetCoreBoolean(key)
 
     // -------------------------------------------------------------------------
     // Phase 4 — per-frame operations (GL thread only)
@@ -329,8 +334,10 @@ class AresCore {
     private external fun nativeSetAudio(volume: Float, balance: Float)
     private external fun nativeSetVideo(
         luminance: Float, saturation: Float, gamma: Float,
-        colorBleed: Boolean, interframeBlending: Boolean, overscan: Boolean,
+        colorBleed: Boolean, overscan: Boolean,
     )
+    private external fun nativeSetCoreBoolean(key: String, value: Boolean)
+    private external fun nativeGetCoreBoolean(key: String): Int
 
     private external fun nativeTick()
     private external fun nativeGetFrameWidth(): Int

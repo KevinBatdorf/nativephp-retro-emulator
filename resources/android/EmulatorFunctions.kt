@@ -28,6 +28,11 @@ object EmulatorFunctions {
 
     private const val TAG = "EmulatorFunctions"
 
+    // Per-system emulation toggles carried on loadSystem() config and
+    // setSystemOptions(). Native maps each to its ares node and no-ops where the
+    // core doesn't declare it (see native/core_options.hpp).
+    private val CORE_TOGGLE_KEYS = listOf("colorEmulation", "deepBlackBoost", "interframeBlending")
+
     // -------------------------------------------------------------------------
     // Surface registry
     // -------------------------------------------------------------------------
@@ -228,6 +233,10 @@ object EmulatorFunctions {
             (config["speed"] as? Number)?.toDouble()?.let { speed ->
                 renderer.speedMultiplier = speed.coerceIn(0.25, 4.0)
             }
+            val coreToggles = CORE_TOGGLE_KEYS
+                .mapNotNull { key -> (config[key] as? Boolean)?.let { key to it } }
+                .toMap()
+            if (coreToggles.isNotEmpty()) renderer.queueCoreOptions(coreToggles)
             renderer.queueSystemLoad(system)
 
             Log.d(TAG, "LoadSystem: staged system=$system")
@@ -526,16 +535,15 @@ object EmulatorFunctions {
     }
 
     /**
-     * Merge video options — omitted options keep their current values, and
-     * the surface's options persist across ROM/system reloads (desktop
+     * Merge GLOBAL display options — omitted options keep their current values,
+     * and the surface's options persist across ROM/system reloads (desktop
      * reapplies its settings at load the same way). luminance/saturation
-     * 0–100, gamma 1.0–2.0, colorBleed/interframeBlending/overscan booleans,
-     * applied on the ares screen node; presentation settings output
-     * (scale/integer/integerFixed/stretch), fixedScale, and aspectCorrection
-     * (none/standard/anamorphic) mirror ares desktop's Video settings.
-     * overscan false (default) trims the borders like desktop. Options ares
-     * has no post-processing hook for (colorEmulation, deepBlackBoost,
-     * pixelAccuracy) are reported back as ignored.
+     * 0–100, gamma 1.0–2.0, colorBleed/overscan booleans, applied on the ares
+     * screen node; presentation settings output (scale/integer/integerFixed/
+     * stretch), fixedScale, and aspectCorrection (none/standard/anamorphic)
+     * mirror ares desktop's Video settings. overscan false (default) trims the
+     * borders like desktop. Per-system emulation toggles live on
+     * setSystemOptions(), not here.
      */
     class SetVideo(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
@@ -562,19 +570,12 @@ object EmulatorFunctions {
                 saturation = (options["saturation"] as? Number)?.toFloat()?.div(100f),
                 gamma      = (options["gamma"] as? Number)?.toFloat(),
                 colorBleed = options["colorBleed"] as? Boolean,
-                interframeBlending = options["interframeBlending"] as? Boolean,
                 overscan   = options["overscan"] as? Boolean,
                 output     = output,
                 fixedScale = (options["fixedScale"] as? Number)?.toInt(),
                 aspectCorrection = aspectCorrection,
             )
-            val ignored = options.keys.filter {
-                it in setOf("colorEmulation", "deepBlackBoost", "pixelAccuracy")
-            }
-            return BridgeResponse.success(
-                if (ignored.isEmpty()) mapOf("status" to "ok")
-                else mapOf("status" to "ok", "ignored" to ignored)
-            )
+            return BridgeResponse.success(mapOf("status" to "ok"))
         }
     }
 
@@ -640,8 +641,16 @@ object EmulatorFunctions {
 
     /** Merge system-specific options (e.g. expansionPak for N64). Stubbed. */
     class SetSystemOptions(private val activity: FragmentActivity) : BridgeFunction {
-        override fun execute(parameters: Map<String, Any>): Map<String, Any> =
-            BridgeResponse.success(mapOf("status" to "ok"))
+        override fun execute(parameters: Map<String, Any>): Map<String, Any> {
+            val (entry, err) = entry(parameters)
+            if (err != null) return err
+            val options = paramMap(parameters, "options") ?: emptyMap()
+            val toggles = CORE_TOGGLE_KEYS
+                .mapNotNull { key -> (options[key] as? Boolean)?.let { key to it } }
+                .toMap()
+            if (toggles.isNotEmpty()) entry!!.renderer.queueCoreOptions(toggles)
+            return BridgeResponse.success(mapOf("status" to "ok"))
+        }
     }
 
     /** Toggle fast-forward mode (4× emulation speed). */

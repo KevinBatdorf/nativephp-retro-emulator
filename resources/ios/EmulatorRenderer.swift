@@ -111,7 +111,10 @@ final class EmulatorRenderer: UIView {
         // options like desktop reapplies its settings. (Context-side prefs —
         // volume, DRC, run-ahead, rewind config, rumble — survive the
         // in-place reboot.)
-        if result == 1 { applyVideoOptions() }
+        if result == 1 {
+            applyVideoOptions()
+            applyCoreOptions()
+        }
         emuLock.unlock()
 
         switch result {
@@ -171,13 +174,13 @@ final class EmulatorRenderer: UIView {
         ares_set_audio(ctx, volume, balance)
     }
 
-    /// Merge video options — nil keeps the current value, and the surface's
-    /// options persist across ROM/system reloads (desktop reapplies its
-    /// settings at load the same way). overscan false (default) trims the
+    /// Merge global display options — nil keeps the current value, and the
+    /// surface's options persist across ROM/system reloads (desktop reapplies
+    /// its settings at load the same way). overscan false (default) trims the
     /// borders like desktop. Presentation settings apply on the next draw.
     func setVideoOptions(
         luminance: Float? = nil, saturation: Float? = nil, gamma: Float? = nil,
-        colorBleed: Bool? = nil, interframeBlending: Bool? = nil, overscan: Bool? = nil,
+        colorBleed: Bool? = nil, overscan: Bool? = nil,
         output: String? = nil, fixedScale: Int? = nil, aspectCorrection: String? = nil
     ) {
         emuLock.lock()
@@ -188,7 +191,6 @@ final class EmulatorRenderer: UIView {
         if let saturation { videoOptions.saturation = saturation }
         if let gamma { videoOptions.gamma = gamma }
         if let colorBleed { videoOptions.colorBleed = colorBleed }
-        if let interframeBlending { videoOptions.interframeBlending = interframeBlending }
         if let overscan { videoOptions.overscan = overscan }
         let pres = presentation
         applyVideoOptions()
@@ -200,7 +202,25 @@ final class EmulatorRenderer: UIView {
     private func applyVideoOptions() {
         ares_set_video(
             ctx, videoOptions.luminance, videoOptions.saturation, videoOptions.gamma,
-            videoOptions.colorBleed, videoOptions.interframeBlending, videoOptions.overscan)
+            videoOptions.colorBleed, videoOptions.overscan)
+    }
+
+    /// Merge per-system emulation toggles — recognised keys update the
+    /// persisted map and apply live (a no-op on cores without the node, and
+    /// reapplied on the next boot). Applies immediately when a core is loaded.
+    func setCoreOptions(_ options: [String: Bool]) {
+        emuLock.lock()
+        for (key, value) in options where coreOptions.keys.contains(key) {
+            coreOptions[key] = value
+            // No-ops natively when no core is loaded yet; reapplied at boot.
+            ares_set_core_boolean(ctx, key, value)
+        }
+        emuLock.unlock()
+    }
+
+    /// Reapply all toggles to a freshly booted core. Callers hold emuLock.
+    private func applyCoreOptions() {
+        for (key, value) in coreOptions { ares_set_core_boolean(ctx, key, value) }
     }
 
     // MARK: - Memory
@@ -470,11 +490,21 @@ final class EmulatorRenderer: UIView {
         var saturation: Float = 1
         var gamma: Float = 1
         var colorBleed = false
-        var interframeBlending = false
         var overscan = false
     }
 
     private var videoOptions = VideoOptions()
+
+    /// Per-system emulation toggles. Default off — applied even when unset,
+    /// since the cores default them on; reapplied on each boot like
+    /// videoOptions. Unsupported keys no-op natively, so every system carries
+    /// the full set.
+    private var coreOptions: [String: Bool] = [
+        "colorEmulation": false,
+        "deepBlackBoost": false,
+        "interframeBlending": false,
+    ]
+
     private var presentation = PresentationSettings()
 
     private let ctx: OpaquePointer

@@ -18,6 +18,7 @@
 #include "save_io.hpp"
 #include "cheat_parse.hpp"
 #include "rate_control.hpp"
+#include "core_options.hpp"
 
 #define LOG_TAG "AresCore"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO,  LOG_TAG, __VA_ARGS__)
@@ -1057,7 +1058,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetAudio(
 JNIEXPORT void JNICALL
 Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetVideo(
     JNIEnv*, jobject, jfloat luminance, jfloat saturation, jfloat gamma,
-    jboolean colorBleed, jboolean interframeBlending, jboolean overscan)
+    jboolean colorBleed, jboolean overscan)
 {
     if (!g_state || !g_state->systemLoaded) return;
     g_state->overscan = overscan;
@@ -1066,9 +1067,30 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetVideo(
         screen->setSaturation((f64)saturation);
         screen->setGamma((f64)gamma);
         screen->setColorBleed(colorBleed);
-        screen->setInterframeBlending(interframeBlending);
         screen->setOverscan(overscan);
     }
+}
+
+/**
+ * Apply a per-system emulation toggle (Color Emulation, Deep Black Boost,
+ * Interframe Blending) to the loaded core. No-ops when the core doesn't declare
+ * the node, so callers apply every toggle unconditionally. GL thread only.
+ */
+JNIEXPORT void JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetCoreBoolean(
+    JNIEnv* env, jobject, jstring keyStr, jboolean value)
+{
+    if (!g_state || !g_state->systemLoaded) return;
+    CoreOptions::applyBoolean(g_state->root, jstringToString(env, keyStr), value);
+}
+
+/** Test seam: read a toggle's current node value (1/0), or -1 if absent. */
+JNIEXPORT jint JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetCoreBoolean(
+    JNIEnv* env, jobject, jstring keyStr)
+{
+    if (!g_state || !g_state->systemLoaded) return -1;
+    return CoreOptions::readBoolean(g_state->root, jstringToString(env, keyStr));
 }
 
 // Phase 13 — battery-save flush ------------------------------------------------

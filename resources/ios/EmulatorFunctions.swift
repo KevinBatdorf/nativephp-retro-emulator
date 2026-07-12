@@ -70,6 +70,19 @@ enum EmulatorFunctions {
         return url
     }
 
+    // Per-system emulation toggles carried on loadSystem() config and
+    // setSystemOptions(). Native maps each to its ares node and no-ops where
+    // the core doesn't declare it (see native/core_options.hpp).
+    private static let coreToggleKeys = ["colorEmulation", "deepBlackBoost", "interframeBlending"]
+
+    private static func coreToggles(from options: [String: Any]) -> [String: Bool] {
+        var result: [String: Bool] = [:]
+        for key in coreToggleKeys {
+            if let value = options[key] as? Bool { result[key] = value }
+        }
+        return result
+    }
+
     // MARK: - Event forwarder
 
     /// Translates `EmulatorEventListener` callbacks into NativePHP events. Holds only the
@@ -180,6 +193,8 @@ enum EmulatorFunctions {
             if let speed = (config["speed"] as? NSNumber)?.doubleValue {
                 renderer.speedMultiplier = min(max(speed, 0.25), 4.0)
             }
+            let toggles = coreToggles(from: config)
+            if !toggles.isEmpty { renderer.setCoreOptions(toggles) }
             guard renderer.loadSystem(system) else {
                 return BridgeResponse.error(code: "LOAD_FAILED", message: "ares_load_system failed for '\(system)'")
             }
@@ -431,15 +446,15 @@ enum EmulatorFunctions {
         }
     }
 
-    /// Merge video options — omitted options keep their current values, and
-    /// the surface's options persist across ROM/system reloads (desktop
-    /// reapplies its settings at load the same way). luminance/saturation
-    /// 0–100, gamma 1.0–2.0, colorBleed/interframeBlending/overscan booleans,
-    /// applied on the ares screen node; presentation settings output
-    /// (scale/integer/integerFixed/stretch), fixedScale, and aspectCorrection
-    /// (none/standard/anamorphic) mirror ares desktop's Video settings.
-    /// overscan false (default) trims the borders like desktop. Options ares
-    /// has no post-processing hook for are reported back as ignored.
+    /// Merge global display options — omitted options keep their current
+    /// values, and the surface's options persist across ROM/system reloads
+    /// (desktop reapplies its settings at load the same way). luminance/
+    /// saturation 0–100, gamma 1.0–2.0, colorBleed/overscan booleans, applied
+    /// on the ares screen node; presentation settings output (scale/integer/
+    /// integerFixed/stretch), fixedScale, and aspectCorrection (none/standard/
+    /// anamorphic) mirror ares desktop's Video settings. overscan false
+    /// (default) trims the borders like desktop. Per-system emulation toggles
+    /// live on setSystemOptions(), not here.
     class SetVideo: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
@@ -463,18 +478,12 @@ enum EmulatorFunctions {
                 saturation: (options["saturation"] as? NSNumber).map { $0.floatValue / 100 },
                 gamma:      (options["gamma"] as? NSNumber)?.floatValue,
                 colorBleed: options["colorBleed"] as? Bool,
-                interframeBlending: options["interframeBlending"] as? Bool,
                 overscan:   options["overscan"] as? Bool,
                 output:     output,
                 fixedScale: (options["fixedScale"] as? NSNumber)?.intValue,
                 aspectCorrection: aspectCorrection
             )
-            let ignored = options.keys.filter {
-                ["colorEmulation", "deepBlackBoost", "pixelAccuracy"].contains($0)
-            }
-            return ignored.isEmpty
-                ? BridgeResponse.success(data: ["status": "ok"])
-                : BridgeResponse.success(data: ["status": "ok", "ignored": ignored])
+            return BridgeResponse.success(data: ["status": "ok"])
         }
     }
 
@@ -527,10 +536,14 @@ enum EmulatorFunctions {
         }
     }
 
-    /// Merge system-specific options. Stubbed.
+    /// Merge system-specific options (per-system emulation toggles).
     class SetSystemOptions: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
-            BridgeResponse.success(data: ["status": "ok"])
+            guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
+            let options = parameters["options"] as? [String: Any] ?? [:]
+            let toggles = coreToggles(from: options)
+            if !toggles.isEmpty { renderer.setCoreOptions(toggles) }
+            return BridgeResponse.success(data: ["status": "ok"])
         }
     }
 

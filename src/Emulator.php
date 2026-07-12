@@ -266,34 +266,32 @@ class Emulator
     }
 
     /**
-     * Merge video post-processing options: omitted options keep their
-     * current values, and the surface's options persist across ROM/system
-     * swaps. Overscan borders are trimmed by default; overscan: true shows
-     * the full canvas. Presentation follows ares desktop's Video settings:
-     * output VideoOutput::Scale (best-fit, default), Integer (largest whole
-     * multiple), IntegerFixed (exactly fixedScale×), or Stretch;
+     * Merge GLOBAL display settings — presentation knobs that mean the same
+     * thing on every system. Omitted options keep their current values and
+     * persist across ROM/system swaps. Overscan borders are trimmed by default;
+     * overscan: true shows the full canvas. Presentation follows ares desktop's
+     * Video settings: output VideoOutput::Scale (best-fit, default), Integer
+     * (largest whole multiple), IntegerFixed (exactly fixedScale×), or Stretch;
      * aspectCorrection AspectCorrection::Standard (default), None (square
-     * pixels), or Anamorphic (force 4:3). Options ares has no hook for
-     * (colorEmulation, deepBlackBoost, pixelAccuracy) are reported back as
-     * ignored by the bridge.
+     * pixels), or Anamorphic (force 4:3).
+     *
+     * Per-system emulation toggles (Color Emulation, Deep Black Boost,
+     * Interframe Blending) are not here — they only exist on the cores that
+     * declare them, so they live on the per-system config classes and
+     * setSystemOptions().
      */
     public function setVideo(
         ?int $luminance = null,
         ?int $saturation = null,
         ?float $gamma = null,
         ?bool $colorBleed = null,
-        ?bool $interframeBlending = null,
-        ?bool $colorEmulation = null,
-        ?bool $deepBlackBoost = null,
         ?bool $overscan = null,
-        ?bool $pixelAccuracy = null,
         ?VideoOutput $output = null,
         ?int $fixedScale = null,
         ?AspectCorrection $aspectCorrection = null,
     ): static {
         $options = array_filter(compact(
-            'luminance', 'saturation', 'gamma', 'colorBleed', 'interframeBlending',
-            'colorEmulation', 'deepBlackBoost', 'overscan', 'pixelAccuracy',
+            'luminance', 'saturation', 'gamma', 'colorBleed', 'overscan',
         ), fn ($value) => $value !== null);
 
         if ($output !== null) {

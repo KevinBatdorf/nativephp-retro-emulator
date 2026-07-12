@@ -204,15 +204,28 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
         var saturation = 1f
         var gamma = 1f
         var colorBleed = false
-        var interframeBlending = false
         var overscan = false
     }
     private val videoOptions = VideoOptions()
 
     private fun applyVideoOptions() = core.setVideo(
         videoOptions.luminance, videoOptions.saturation, videoOptions.gamma,
-        videoOptions.colorBleed, videoOptions.interframeBlending, videoOptions.overscan,
+        videoOptions.colorBleed, videoOptions.overscan,
     )
+
+    // Per-system emulation toggles (Color Emulation, Deep Black Boost,
+    // Interframe Blending). Default off — applied even when unset, since the
+    // cores default them on; a fresh core reapplies these like videoOptions.
+    // Unsupported keys no-op natively, so every system carries the full map.
+    private val coreOptions = linkedMapOf(
+        "colorEmulation" to false,
+        "deepBlackBoost" to false,
+        "interframeBlending" to false,
+    )
+
+    private fun applyCoreOptions() = coreOptions.forEach { (key, value) ->
+        core.setCoreBoolean(key, value)
+    }
 
     private val renderer = object : GLSurfaceView.Renderer {
 
@@ -318,6 +331,7 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
                         // rewind config, rumble — live in g_state atomics that
                         // survive the in-place reboot.)
                         applyVideoOptions()
+                        applyCoreOptions()
                     }
                     AresCore.LOAD_REJECTED -> {
                         // Pre-teardown rejection: a running game is untouched.
@@ -825,7 +839,6 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
         saturation: Float? = null,
         gamma: Float? = null,
         colorBleed: Boolean? = null,
-        interframeBlending: Boolean? = null,
         overscan: Boolean? = null,
         output: String? = null,
         fixedScale: Int? = null,
@@ -839,9 +852,24 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
             saturation?.let { videoOptions.saturation = it }
             gamma?.let { videoOptions.gamma = it }
             colorBleed?.let { videoOptions.colorBleed = it }
-            interframeBlending?.let { videoOptions.interframeBlending = it }
             overscan?.let { videoOptions.overscan = it }
             applyVideoOptions()
+        }
+    }
+
+    /**
+     * Merge per-system emulation toggles onto the GL thread. Unknown keys are
+     * ignored; recognised ones update the persisted map and apply live (a no-op
+     * on cores that don't declare the node, and reapplied on the next boot).
+     */
+    fun queueCoreOptions(options: Map<String, Boolean>) {
+        queueEvent {
+            options.forEach { (key, value) ->
+                if (coreOptions.containsKey(key)) {
+                    coreOptions[key] = value
+                    if (systemStaged) core.setCoreBoolean(key, value)
+                }
+            }
         }
     }
 
