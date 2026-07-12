@@ -727,6 +727,20 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetInputState(
     else if (port == 2) g_state->inputMaskPort2.store(mask, std::memory_order_relaxed);
 }
 
+/**
+ * Read back the current button bitmask for one controller port — the value
+ * Platform::input() will see on its next poll. Test/diagnostic seam.
+ */
+JNIEXPORT jint JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetInputState(
+    JNIEnv*, jobject, jint port)
+{
+    if (!g_state) return 0;
+    if (port == 1) return static_cast<jint>(g_state->inputMaskPort1.load(std::memory_order_relaxed));
+    if (port == 2) return static_cast<jint>(g_state->inputMaskPort2.load(std::memory_order_relaxed));
+    return 0;
+}
+
 // Phase 7 — pause / resume / stop ------------------------------------------
 
 JNIEXPORT void JNICALL

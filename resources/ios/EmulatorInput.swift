@@ -28,6 +28,19 @@ final class EmulatorInput {
     private static let L: UInt32      = 1 << 10
     private static let R: UInt32      = 1 << 11
 
+    /// D-pad bits for an analog direction input. Threshold is ares' digital-input
+    /// semantics: pressed past half deflection (desktop-ui InputDigital::value(),
+    /// input.cpp:190-193 — ±16384 of s16 full scale). GameController convention:
+    /// positive y is up.
+    static func directionBits(x: Float, y: Float) -> UInt32 {
+        var mask: UInt32 = 0
+        if x < -0.5 { mask |= left }
+        if x >  0.5 { mask |= right }
+        if y >  0.5 { mask |= up }
+        if y < -0.5 { mask |= down }
+        return mask
+    }
+
     /// Maps a bridge button name to its ares bitmask. Names are the lowercase
     /// button identifiers exposed by `getPorts()`. Returns nil for unknown names.
     static func buttonNameToBit(_ name: String) -> UInt32? {
@@ -131,6 +144,11 @@ final class EmulatorInput {
             if pad.dpad.down.isPressed  { mask |= Self.down }
             if pad.dpad.left.isPressed  { mask |= Self.left }
             if pad.dpad.right.isPressed { mask |= Self.right }
+            // Left stick doubles as the d-pad, ares digital-input threshold.
+            mask |= Self.directionBits(
+                x: pad.leftThumbstick.xAxis.value,
+                y: pad.leftThumbstick.yAxis.value
+            )
             if pad.leftShoulder.isPressed  { mask |= Self.L }
             if pad.rightShoulder.isPressed { mask |= Self.R }
             if pad.buttonOptions?.isPressed == true { mask |= Self.select }

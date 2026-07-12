@@ -157,6 +157,13 @@ class AresCore {
      */
     fun setInputState(port: Int, buttons: Int) = nativeSetInputState(port, buttons)
 
+    /**
+     * Read back the current button bitmask for one controller port — the value
+     * the core will see on its next [Platform::input] poll. Test/diagnostic
+     * seam; returns 0 when no core is initialized or the port is unknown.
+     */
+    fun getInputState(port: Int): Int = nativeGetInputState(port)
+
     // -------------------------------------------------------------------------
     // Phase 7 — emulator control (any thread)
     // -------------------------------------------------------------------------
@@ -303,6 +310,7 @@ class AresCore {
     private external fun nativeReadAudio(buffer: FloatArray): Int
 
     private external fun nativeSetInputState(port: Int, buttons: Int)
+    private external fun nativeGetInputState(port: Int): Int
 
     private external fun nativePause()
     private external fun nativeResume()

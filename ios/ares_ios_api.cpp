@@ -610,6 +610,13 @@ void ares_set_input(AresContext* ctx, int port, uint32_t bits) {
     else if (port == 2) ctx->inputMaskPort2.store(mask, std::memory_order_relaxed);
 }
 
+uint32_t ares_get_input(AresContext* ctx, int port) {
+    if (!ctx) return 0;
+    if (port == 1) return ctx->inputMaskPort1.load(std::memory_order_relaxed);
+    if (port == 2) return ctx->inputMaskPort2.load(std::memory_order_relaxed);
+    return 0;
+}
+
 bool ares_get_frame(AresContext* ctx,
                     uint32_t* out_buf, size_t buf_capacity,
                     uint32_t* out_width, uint32_t* out_height)

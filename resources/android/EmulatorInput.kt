@@ -54,10 +54,10 @@ class EmulatorInput(private val core: AresCore) {
         }
     }
 
-    // Current button state split into three independent sources that are OR'd together.
+    // Current button state split into independent sources that are OR'd together.
     // Each source is updated on a different thread; none overrides the others.
     private var keyBits      = 0  // hardware key events (UI thread)
-    private var hatBits      = 0  // hardware hat-switch motion events (UI thread)
+    private var motionBits   = 0  // hardware hat-switch + left-stick motion events (UI thread)
     @Volatile private var softBitsPort1 = 0  // PHP software presses (bridge thread)
     @Volatile private var softBitsPort2 = 0  // PHP software presses, port 2
 
@@ -79,6 +79,12 @@ class EmulatorInput(private val core: AresCore) {
     /**
      * Process a generic motion event from a gamepad joystick or hat switch.
      * Returns true if the event source is a gamepad or joystick.
+     *
+     * Hat and left stick both map to the d-pad with ares' digital-input
+     * threshold: an axis reads pressed past half deflection (desktop-ui
+     * InputDigital::value(), input.cpp:190-193 — ±16384 of s16 full scale).
+     * Every joystick MotionEvent carries the current value of all axes, so
+     * both controls are recomputed from each event.
      */
     fun onMotionEvent(event: MotionEvent): Boolean {
         val src = event.source
@@ -86,22 +92,32 @@ class EmulatorInput(private val core: AresCore) {
             src and InputDevice.SOURCE_JOYSTICK == 0) {
             return false
         }
-        val hatX = event.getAxisValue(MotionEvent.AXIS_HAT_X)
-        val hatY = event.getAxisValue(MotionEvent.AXIS_HAT_Y)
-        var mask = 0
-        if (hatX < -0.5f) mask = mask or BTN_LEFT
-        if (hatX >  0.5f) mask = mask or BTN_RIGHT
-        if (hatY < -0.5f) mask = mask or BTN_UP
-        if (hatY >  0.5f) mask = mask or BTN_DOWN
-        hatBits = mask
+        var mask = directionBits(
+            event.getAxisValue(MotionEvent.AXIS_HAT_X),
+            event.getAxisValue(MotionEvent.AXIS_HAT_Y),
+        )
+        mask = mask or directionBits(
+            event.getAxisValue(MotionEvent.AXIS_X),
+            event.getAxisValue(MotionEvent.AXIS_Y),
+        )
+        motionBits = mask
         pushPort1()
         return true
+    }
+
+    private fun directionBits(x: Float, y: Float): Int {
+        var mask = 0
+        if (x < -0.5f) mask = mask or BTN_LEFT
+        if (x >  0.5f) mask = mask or BTN_RIGHT
+        if (y < -0.5f) mask = mask or BTN_UP
+        if (y >  0.5f) mask = mask or BTN_DOWN
+        return mask
     }
 
     /** Clear all button state (call when the activity loses focus). */
     fun reset() {
         keyBits      = 0
-        hatBits      = 0
+        motionBits   = 0
         softBitsPort1 = 0
         softBitsPort2 = 0
         pushPort1()
@@ -129,7 +145,7 @@ class EmulatorInput(private val core: AresCore) {
     }
 
     private fun pushPort1() {
-        core.setInputState(1, keyBits or hatBits or softBitsPort1)
+        core.setInputState(1, keyBits or motionBits or softBitsPort1)
     }
 
     private fun pushPort2() {

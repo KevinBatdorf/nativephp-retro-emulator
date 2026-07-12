@@ -48,6 +48,10 @@ bool ares_tick(AresContext* ctx);
 // Write the button bitmask for port 1 or 2 (bits match iOS EmulatorInput).
 void ares_set_input(AresContext* ctx, int port, uint32_t bits);
 
+// Read back the bitmask the core will see on its next input poll.
+// Test/diagnostic seam; returns 0 for an unknown port or null context.
+uint32_t ares_get_input(AresContext* ctx, int port);
+
 void ares_pause(AresContext* ctx);
 void ares_resume(AresContext* ctx);
 
