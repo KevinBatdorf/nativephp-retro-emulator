@@ -160,6 +160,35 @@ final class BootTests: XCTestCase {
         XCTAssertFalse(region.isEmpty, "region must not be empty after ROM load")
     }
 
+    // MARK: - Refresh rate hint
+
+    func testRefreshRateHintZeroBeforeSystemLoad() {
+        XCTAssertEqual(ares_get_refresh_rate_hint(ctx), 0.0,
+                       "hint must be 0 before a system loads")
+    }
+
+    func testRefreshRateHintIsRegionAwarePerSystem() {
+        // Screens register at system load (each core's ppu/vdp load()), so no
+        // ROM is needed. Expected values follow the core formulas at the
+        // pinned submodule — see RefreshRateHintTest.kt for the derivations.
+        // These load-without-power destroy cycles also exercise the
+        // stale-EntryPoints workaround in ares_destroy (see
+        // system_registry.hpp) — without it they strand dangling Thread entry
+        // points that can wedge the next core booted in this process.
+        let cases: [(String, Double)] = [
+            ("fc", 60.09848), ("sfc", 60.09848), ("gb", 59.72750), ("md", 59.92275),
+        ]
+        for (id, expected) in cases {
+            let localCtx = ares_create()
+            XCTAssertTrue(ares_load_system(localCtx, id), "\(id): loadSystem failed")
+            XCTAssertEqual(ares_get_refresh_rate_hint(localCtx), expected,
+                           accuracy: 0.001, "\(id): wrong refresh hint")
+            ares_destroy(localCtx)
+        }
+        // Re-create for tearDown symmetry.
+        ctx = ares_create()
+    }
+
     // MARK: - Ports JSON
 
     func testGetPortsJsonAfterSystemLoad() {

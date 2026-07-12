@@ -123,6 +123,13 @@ struct AresContext {
     // Dynamic rate control (see native/rate_control.hpp). Written from the
     // bridge thread, read in ares_tick on the emulation thread.
     std::atomic<bool> dynamicRateControl {true};
+
+    // True refresh rate reported by the core via Platform::refreshRateHint
+    // (region- and mode-aware: SFC NTSC 60.0988, GB 59.7275, PAL ~50, …).
+    // 0 until the first hint; the Swift pacing loop polls it per iteration —
+    // the analogue of ruby's Metal driver deriving its present interval
+    // (ruby/video/metal/metal.cpp:118-151). Written on the emu thread.
+    std::atomic<double> refreshRateHint {0.0};
 };
 
 static AresContext* g_ctx      = nullptr;
@@ -175,6 +182,15 @@ struct IosPlatform : ares::Platform {
             std::memcpy(&g_ctx->frameBuffer[y * width],
                         data + y * stride, width * sizeof(u32));
         }
+    }
+
+    auto refreshRateHint(double refreshRate) -> void override {
+        if (!g_ctx) return;
+        // Log on change like ruby's Metal driver (metal.cpp:149-151).
+        if (g_ctx->refreshRateHint.load(std::memory_order_relaxed) != refreshRate) {
+            fprintf(stderr, "refresh rate hint changed to %f\n", refreshRate);
+        }
+        g_ctx->refreshRateHint.store(refreshRate, std::memory_order_relaxed);
     }
 
     auto audio(ares::Node::Audio::Stream) -> void override {
@@ -295,6 +311,10 @@ void ares_destroy(AresContext* ctx) {
         g_ctx->root->unload();
         g_ctx->root.reset();
     }
+    // Works around an upstream ares bug — a system loaded but never powered
+    // strands dangling Thread entry points that wedge or corrupt a later
+    // load. Full story on the declaration (system_registry.hpp).
+    SystemRegistry::clearStaleEntryPoints();
     ares::platform = nullptr;
     delete g_platform; g_platform = nullptr;
     delete g_ctx;      g_ctx      = nullptr;
@@ -450,6 +470,10 @@ void ares_set_video(AresContext* ctx, float luminance, float saturation,
         screen->setInterframeBlending(interframe_blending);
         screen->setOverscan(overscan);
     }
+}
+
+double ares_get_refresh_rate_hint(AresContext* ctx) {
+    return ctx ? ctx->refreshRateHint.load(std::memory_order_relaxed) : 0.0;
 }
 
 void ares_get_video_geometry(AresContext* ctx, double out[7]) {

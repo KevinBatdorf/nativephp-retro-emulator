@@ -124,6 +124,13 @@ class AresCore {
      */
     fun getVideoGeometry(): DoubleArray = nativeGetVideoGeometry()
 
+    /**
+     * True refresh rate of the loaded system, reported by the core via ares'
+     * Platform::refreshRateHint (region- and mode-aware: SFC NTSC 60.0988,
+     * GB 59.7275, PAL ~50). 0.0 until the system powers on. Any thread.
+     */
+    fun refreshRateHint(): Double = nativeGetRefreshRateHint()
+
     // -------------------------------------------------------------------------
     // Phase 5 — audio
     // -------------------------------------------------------------------------
@@ -291,6 +298,7 @@ class AresCore {
     private external fun nativeGetFrameWidth(): Int
     private external fun nativeGetFrameHeight(): Int
     private external fun nativeGetVideoGeometry(): DoubleArray
+    private external fun nativeGetRefreshRateHint(): Double
 
     private external fun nativeReadAudio(buffer: FloatArray): Int
 

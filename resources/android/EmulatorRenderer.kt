@@ -28,10 +28,12 @@ private const val TAG = "EmulatorRenderer"
 private const val TEX_W = 1024
 private const val TEX_H = 512
 
-// Emulation pacing. 60.0988 is NTSC SNES/NES; GB (59.73) and MD (59.92) are
-// close enough that the audio resampler absorbs the drift. Refined per-system
-// (and for PAL) in the feature-audit phase.
-private const val TARGET_FPS = 60.0988
+// Emulation pacing fallback, used only until the core's first
+// Platform::refreshRateHint arrives during system power-on. After that the
+// hint is authoritative — per-system and per-region (SFC NTSC 60.0988,
+// GB 59.7275, MD NTSC 59.9228, PAL ~50), polled per frame because some cores
+// re-hint on video-mode changes.
+private const val FALLBACK_FPS = 60.0988
 private const val MAX_TICKS_PER_FRAME = 8
 
 // Battery-save auto-flush cadence — matches ares' desktop 30 s auto-save.
@@ -336,7 +338,9 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
             lastTickNanos = now
 
             val speed = if (fastForward) 4.0 else speedMultiplier
-            tickAccumulator += elapsed * TARGET_FPS * speed
+            val hint = core.refreshRateHint()
+            val targetFps = if (hint > 0.0) hint else FALLBACK_FPS
+            tickAccumulator += elapsed * targetFps * speed
             var ticks = tickAccumulator.toInt()
             if (ticks > MAX_TICKS_PER_FRAME) {
                 // Can't keep up — drop the debt instead of spiraling.
@@ -528,13 +532,23 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
             systemLoaded  = false
             audioStarted  = false
             firstFrameSent = false
-            currentStatus = "stopped"
         }
+        // Status flips with the event, not with the queued teardown — a
+        // GetStatus right after EmulatorStopped must already say "stopped"
+        // (iOS sets it synchronously too; the conformance runner asserts it).
+        currentStatus = "stopped"
         eventListener?.onStopped()
     }
 
     /**
      * Stop audio and tear down the ares core. Call from [Activity.onDestroy].
+     * Blocks (≤2 s) until the GL thread has actually destroyed the core:
+     * release() runs at teardown, when the GL thread may already be paused or
+     * exiting — a fire-and-forget destroy can execute late or never, leaving
+     * the global core alive with libco contexts primed on the dying thread.
+     * The next surface's loadSystem then drives those coroutines from a
+     * different thread, which wedges or crashes the core (co_switch storm;
+     * found via the instrumented suite hanging cross-test).
      */
     fun release() {
         watchedAddresses.clear()
@@ -542,9 +556,15 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
         audio.stop()
         lastRumbleState = 0
         vibrator?.cancel()
+        val latch = CountDownLatch(1)
         queueEvent {
             core.flushSaves()
             core.destroy()
+            latch.countDown()
+        }
+        if (!latch.await(2, TimeUnit.SECONDS)) {
+            Log.w(TAG, "release(): GL thread never serviced core teardown — " +
+                "native core may leak until process death")
         }
     }
 

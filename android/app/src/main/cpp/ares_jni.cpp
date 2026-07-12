@@ -146,6 +146,13 @@ struct EmulatorState {
     // Dynamic rate control (see native/rate_control.hpp). Written from bridge
     // threads, read on the GL thread each tick.
     std::atomic<bool> dynamicRateControl {true};
+
+    // True refresh rate reported by the core via Platform::refreshRateHint
+    // (region- and mode-aware: SFC NTSC 60.0988, GB 59.7275, PAL ~50, …).
+    // 0 until the first hint; the Kotlin pacing loop polls it per frame —
+    // the analogue of ruby's Metal driver deriving its present interval
+    // (ruby/video/metal/metal.cpp:118-151). Written on the emu thread.
+    std::atomic<double> refreshRateHint {0.0};
 };
 
 static EmulatorState* g_state = nullptr;
@@ -207,6 +214,15 @@ struct AndroidPlatform : ares::Platform {
                         data + y * stride, width * sizeof(u32));
         }
         g_state->frameDirty = true;
+    }
+
+    auto refreshRateHint(double refreshRate) -> void override {
+        if (!g_state) return;
+        // Log on change like ruby's Metal driver (metal.cpp:149-151).
+        if (g_state->refreshRateHint.load(std::memory_order_relaxed) != refreshRate) {
+            LOGI("refresh rate hint changed to %f", refreshRate);
+        }
+        g_state->refreshRateHint.store(refreshRate, std::memory_order_relaxed);
     }
 
     auto audio(ares::Node::Audio::Stream) -> void override {
@@ -362,6 +378,10 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeDestroy(
         g_state->root->unload();
         g_state->root.reset();
     }
+    // Works around an upstream ares bug — a system loaded but never powered
+    // strands dangling Thread entry points that wedge or corrupt a later
+    // load. Full story on the declaration (system_registry.hpp).
+    SystemRegistry::clearStaleEntryPoints();
     ares::platform = nullptr;
     delete g_platform; g_platform = nullptr;
     delete g_state;    g_state    = nullptr;
@@ -641,6 +661,20 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetVideoGeometry(
     jdoubleArray result = env->NewDoubleArray(7);
     env->SetDoubleArrayRegion(result, 0, 7, values);
     return result;
+}
+
+/**
+ * True refresh rate of the loaded system as hinted by the core
+ * (Platform::refreshRateHint). 0 until the first hint fires during system
+ * power-on. Any thread.
+ */
+JNIEXPORT jdouble JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetRefreshRateHint(
+    JNIEnv*, jobject)
+{
+    return g_state
+        ? (jdouble)g_state->refreshRateHint.load(std::memory_order_relaxed)
+        : 0.0;
 }
 
 // Phase 5 — audio drain -----------------------------------------------------

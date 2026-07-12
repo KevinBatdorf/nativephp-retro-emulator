@@ -81,6 +81,11 @@ bool ares_get_frame(AresContext* ctx,
 // All zeros before the first frame.  Emulation thread only.
 void ares_get_video_geometry(AresContext* ctx, double out[7]);
 
+// True refresh rate of the loaded system, reported by the core via ares'
+// Platform::refreshRateHint (region- and mode-aware: SFC NTSC 60.0988,
+// GB 59.7275, PAL ~50). 0.0 until the system powers on. Any thread.
+double ares_get_refresh_rate_hint(AresContext* ctx);
+
 // Audio -----------------------------------------------------------------------
 
 // Drain mixed stereo float samples (interleaved L/R) into caller buffer.

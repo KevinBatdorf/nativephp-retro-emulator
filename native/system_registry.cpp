@@ -197,4 +197,13 @@ auto find(const std::string& id) -> const SystemDef* {
     return nullptr;
 }
 
+auto clearStaleEntryPoints() -> void {
+    // Thread is a distinct type (with a distinct EntryPoints() static) inside
+    // each core's namespace — scheduler/thread.hpp is included per system.
+    ares::Famicom::Thread::EntryPoints().clear();
+    ares::SuperFamicom::Thread::EntryPoints().clear();
+    ares::GameBoy::Thread::EntryPoints().clear();
+    ares::MegaDrive::Thread::EntryPoints().clear();
+}
+
 } // namespace SystemRegistry

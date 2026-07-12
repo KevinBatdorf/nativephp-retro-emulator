@@ -523,9 +523,12 @@ final class EmulatorRenderer: UIView {
 
     private func emulationLoop() {
         // Ticks are budgeted by wall clock against the console frame rate —
-        // an unpaced loop runs as fast as the CPU allows. 60.0988 is NTSC
-        // SNES/NES; GB/MD are within 0.6% and the resampler absorbs it.
-        let targetFps = 60.0988
+        // an unpaced loop runs as fast as the CPU allows. 60.0988 is only the
+        // fallback until the core's first Platform::refreshRateHint arrives
+        // during power-on; after that the hint is authoritative — per-system
+        // and per-region (SFC NTSC 60.0988, GB 59.7275, PAL ~50), polled per
+        // iteration because some cores re-hint on video-mode changes.
+        let fallbackFps = 60.0988
         var lastTick = DispatchTime.now()
         var accumulator = 0.0
         var lastAutoSave = DispatchTime.now()
@@ -536,6 +539,8 @@ final class EmulatorRenderer: UIView {
                 Double(now.uptimeNanoseconds - lastTick.uptimeNanoseconds) / 1e9, 0.25)
             lastTick = now
             let speed = fastForward ? 4.0 : speedMultiplier
+            let hint = ares_get_refresh_rate_hint(ctx)
+            let targetFps = hint > 0 ? hint : fallbackFps
             accumulator += elapsed * targetFps * speed
             var ticks = Int(accumulator)
             if ticks > 8 {

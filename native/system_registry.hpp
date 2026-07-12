@@ -58,4 +58,17 @@ auto all() -> const std::vector<const SystemDef*>&;
 // Look up a compiled system by id; nullptr if this build does not include it.
 auto find(const std::string& id) -> const SystemDef*;
 
+// Clear every compiled core's pending Thread::EntryPoints() static. Works
+// around an upstream ares bug: Thread::destroy() frees the coroutine but
+// leaves its pending entry in the per-core-namespace EntryPoints() static —
+// entries are only consumed when a coroutine first RUNS, so a system loaded
+// but never powered (element with `system` but no `rom`, torn down early)
+// strands {freed handle, dangling std::function} pairs. A later co_create
+// that recycles the allocation matches the stale entry in Thread::Enter and
+// runs a dead component's main() forever. One core runs per process, so
+// after unload every pending entry is stale. Call from the platform destroy
+// paths, after root->unload(). Revisit if multiple cores ever share a
+// process; upstream PR planned (real fix belongs in Thread::destroy()).
+auto clearStaleEntryPoints() -> void;
+
 } // namespace SystemRegistry
