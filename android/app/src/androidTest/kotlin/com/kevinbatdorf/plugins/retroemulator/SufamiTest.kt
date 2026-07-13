@@ -57,4 +57,29 @@ class SufamiTest {
             core.destroy()
         }
     }
+
+    @Test
+    fun bsxMemoryCartBoots() {
+        val bios = File("/data/local/tmp/bsx-bios.sfc")
+        val bs = File("/data/local/tmp/satella.bs")
+        if (!bios.exists() || !bs.exists()) { Log.w("SufamiTest", "no BS-X media; skipping"); return }
+
+        val core = AresCore()
+        try {
+            assert(core.init())
+            assert(core.loadSystem("sfc"))
+            // BS-X base is a normal .sfc (serial ZBSJ → BS-MCC board → BS Memory
+            // slot); the .bs cassette is staged into that single slot (index 0).
+            core.stageSlot(0, bs.readBytes())
+            assert(core.loadRom(bios.readBytes(), null) == AresCore.LOAD_OK) { "BS-X base + cassette should load" }
+            // The BIOS reads its MCC download PSRAM well after the first frames —
+            // a short run false-passes. Run long enough to fault if the base pak
+            // failed to allocate the Save/Download writable memories.
+            repeat(600) { core.tick() }
+            assert(core.isSlotConnected(0)) { "BS Memory cassette should be connected" }
+            assert(core.getFrameWidth() > 0) { "BS-X should render" }
+        } finally {
+            core.destroy()
+        }
+    }
 }

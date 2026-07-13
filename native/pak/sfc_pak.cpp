@@ -89,6 +89,23 @@ SfcPakBuilder::CartridgeInfo SfcPakBuilder::detectHeader(const uint8_t* rom, siz
 
     const uint8_t* h = data + headerBase;
 
+    // BS-X (Satellaview) base cartridge — serial "ZBSJ" (super-famicom.cpp:587)
+    // → the BS-MCC board, whose BS Memory slot makes ares create the "BS Memory
+    // Slot" port. (BS .bs carts are built by makeBsMemoryPak.)
+    if (std::memcmp(h + 0x02, "ZBSJ", 4) == 0) {
+        info.board  = "BS-MCC-RAM";
+        info.title  = "Satellaview BS-X";
+        info.region = "NTSC";
+        // BS-MCC-RAM maps two writable memories the base pak must allocate, or the
+        // BIOS reads a null pointer and segfaults: a Save RAM (super-famicom.cpp:797
+        // ramSize formula; falls back to the 0x8000 mapped by the board) and the
+        // 512 KiB MCC download PSRAM (.bsx, super-famicom.cpp:334).
+        uint8_t ramByte = h[0x28];
+        info.sramSize = ramByte ? (1u << (((ramByte - 1) & 7) + 1)) << 10 : 0x8000u;
+        info.downloadRamSize = 0x80000;
+        return info;
+    }
+
     info.title = extractTitle(h);
     if (info.title.empty()) info.title = "Unknown";
 
@@ -160,6 +177,10 @@ std::shared_ptr<vfs::directory> SfcPakBuilder::makeCartridgePak(
         pak->append("save.ram", uint64_t(info.sramSize));
     }
 
+    if (info.downloadRamSize > 0) {
+        pak->append("download.ram", uint64_t(info.downloadRamSize));
+    }
+
     return pak;
 }
 
@@ -180,6 +201,24 @@ std::shared_ptr<vfs::directory> SfcPakBuilder::makeSufamiSlotPak(
     if (ramSize > 0) {
         pak->append("save.ram", uint64_t(ramSize));
     }
+
+    return pak;
+}
+
+std::shared_ptr<vfs::directory> SfcPakBuilder::makeBsMemoryPak(
+    const uint8_t* rom, size_t romSize)
+{
+    auto pak = std::make_shared<vfs::directory>();
+
+    if (romSize > 0 && (romSize & 0x7fff) == 512) {   // strip copier header
+        rom += 512;
+        romSize -= 512;
+    }
+
+    // BS Memory carts are flash cassettes — the "BS Memory Cartridge" node reads
+    // program.flash (mia bs-memory.cpp defaults Flash). The bytes double as the
+    // flash contents; a .sav persists writes.
+    pak->append("program.flash", std::span<const u8>(rom, romSize));
 
     return pak;
 }

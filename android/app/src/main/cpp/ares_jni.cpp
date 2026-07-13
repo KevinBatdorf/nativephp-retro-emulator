@@ -251,6 +251,7 @@ struct AndroidPlatform : ares::Platform {
             if (port == "Sufami Turbo Slot A") return g_state->slotPak[0];
             if (port == "Sufami Turbo Slot B") return g_state->slotPak[1];
         }
+        if (name == "BS Memory Cartridge") return g_state->slotPak[0];
         return {};
     }
 
@@ -896,19 +897,33 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadRom(
     // there. Build a pak from each staged slot ROM and connect it (Platform::pak
     // hands it to the slot's cartridge node). Do this before power-on so the game
     // is present at boot rather than the base's insert-cartridge menu.
-    static const char* kSlotPorts[2] = {"Sufami Turbo Slot A", "Sufami Turbo Slot B"};
-    for (int i = 0; i < 2; i++) {
+    // Two shapes: SuFami Turbo (two slots) or BS-X (one BS Memory slot). Pick by
+    // which port the base created; stagedSlot[0] feeds the single BS slot.
+    bool isBsx = baseCartridge && (bool)baseCartridge->find<ares::Node::Port>("BS Memory Slot");
+    struct SlotDef { const char* port; bool flash; };
+    SlotDef slots[2];
+    int slotCount;
+    if (isBsx) {
+        slots[0] = {"BS Memory Slot", true};
+        slotCount = 1;
+    } else {
+        slots[0] = {"Sufami Turbo Slot A", false};
+        slots[1] = {"Sufami Turbo Slot B", false};
+        slotCount = 2;
+    }
+    for (int i = 0; i < slotCount; i++) {
         if (g_state->stagedSlot[i].empty()) continue;
-        auto slot = baseCartridge ? baseCartridge->find<ares::Node::Port>(kSlotPorts[i])
+        auto slot = baseCartridge ? baseCartridge->find<ares::Node::Port>(slots[i].port)
                                    : ares::Node::Port();
-        if (!slot) { LOGE("slot port '%s' not found (base not ST?)", kSlotPorts[i]); continue; }
-        g_state->slotPak[i] = SfcPakBuilder::makeSufamiSlotPak(
-            g_state->stagedSlot[i].data(), g_state->stagedSlot[i].size());
+        if (!slot) { LOGE("slot port '%s' not found", slots[i].port); continue; }
+        g_state->slotPak[i] = slots[i].flash
+            ? SfcPakBuilder::makeBsMemoryPak(g_state->stagedSlot[i].data(), g_state->stagedSlot[i].size())
+            : SfcPakBuilder::makeSufamiSlotPak(g_state->stagedSlot[i].data(), g_state->stagedSlot[i].size());
         slot->allocate();
         slot->connect();
         g_state->slotConnected[i] = (bool)slot->connected();
-        LOGI("Sufami Turbo slot %c connected=%d (%zu bytes)",
-             'A' + i, g_state->slotConnected[i] ? 1 : 0, g_state->stagedSlot[i].size());
+        LOGI("slot '%s' connected=%d (%zu bytes)",
+             slots[i].port, g_state->slotConnected[i] ? 1 : 0, g_state->stagedSlot[i].size());
         g_state->stagedSlot[i].clear();   // pak copied the bytes
     }
 

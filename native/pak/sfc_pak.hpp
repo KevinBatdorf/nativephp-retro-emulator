@@ -15,6 +15,7 @@ struct SfcPakBuilder {
         std::string title;   // up to 21 chars from the ROM header
         std::string region;  // "NTSC" or "PAL"
         uint32_t    sramSize = 0; // in bytes, 0 if no SRAM
+        uint32_t    downloadRamSize = 0; // BS-MCC PSRAM (.bsx download), 0 if none
     };
 
     // Detect whether the ROM is LoROM or HiROM and extract basic header info.
@@ -37,6 +38,11 @@ struct SfcPakBuilder {
     // save.ram sized from the cart header (rom[0x37] = RAM in 2 KiB units). The
     // "Sufami Turbo Cartridge" node reads these when its slot connects.
     static std::shared_ptr<vfs::directory> makeSufamiSlotPak(
+        const uint8_t* rom, size_t romSize);
+
+    // Build a BS Memory (Satellaview) cassette pak: program.flash from the .bs
+    // ROM. Read by the "BS Memory Cartridge" node when the BS Memory slot connects.
+    static std::shared_ptr<vfs::directory> makeBsMemoryPak(
         const uint8_t* rom, size_t romSize);
 
 private:
