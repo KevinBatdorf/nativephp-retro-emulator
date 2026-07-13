@@ -156,6 +156,18 @@ object EmulatorFunctions {
         }
     }
 
+    /**
+     * Report an operational outcome (category B): a valid call the world said
+     * no to — a missing ROM, an empty slot, a failed save. These surface as an
+     * EmulatorError event, never as a bridge error, so the PHP wrapper returns
+     * fluently and the event carries the detail. The "failed" status keeps the
+     * response off the wrapper's throw path (which fires on "error").
+     */
+    private fun operationalError(entry: SurfaceEntry, code: String, message: String): Map<String, Any> {
+        entry.renderer.eventListener?.onError(code, message)
+        return BridgeResponse.success(mapOf("status" to "failed", "code" to code, "message" to message))
+    }
+
     private class NativeEventForwarder(
         private val surface: String,
         private val activity: FragmentActivity,
@@ -309,7 +321,7 @@ object EmulatorFunctions {
 
             val file = File(path)
             if (!file.exists()) {
-                return BridgeResponse.error("ROM_NOT_FOUND", "ROM not found: $path")
+                return operationalError(entry!!, "ROM_NOT_FOUND", "ROM not found: $path")
             }
 
             val system = entry!!.renderer.stagedSystemId
@@ -319,7 +331,8 @@ object EmulatorFunctions {
             val extensions = AresCore().systemExtensions(system).split(",")
             val ext = file.extension.lowercase()
             if (ext !in extensions) {
-                return BridgeResponse.error(
+                return operationalError(
+                    entry,
                     "INVALID_ROM",
                     "'.$ext' is not a $system ROM — expected one of: " +
                         extensions.joinToString(", ") { ".$it" },
@@ -391,7 +404,7 @@ object EmulatorFunctions {
             return if (ok) {
                 BridgeResponse.success(mapOf("status" to "saved", "slot" to slot, "path" to path))
             } else {
-                BridgeResponse.error("SAVE_FAILED", "State save failed for slot $slot")
+                operationalError(entry, "SAVE_FAILED", "State save failed for slot $slot")
             }
         }
     }
@@ -406,14 +419,14 @@ object EmulatorFunctions {
             val statePath = File(activity.filesDir, "states/${surface(parameters)}/$slot.state")
 
             if (!statePath.exists()) {
-                return BridgeResponse.error("SLOT_EMPTY", "No state in slot $slot")
+                return operationalError(entry!!, "SLOT_EMPTY", "No state in slot $slot")
             }
 
             val ok = entry!!.renderer.syncStateLoad(statePath.absolutePath)
             return if (ok) {
                 BridgeResponse.success(mapOf("status" to "loaded", "slot" to slot))
             } else {
-                BridgeResponse.error("LOAD_FAILED", "State load failed for slot $slot")
+                operationalError(entry, "LOAD_FAILED", "State load failed for slot $slot")
             }
         }
     }
@@ -440,7 +453,7 @@ object EmulatorFunctions {
             return if (ok) {
                 BridgeResponse.success(mapOf("status" to "undone"))
             } else {
-                BridgeResponse.error("UNDO_FAILED", "Undo state load failed")
+                operationalError(entry, "UNDO_FAILED", "Undo state load failed")
             }
         }
     }
@@ -511,7 +524,17 @@ object EmulatorFunctions {
                 ?: return BridgeResponse.error("INVALID_PARAMETERS", "bytes is required")
 
             val bytes = byteList.mapNotNull { (it as? Number)?.toInt()?.toByte() }.toByteArray()
-            entry!!.renderer.queueWriteMemory(address, bytes)
+
+            // Validate the target synchronously: a read-probe of the same window
+            // returns null for an out-of-range address or when no core is
+            // running — exactly the cases a write must reject (WRITE_FAILED).
+            if (entry!!.renderer.syncReadMemory(address, bytes.size.coerceAtLeast(1)) == null) {
+                return BridgeResponse.error(
+                    "WRITE_FAILED",
+                    "Memory write failed — address 0x${address.toString(16).uppercase()} out of range or emulator not running",
+                )
+            }
+            entry.renderer.queueWriteMemory(address, bytes)
 
             return BridgeResponse.success(mapOf("status" to "queued", "address" to address, "length" to bytes.size))
         }
@@ -681,7 +704,7 @@ object EmulatorFunctions {
                     "REWIND_DISABLED",
                     "Rewind capture is off — enable it via configure(['rewind' => true]) first",
                 )
-                else -> BridgeResponse.error("REWIND_FAILED", "Emulator not running")
+                else -> operationalError(entry, "REWIND_FAILED", "Emulator not running")
             }
         }
     }
@@ -766,11 +789,12 @@ object EmulatorFunctions {
 
             return when (entry!!.renderer.syncAddCheat(code)) {
                 true  -> BridgeResponse.success(mapOf("status" to "added", "code" to code))
-                false -> BridgeResponse.error(
+                false -> operationalError(
+                    entry,
                     "INVALID_CHEAT",
                     "No valid ADDR:VALUE pairs in '$code' — expected hex pairs joined with '+'",
                 )
-                null  -> BridgeResponse.error("CHEAT_FAILED", "Emulator not running")
+                null  -> operationalError(entry, "CHEAT_FAILED", "Emulator not running")
             }
         }
     }
@@ -786,7 +810,7 @@ object EmulatorFunctions {
             return when (entry!!.renderer.syncRemoveCheat(code)) {
                 true  -> BridgeResponse.success(mapOf("status" to "removed", "code" to code))
                 false -> BridgeResponse.success(mapOf("status" to "not_found", "code" to code))
-                null  -> BridgeResponse.error("CHEAT_FAILED", "Emulator not running")
+                null  -> operationalError(entry, "CHEAT_FAILED", "Emulator not running")
             }
         }
     }
@@ -879,7 +903,7 @@ object EmulatorFunctions {
                 BridgeResponse.success(mapOf("status" to "captured", "path" to file.absolutePath))
             } catch (e: Exception) {
                 Log.e(TAG, "Screenshot write failed: ${e.message}")
-                BridgeResponse.error("WRITE_FAILED", e.message ?: "Failed to save screenshot")
+                BridgeResponse.error("SCREENSHOT_FAILED", e.message ?: "Failed to save screenshot")
             }
         }
     }

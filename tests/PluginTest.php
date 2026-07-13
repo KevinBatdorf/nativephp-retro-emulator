@@ -13,6 +13,8 @@ use KevinBatdorf\RetroEmulator\Config\RegionalSystemConfig;
 use KevinBatdorf\RetroEmulator\Config\SfcConfig;
 use KevinBatdorf\RetroEmulator\Elements\Emulator as EmulatorElement;
 use KevinBatdorf\RetroEmulator\Emulator;
+use KevinBatdorf\RetroEmulator\EmulatorErrorCode;
+use KevinBatdorf\RetroEmulator\EmulatorException;
 use KevinBatdorf\RetroEmulator\Events\EmulatorError;
 use KevinBatdorf\RetroEmulator\Events\EmulatorPaused;
 use KevinBatdorf\RetroEmulator\Events\EmulatorResumed;
@@ -228,11 +230,81 @@ describe('Events', function () {
         expect($event->newValue)->toBe(0x09);
     });
 
-    it('EmulatorError has correct properties', function () {
-        $event = new EmulatorError('main', 'CRASH', 'Segmentation fault in ares core');
+    it('EmulatorError has correct properties, coercing the wire code to the enum', function () {
+        $event = new EmulatorError('main', 'LOAD_FAILED', 'boot failed; emulator stopped');
         expect($event->surface)->toBe('main');
-        expect($event->code)->toBe('CRASH');
-        expect($event->message)->toBe('Segmentation fault in ares core');
+        expect($event->code)->toBe(EmulatorErrorCode::LoadFailed);
+        expect($event->message)->toBe('boot failed; emulator stopped');
+    });
+});
+
+describe('Error handling', function () {
+    afterEach(function () {
+        $GLOBALS['__nativephp_mock'] = [];
+    });
+
+    it('error codes match the native source', function () {
+        $sources = file_get_contents(dirname(__DIR__).'/resources/android/EmulatorFunctions.kt')
+            .file_get_contents(dirname(__DIR__).'/resources/android/EmulatorRenderer.kt');
+
+        // Codes surface three ways: a bridge error (code is arg 1), a direct
+        // onError (arg 1), or operationalError(entry, code, …) (arg 2).
+        preg_match_all(
+            '/(?:BridgeResponse\.error|\.onError)\s*\(\s*"([A-Z_]+)"|operationalError\([^,]+,\s*"([A-Z_]+)"/s',
+            $sources,
+            $m,
+        );
+        $native = array_values(array_unique(array_filter(array_merge($m[1], $m[2]))));
+        $enum = array_map(fn ($case) => $case->value, EmulatorErrorCode::cases());
+
+        sort($native);
+        sort($enum);
+        expect($enum)->toBe($native);
+    });
+
+    it('throws EmulatorException carrying the code on a programmer error', function () {
+        $GLOBALS['__nativephp_mock']['Emulator.ReadMemory'] =
+            '{"status":"error","code":"READ_FAILED","message":"out of range"}';
+
+        try {
+            Emulator::surface('main')->readMemory(0xFFFFFF);
+            throw new \Exception('expected EmulatorException, none thrown');
+        } catch (EmulatorException $e) {
+            expect($e->errorCode)->toBe(EmulatorErrorCode::ReadFailed);
+            expect($e->getMessage())->toBe('out of range');
+        }
+    });
+
+    it('throws on a fluent command that a programmer got wrong', function () {
+        $GLOBALS['__nativephp_mock']['Emulator.LoadSystem'] =
+            '{"status":"error","code":"UNSUPPORTED_SYSTEM","message":"nope"}';
+
+        expect(fn () => Emulator::surface('main')->loadSystem('xyz'))
+            ->toThrow(EmulatorException::class);
+    });
+
+    it('does not throw on SCREENSHOT_FAILED — screenshot() returns null', function () {
+        $GLOBALS['__nativephp_mock']['Emulator.Screenshot'] =
+            '{"status":"error","code":"SCREENSHOT_FAILED","message":"no frame"}';
+
+        expect(Emulator::surface('main')->screenshot())->toBeNull();
+    });
+
+    it('never throws an operational code, even as a bridge error', function () {
+        // Operational outcomes travel the event channel. A platform still
+        // returning one as a bridge error must not reach the dev as a throw.
+        $GLOBALS['__nativephp_mock']['Emulator.LoadRom'] =
+            '{"status":"error","code":"ROM_NOT_FOUND","message":"missing"}';
+
+        expect(fn () => Emulator::surface('main')->loadRom('/nope.sfc'))
+            ->not->toThrow(EmulatorException::class);
+    });
+
+    it('a successful response never throws', function () {
+        $GLOBALS['__nativephp_mock']['Emulator.Pause'] = '{"status":"paused"}';
+
+        expect(fn () => Emulator::surface('main')->pause())
+            ->not->toThrow(EmulatorException::class);
     });
 });
 
