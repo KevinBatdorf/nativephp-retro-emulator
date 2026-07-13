@@ -581,7 +581,10 @@ bool ares_tick(AresContext* ctx) {
     if (!ctx || !ctx->romLoaded) return false;
     if (ctx->paused.load(std::memory_order_relaxed)) return false;
 
+    // DRC gates off during fast-forward, porting desktop's FastForwardOn ->
+    // ruby::audio.setDynamic(false) (platform.cpp:29-45).
     if (ctx->dynamicRateControl.load(std::memory_order_relaxed) &&
+        !ctx->fastForwardActive.load(std::memory_order_relaxed) &&
         !ctx->audioStreams.empty()) {
         f64 fill;
         {

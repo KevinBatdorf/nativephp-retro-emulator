@@ -601,7 +601,11 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeTick(
 {
     if (!g_state || !g_state->romLoaded) return;
     if (!g_state->paused.load(std::memory_order_relaxed)) {
+        // Gate DRC off during fast-forward, porting desktop's Program::event
+        // FastForwardOn -> ruby::audio.setDynamic(false) (platform.cpp:29-45):
+        // at 4x the resampler must not steer production toward the DAC clock.
         if (g_state->dynamicRateControl.load(std::memory_order_relaxed) &&
+            !g_state->fastForwardActive.load(std::memory_order_relaxed) &&
             !g_state->audioStreams.empty()) {
             f64 fill;
             {
