@@ -2,8 +2,6 @@ package com.kevinbatdorf.plugins.retroemulator
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.opengl.GLES20
-import android.opengl.GLSurfaceView
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -11,22 +9,18 @@ import android.os.VibratorManager
 import android.util.Log
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.Surface
+import android.view.SurfaceHolder
+import android.view.SurfaceView
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
-import java.nio.ByteOrder
-import java.nio.FloatBuffer
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
-import javax.microedition.khronos.egl.EGLConfig
-import javax.microedition.khronos.opengles.GL10
 
 private const val TAG = "EmulatorRenderer"
-
-// Texture dimensions — large enough for any SFC canvas (max ~564×448).
-private const val TEX_W = 1024
-private const val TEX_H = 512
 
 // Emulation pacing fallback, used only until the core's first
 // Platform::refreshRateHint arrives during system power-on. After that the
@@ -44,16 +38,18 @@ private const val AUTOSAVE_INTERVAL_NANOS = 30_000_000_000L
 private const val RUMBLE_ONESHOT_MS = 10_000L
 
 /**
- * A [GLSurfaceView] that drives the ares emulator and blits each frame via a
- * full-screen textured quad. All ares calls happen on the GL thread so libco
- * coroutine contexts are consistent throughout the session.
+ * A [SurfaceView] that drives the ares emulator and presents each frame through
+ * the native Vulkan renderer (librashader-capable). A dedicated render thread
+ * owns the one thread every ares call runs on, so libco coroutine contexts stay
+ * consistent for the whole session — the same contract GLSurfaceView's GL thread
+ * used to provide.
  *
  * Usage:
- * 1. Construct and set as the Activity's content view.
- * 2. Call [pendingSystemLoad] / [pendingRomLoad] with your data; the actual
- *    native calls execute on the first [onDrawFrame] after each flag is set.
+ * 1. Construct and set as the Activity's content view (or wrap in AndroidView).
+ * 2. Call [queueSystemLoad] / [queueRomLoad]; the native calls execute on the
+ *    render thread once the surface is ready.
  */
-class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
+class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.Callback {
 
     private val core  = AresCore()
     private val audio = EmulatorAudio(core)
@@ -129,7 +125,7 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
     var eventListener: EmulatorEventListener? = null
 
     // Phase 7 — synchronous GL-thread operations.
-    // Requests are posted from bridge threads and serviced on the next onDrawFrame.
+    // Requests are posted from bridge threads and serviced on the render thread.
 
     private data class MemReadRequest(
         val address: Int,
@@ -178,9 +174,9 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
         }
     @Volatile var speedMultiplier: Double = 1.0
 
-    // Frame pacing — the GL thread draws at the display's refresh rate (120 Hz
-    // on some devices) and GLSurfaceView redraws opportunistically, so ticks
-    // are budgeted by wall clock against the console's native frame rate.
+    // Frame pacing — the render loop presents at the display's refresh rate
+    // (Vulkan FIFO/vsync; 120 Hz on some devices), so ticks are budgeted by wall
+    // clock against the console's native frame rate rather than per present.
     private var lastTickNanos = 0L
     private var tickAccumulator = 0.0
 
@@ -189,14 +185,10 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
     @Volatile var autoSave: Boolean = true
     private var lastAutoSaveNanos = 0L
 
-    // Current UV extents for the content region within the 1024×512 texture.
-    private var uvW = 1f
-    private var uvH = 1f
-
     // Letterboxed output rect in surface pixels, recomputed per frame from the
     // screen-node geometry (GL thread only). Screenshot reads this region.
-    private var surfaceW = 0
-    private var surfaceH = 0
+    @Volatile private var surfaceW = 0
+    @Volatile private var surfaceH = 0
     private var outputRect = OutputRect(0, 0, 0, 0)
 
     // Presentation settings (ares desktop's Video settings) — written from
@@ -236,80 +228,77 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
         core.setCoreBoolean(key, value)
     }
 
-    private val renderer = object : GLSurfaceView.Renderer {
+    // -----------------------------------------------------------------------
+    // Render thread — replaces GLSurfaceView's managed GL thread. It owns the
+    // single thread every ares call runs on (libco), drains queued commands,
+    // ticks the core paced to its refresh rate, and presents each frame through
+    // the native Vulkan renderer. The Vulkan swapchain follows the SurfaceHolder.
+    // -----------------------------------------------------------------------
+    private val events = ConcurrentLinkedQueue<Runnable>()
+    private val lifecycleLock = Object()
+    @Volatile private var renderThread: RenderThread? = null
+    @Volatile private var currentSurface: Surface? = null
+    @Volatile private var threadPaused = false
 
-        private var textureId   = 0
-        private var program     = 0
-        private var posLoc      = 0
-        private var texLoc      = 0
-        private var uvScaleLoc  = 0
-        private var posScaleLoc = 0
-        private var vbo         = 0
+    /** GLSurfaceView-style post: run [r] on the render thread (serviced each loop). */
+    fun queueEvent(r: Runnable) {
+        events.add(r)
+        synchronized(lifecycleLock) { lifecycleLock.notifyAll() }
+    }
 
-        override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
-            GLES20.glClearColor(0f, 0f, 0f, 1f)
+    /**
+     * Wake the render loop. It renders continuously, so this only nudges it out
+     * of an idle wait (no surface / paused). Kept so call sites that used
+     * GLSurfaceView.requestRender() still compile and behave.
+     */
+    fun requestRender() {
+        synchronized(lifecycleLock) { lifecycleLock.notifyAll() }
+    }
 
-            // Compile shaders.
-            program     = buildProgram(VERTEX_SRC, FRAGMENT_SRC)
-            posLoc      = GLES20.glGetAttribLocation(program,  "aPos")
-            texLoc      = GLES20.glGetUniformLocation(program, "uTex")
-            uvScaleLoc  = GLES20.glGetUniformLocation(program, "uUvScale")
-            posScaleLoc = GLES20.glGetUniformLocation(program, "uPosScale")
+    private inner class RenderThread : Thread("EmulatorRender") {
+        @Volatile var running = true
+        private var boundSurface: Surface? = null
 
-            // Full-screen quad (two triangles as a triangle strip, NDC coords).
-            val verts = floatArrayOf(
-                -1f, -1f,
-                 1f, -1f,
-                -1f,  1f,
-                 1f,  1f
-            )
-            val buf: FloatBuffer = ByteBuffer
-                .allocateDirect(verts.size * 4)
-                .order(ByteOrder.nativeOrder())
-                .asFloatBuffer()
-                .put(verts)
-                .also { it.position(0) }
-
-            val vbos = IntArray(1)
-            GLES20.glGenBuffers(1, vbos, 0)
-            vbo = vbos[0]
-            GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, vbo)
-            GLES20.glBufferData(
-                GLES20.GL_ARRAY_BUFFER,
-                verts.size * 4,
-                buf,
-                GLES20.GL_STATIC_DRAW
-            )
-
-            // Allocate the frame texture.
-            val texIds = IntArray(1)
-            GLES20.glGenTextures(1, texIds, 0)
-            textureId = texIds[0]
-            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textureId)
-            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR)
-            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
-            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S,     GLES20.GL_CLAMP_TO_EDGE)
-            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T,     GLES20.GL_CLAMP_TO_EDGE)
-            // Allocate storage (zeroed = black).
-            GLES20.glTexImage2D(
-                GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA,
-                TEX_W, TEX_H, 0,
-                GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, null
-            )
-
-            // Initialise ares and hand it the texture ID.
+        override fun run() {
+            // ares platform first; the Vulkan device comes up lazily when a
+            // surface binds (core.surfaceCreated) and survives core stop/init.
             core.init()
-            core.setupRenderer(textureId)
-            Log.i(TAG, "Surface created — ares ${core.version()}")
-        }
+            Log.i(TAG, "render thread started — ares ${core.version()}")
+            try {
+                while (running) {
+                    while (true) { (events.poll() ?: break).run() }
 
-        override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
-            GLES20.glViewport(0, 0, width, height)
-            surfaceW = width
-            surfaceH = height
-        }
+                    // Bind / rebind / unbind the Vulkan surface on this thread.
+                    val want = currentSurface
+                    if (want !== boundSurface) {
+                        if (boundSurface != null) core.surfaceDestroyed()
+                        boundSurface = want
+                        if (want != null) core.surfaceCreated(want)
+                    }
 
-        override fun onDrawFrame(gl: GL10?) {
+                    // Idle when there is nothing to draw, but keep draining
+                    // events (release()/teardown must still run with no surface).
+                    if (boundSurface == null || threadPaused) {
+                        synchronized(lifecycleLock) {
+                            if (running && events.isEmpty() &&
+                                currentSurface === boundSurface &&
+                                (boundSurface == null || threadPaused)) {
+                                lifecycleLock.wait(250)
+                            }
+                        }
+                        continue
+                    }
+                    doFrame()
+                }
+            } finally {
+                if (boundSurface != null) core.surfaceDestroyed()
+                core.releaseRenderer()
+                Log.i(TAG, "render thread stopped")
+            }
+        }
+    }
+
+    private fun doFrame() {
             // --- Consume pending system staging (never boots — plan 4b) ---
             val systemId = pendingSystemId
             if (systemId != null) {
@@ -364,9 +353,12 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
                 audio.start()
             }
 
-            GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
-
-            if (!romLoaded) return
+            if (!romLoaded) {
+                // No game loaded: present a cleared (black) frame so the surface
+                // shows black rather than a stale image, then idle this pass.
+                core.presentFrame(0, 0, 0, 0)
+                return
+            }
 
             // --- Service pending memory write (before tick so write takes effect this frame) ---
             pendingWrite.getAndSet(null)?.let { req ->
@@ -412,10 +404,8 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
                 eventListener?.onStarted(loadedSystem, loadedRomPath)
             }
 
-            // --- Update UV scale and letterboxed output rect ---
+            // --- Update the letterboxed output rect ---
             if (fw > 0 && fh > 0) {
-                uvW = fw.toFloat() / TEX_W.toFloat()
-                uvH = fh.toFloat() / TEX_H.toFloat()
                 val g = core.getVideoGeometry()
                 outputRect = computeOutputRect(
                     nodeWidth = g[0], nodeHeight = g[1],
@@ -443,7 +433,7 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
 
             // --- Service pending screenshot (after the rect update above) ---
             pendingScreenshot.getAndSet(null)?.let { req ->
-                req.result = captureFramebuffer(outputRect)
+                req.result = captureFramebuffer()
                 req.latch.countDown()
             }
 
@@ -467,36 +457,68 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
                 }
             }
 
-            // Draw the full-screen quad.
-            GLES20.glUseProgram(program)
-
-            GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, vbo)
-            GLES20.glEnableVertexAttribArray(posLoc)
-            GLES20.glVertexAttribPointer(posLoc, 2, GLES20.GL_FLOAT, false, 8, 0)
-
-            GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
-            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textureId)
-            GLES20.glUniform1i(texLoc, 0)
-            GLES20.glUniform2f(uvScaleLoc, uvW, uvH)
-            // Shrink the quad to the letterboxed output rect (centered, so
-            // scaling NDC about the origin is exactly ruby's centering).
-            val sx = if (surfaceW > 0) outputRect.w.toFloat() / surfaceW else 1f
-            val sy = if (surfaceH > 0) outputRect.h.toFloat() / surfaceH else 1f
-            GLES20.glUniform2f(posScaleLoc, sx, sy)
-
-            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
-
-            GLES20.glDisableVertexAttribArray(posLoc)
-        }
+            // Present the frame, letterboxed into the output rect, via Vulkan.
+            // The native blit scales the source with a linear filter and centers
+            // it in outputRect (the clear paints the letterbox bars) — the exact
+            // ruby presentation, done by vkCmdBlitImage instead of a quad.
+            core.presentFrame(outputRect.x, outputRect.y, outputRect.w, outputRect.h)
     }
 
+    // -----------------------------------------------------------------------
+    // SurfaceHolder lifecycle — drives the render thread + Vulkan swapchain.
+    // -----------------------------------------------------------------------
     init {
-        setEGLContextClientVersion(2)
-        setRenderer(renderer)
-        renderMode = RENDERMODE_CONTINUOUSLY
+        holder.addCallback(this)
         // Gamepad input doesn't reset Android's idle timer — keep the display
         // awake while the emulator view is showing.
         keepScreenOn = true
+    }
+
+    override fun surfaceCreated(holder: SurfaceHolder) {
+        currentSurface = holder.surface
+        val t = renderThread
+        if (t == null || !t.isAlive) {
+            renderThread = RenderThread().also { it.start() }
+        } else {
+            requestRender()
+        }
+    }
+
+    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+        currentSurface = holder.surface
+        queueEvent {
+            surfaceW = width
+            surfaceH = height
+            core.surfaceChanged(width, height)
+        }
+    }
+
+    override fun surfaceDestroyed(holder: SurfaceHolder) {
+        // The Surface is invalid the moment this returns, so block until the
+        // render thread has torn down its swapchain + released the native window.
+        currentSurface = null
+        val latch = CountDownLatch(1)
+        queueEvent {
+            core.surfaceDestroyed()
+            latch.countDown()
+        }
+        requestRender()
+        if (!latch.await(2, TimeUnit.SECONDS)) {
+            Log.w(TAG, "surfaceDestroyed: render thread didn't release the surface in time")
+        }
+    }
+
+    /** Pause emulation while backgrounded (Activity.onPause) — flushes battery saves. */
+    fun onPause() {
+        threadPaused = true
+        queueEvent { core.flushSaves() }
+        requestRender()
+    }
+
+    /** Resume emulation after [onPause] (Activity.onResume). */
+    fun onResume() {
+        threadPaused = false
+        requestRender()
     }
 
     // ---------------------------------------------------------------------------
@@ -504,7 +526,7 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
     // ---------------------------------------------------------------------------
 
     /**
-     * Queue a system STAGING; it executes on the next [onDrawFrame]. No core
+     * Queue a system STAGING; it executes on the next render-loop pass. No core
      * boots until a ROM arrives (plan 4b) — re-staging over a running core is
      * legal and leaves the running game untouched until the next ROM load.
      * @param systemId ares system ID — one of [AresCore.supportedSystems].
@@ -516,7 +538,7 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
     }
 
     /**
-     * Queue a ROM load; it executes on the next [onDrawFrame] after a system
+     * Queue a ROM load; it executes on the next render-loop pass after a system
      * is staged. This is the one boot path — a running game is torn down and
      * a fresh core boots with the region resolved from this ROM.
      * @param system     ares system ID (e.g. "sfc") — stored for [EmulatorStarted] event.
@@ -604,6 +626,8 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
         audio.stop()
         lastRumbleState = 0
         vibrator?.cancel()
+        currentSurface = null
+        val t = renderThread ?: return
         val latch = CountDownLatch(1)
         queueEvent {
             core.flushSaves()
@@ -611,9 +635,14 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
             latch.countDown()
         }
         if (!latch.await(2, TimeUnit.SECONDS)) {
-            Log.w(TAG, "release(): GL thread never serviced core teardown — " +
+            Log.w(TAG, "release(): render thread never serviced core teardown — " +
                 "native core may leak until process death")
         }
+        // Stop the render thread; its finally block tears down the Vulkan device.
+        t.running = false
+        requestRender()
+        t.join(2000)
+        renderThread = null
     }
 
     // ---------------------------------------------------------------------------
@@ -767,6 +796,23 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
         return result
     }
 
+    /**
+     * Load ([path]) or clear (null) a librashader preset on the render thread,
+     * where the Vulkan filter chain lives. Own timeout (≤10 s) because the first
+     * load compiles the preset's passes. Returns false on a load error, null on
+     * timeout.
+     */
+    fun syncSetShader(path: String?): Boolean? {
+        val latch = CountDownLatch(1)
+        var result = false
+        queueEvent {
+            result = core.setShader(path)
+            latch.countDown()
+        }
+        requestRender()
+        return if (latch.await(10, TimeUnit.SECONDS)) result else null
+    }
+
     // ---------------------------------------------------------------------------
     // Phase 7 — memory watches
     // ---------------------------------------------------------------------------
@@ -802,27 +848,31 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
     fun clearMemoryWatches() = watchedAddresses.clear()
 
     // ---------------------------------------------------------------------------
-    // Phase 7 — GL-thread helpers (called from onDrawFrame)
+    // Render-thread helpers (called from doFrame)
     // ---------------------------------------------------------------------------
 
-    private fun captureFramebuffer(rect: OutputRect): ByteArray? {
-        val (x, y, fw, fh) = rect
+    private fun captureFramebuffer(): ByteArray? {
+        val rgba = core.screenshotRGBA() ?: return null
+        val fw = core.getFrameWidth()
+        val fh = core.getFrameHeight()
         if (fw <= 0 || fh <= 0) return null
+        val rect = outputRect
         return try {
-            val buf = ByteBuffer.allocateDirect(fw * fh * 4).order(ByteOrder.nativeOrder())
-            GLES20.glReadPixels(x, y, fw, fh, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, buf)
-            // GL origin is bottom-left; flip vertically for correct top-down orientation.
-            val src = ByteArray(fw * fh * 4).also { buf.get(it) }
-            val flipped = ByteArray(src.size)
-            val rowBytes = fw * 4
-            for (row in 0 until fh) {
-                src.copyInto(flipped, row * rowBytes, (fh - 1 - row) * rowBytes, (fh - row) * rowBytes)
+            // Native hands back the raw frame as top-down RGBA8 (no GL bottom-left
+            // flip). Scale it to the letterboxed on-screen content size so the
+            // screenshot matches the presented image (aspect-corrected, surface-
+            // scaled) — the semantics the old GL window read-back produced.
+            val frame = Bitmap.createBitmap(fw, fh, Bitmap.Config.ARGB_8888)
+            frame.copyPixelsFromBuffer(ByteBuffer.wrap(rgba))
+            val bmp = if (rect.w > 0 && rect.h > 0) {
+                Bitmap.createScaledBitmap(frame, rect.w, rect.h, true)
+            } else {
+                frame
             }
-            val bmp = Bitmap.createBitmap(fw, fh, Bitmap.Config.ARGB_8888)
-            bmp.copyPixelsFromBuffer(ByteBuffer.wrap(flipped))
             val bos = ByteArrayOutputStream()
             bmp.compress(Bitmap.CompressFormat.PNG, 90, bos)
-            bmp.recycle()
+            if (bmp !== frame) bmp.recycle()
+            frame.recycle()
             bos.toByteArray()
         } catch (e: Exception) {
             Log.e(TAG, "Screenshot failed: ${e.message}")
@@ -1020,73 +1070,7 @@ internal fun computeOutputRect(
     )
 }
 
-// ---------------------------------------------------------------------------
-// GL shader sources
-// ---------------------------------------------------------------------------
-
-// The ares video callback writes ARGB8888 (little-endian: BGRA in memory).
-// When uploaded as GL_RGBA the channels are in BGRA order from GL's perspective,
-// so the fragment shader swizzles .bgra → RGBA to display correctly.
-private const val VERTEX_SRC = """
-    attribute vec2 aPos;
-    uniform   vec2 uUvScale;
-    uniform   vec2 uPosScale;
-    varying   vec2 vUv;
-    void main() {
-        // Flip Y so row 0 of the ares output (screen top) maps to the top of
-        // the quad (GL NDC Y = +1).  Scale into the content region of the texture.
-        vUv = vec2(
-            (aPos.x * 0.5 + 0.5) * uUvScale.x,
-            (0.5 - aPos.y * 0.5) * uUvScale.y
-        );
-        // uPosScale letterboxes: the quad shrinks to the aspect-correct
-        // output rect, centered because NDC scales about the origin.
-        gl_Position = vec4(aPos * uPosScale, 0.0, 1.0);
-    }
-"""
-
-private const val FRAGMENT_SRC = """
-    precision mediump float;
-    uniform sampler2D uTex;
-    varying vec2      vUv;
-    void main() {
-        vec4 c = texture2D(uTex, vUv);
-        // Swap R↔B: ares BGRA memory → correct RGBA display.
-        gl_FragColor = c.bgra;
-    }
-"""
-
-// ---------------------------------------------------------------------------
-// GL helpers
-// ---------------------------------------------------------------------------
-
-private fun compileShader(type: Int, src: String): Int {
-    val id = GLES20.glCreateShader(type)
-    GLES20.glShaderSource(id, src)
-    GLES20.glCompileShader(id)
-    val status = IntArray(1)
-    GLES20.glGetShaderiv(id, GLES20.GL_COMPILE_STATUS, status, 0)
-    if (status[0] == 0) {
-        Log.e(TAG, "Shader compile error: ${GLES20.glGetShaderInfoLog(id)}")
-        GLES20.glDeleteShader(id)
-        return 0
-    }
-    return id
-}
-
-private fun buildProgram(vertSrc: String, fragSrc: String): Int {
-    val vert = compileShader(GLES20.GL_VERTEX_SHADER,   vertSrc)
-    val frag = compileShader(GLES20.GL_FRAGMENT_SHADER, fragSrc)
-    val prog = GLES20.glCreateProgram()
-    GLES20.glAttachShader(prog, vert)
-    GLES20.glAttachShader(prog, frag)
-    GLES20.glLinkProgram(prog)
-    val status = IntArray(1)
-    GLES20.glGetProgramiv(prog, GLES20.GL_LINK_STATUS, status, 0)
-    if (status[0] == 0) {
-        Log.e(TAG, "Program link error: ${GLES20.glGetProgramInfoLog(prog)}")
-    }
-    GLES20.glDeleteShader(vert)
-    GLES20.glDeleteShader(frag)
-    return prog
-}
+// Frame presentation now lives entirely in the native Vulkan renderer
+// (vulkan_renderer.cpp): the ares BGRA frame uploads to a B8G8R8A8_UNORM source
+// image and vkCmdBlitImage scales it into the letterboxed output rect. No GL
+// shader program is needed here anymore — librashader handles slang presets.

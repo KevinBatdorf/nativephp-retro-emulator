@@ -8,7 +8,7 @@ import com.nativephp.mobile.ui.nativerender.NativeUINode
 
 /**
  * Compose entry point for the `emulator` EDGE node — referenced by the
- * generated PluginRendererRegistration. Wraps the classic GLSurfaceView
+ * generated PluginRendererRegistration. Wraps the SurfaceView-based Vulkan
  * renderer in AndroidView and registers it under the node's surface name so
  * Emulator.* bridge calls resolve to this instance.
  *

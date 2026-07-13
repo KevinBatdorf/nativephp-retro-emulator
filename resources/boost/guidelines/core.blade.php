@@ -75,8 +75,9 @@ public function onMemoryChanged(string $surface, int $address, int $oldValue, in
 </code-snippet>
 @endverbatim
 
-### Not implemented in v1
+### Not implemented yet
 
-`runAhead`, `rewind`, `setShader` (loading; clearing succeeds), cheats, rumble, and custom
-input mappings return a `NOT_IMPLEMENTED` bridge error rather than silently succeeding. Do
-not generate code that relies on them.
+`setInputMapping` (custom per-port input remapping) returns a `NOT_IMPLEMENTED` bridge
+error — do not generate code that relies on it. Everything else the API exposes works,
+including `setShader`, which applies librashader `.slangp` presets (Android; iOS lands with
+the iOS renderer). A preset that fails to load reports an `EmulatorError` (`SHADER_FAILED`).

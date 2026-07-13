@@ -547,11 +547,11 @@ enum EmulatorFunctions {
         }
     }
 
-    /// Custom controller mappings are NOT implemented in v1 — hardware
+    /// Custom controller mappings are not implemented yet — hardware
     /// mappings are hardwired in EmulatorInput.
     class SetInputMapping: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
-            BridgeResponse.error(code: "NOT_IMPLEMENTED", message: "custom input mappings are not supported in v1")
+            BridgeResponse.error(code: "NOT_IMPLEMENTED", message: "custom input mappings are not supported yet")
         }
     }
 
@@ -571,15 +571,17 @@ enum EmulatorFunctions {
         }
     }
 
-    /// Shaders (librashader) are NOT implemented in v1. Passing nil/"none"
-    /// (a clear) succeeds — there is never an active shader to remove.
+    /// Shaders (librashader Metal) land with the iOS host renderer (step 3);
+    /// see .claude/findings.md → "Shaders" for the captured seam. Until then
+    /// loading errors NOT_IMPLEMENTED; clearing (nil/"none"/"") succeeds, since
+    /// there is never an active shader to remove.
     class SetShader: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             let path = parameters["path"] as? String
-            if path == nil || path == "none" {
+            if path == nil || path == "none" || path == "" {
                 return BridgeResponse.success(data: ["status": "cleared"])
             }
-            return BridgeResponse.error(code: "NOT_IMPLEMENTED", message: "shaders are not supported in v1")
+            return BridgeResponse.error(code: "NOT_IMPLEMENTED", message: "iOS shaders arrive with the iOS renderer (step 3)")
         }
     }
 

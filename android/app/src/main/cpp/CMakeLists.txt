@@ -223,10 +223,34 @@ target_compile_definitions(md_core PUBLIC
 )
 
 # ---------------------------------------------------------------------------
-# retro_emulator — JNI shared library + GL renderer + pak builders
+# librashader — prebuilt Vulkan slang-shader runtime (Rust cdylib).
+#
+# NOT compiled here: it ships as a prebuilt .so (see
+# scripts/build_librashader_android.sh) and is linked as an imported shared lib
+# per ABI. libretro_emulator.so gains a NEEDED liblibrashader.so, which the
+# dynamic linker resolves from the packaged jniLibs at load (minSdk 26). The
+# dev-harness packages it from android/app/src/main/jniLibs; hosts receive it via
+# the plugin's copy-assets hook. See .claude/findings.md → "Shaders".
+# ---------------------------------------------------------------------------
+add_library(librashader SHARED IMPORTED)
+set_target_properties(librashader PROPERTIES
+    IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/../jniLibs/${ANDROID_ABI}/liblibrashader.so"
+    # Our own vendored copy of the C header, pinned to the SAME upstream tag as
+    # the .so (v0.12.0) — no version skew with the ares tree's older header.
+    INTERFACE_INCLUDE_DIRECTORIES "${NATIVE_ROOT}/vendor"
+    # The cargo cdylib carries no DT_SONAME, so without this CMake links it by
+    # full path and records that absolute BUILD path as libretro_emulator.so's
+    # NEEDED entry (dlopen then fails on device). NO_SONAME links by basename, so
+    # NEEDED = "liblibrashader.so", resolved from the packaged jniLibs at load.
+    IMPORTED_NO_SONAME TRUE
+)
+
+# ---------------------------------------------------------------------------
+# retro_emulator — JNI shared library + Vulkan renderer + pak builders
 # ---------------------------------------------------------------------------
 add_library(retro_emulator SHARED
     "${CMAKE_CURRENT_SOURCE_DIR}/ares_jni.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/vulkan_renderer.cpp"
     "${NATIVE_ROOT}/system_registry.cpp"
     "${NATIVE_ROOT}/save_io.cpp"
     "${NATIVE_ROOT}/pak/sfc_pak.cpp"
@@ -249,5 +273,6 @@ target_link_libraries(retro_emulator PRIVATE
     md_core
     android
     log
-    GLESv2
+    vulkan
+    librashader
 )

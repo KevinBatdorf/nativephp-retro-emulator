@@ -29,6 +29,7 @@ class EmulatorActivity : Activity() {
         const val EXTRA_ROM_PATH = "ROM_PATH"
         const val EXTRA_SYSTEM   = "SYSTEM"
         const val EXTRA_REGION   = "REGION"
+        const val EXTRA_SHADER   = "SHADER"
         const val EXTRA_OUTPUT   = "OUTPUT"
         const val EXTRA_FIXED_SCALE = "FIXED_SCALE"
         const val EXTRA_ASPECT_CORRECTION = "ASPECT_CORRECTION"
@@ -70,6 +71,17 @@ class EmulatorActivity : Activity() {
         renderer.queueRomLoad(romBytes, system, romPath, savePrefix)
 
         Log.i(TAG, "ROM queued: $romPath (${romBytes.size} bytes, system=$system)")
+
+        // Optional shader for on-device librashader verification. Applied off the
+        // main thread after the surface + core are up (the real flow applies
+        // shaders through loadSystem's config fan-out after registerSurface).
+        intent.getStringExtra(EXTRA_SHADER)?.let { shaderPath ->
+            Thread {
+                Thread.sleep(2500)
+                val ok = renderer.syncSetShader(shaderPath)
+                Log.i(TAG, "setShader($shaderPath) → $ok")
+            }.start()
+        }
     }
 
     override fun onResume()  { super.onResume();  renderer.onResume() }

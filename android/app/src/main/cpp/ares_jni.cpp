@@ -1,6 +1,8 @@
 #include <jni.h>
 #include <android/log.h>
-#include <GLES2/gl2.h>
+#include <android/native_window_jni.h>
+
+#include "vulkan_renderer.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -34,7 +36,6 @@ struct EmulatorState {
     std::shared_ptr<vfs::directory> systemPak;
     std::shared_ptr<vfs::directory> cartridgePak;
 
-    GLuint textureId   = 0;
     u32    frameWidth  = 0;
     u32    frameHeight = 0;
 
@@ -302,6 +303,11 @@ struct AndroidPlatform : ares::Platform {
 
 static AndroidPlatform* g_platform = nullptr;
 
+// The Vulkan display path (replaces the old GLES blit). Created in nativeInit
+// (device/instance are window-independent); the swapchain is bound on
+// nativeSurfaceCreated. All Vulkan calls happen on the render thread.
+static VulkanRenderer* g_vk = nullptr;
+
 // ---------------------------------------------------------------------------
 // JNI helpers
 // ---------------------------------------------------------------------------
@@ -351,6 +357,11 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeInit(
         ares::platform = g_platform;
         LOGI("ares platform initialised — version: %s", ares::Version.data());
     }
+    // NB: the Vulkan renderer (g_vk) is deliberately NOT created here. Its
+    // lifecycle follows the SURFACE, not the ares platform — stopEmulation()
+    // and release() cycle the platform via destroy()+init(), and the swapchain
+    // must survive that. g_vk is created lazily in nativeSurfaceCreated and torn
+    // down only when the render thread exits (nativeReleaseRenderer).
     return JNI_TRUE;
 }
 
@@ -370,6 +381,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeDestroy(
     // load. Full story on the declaration (system_registry.hpp).
     SystemRegistry::clearStaleEntryPoints();
     ares::platform = nullptr;
+    // g_vk is NOT deleted here — it outlives the ares platform (see nativeInit).
     delete g_platform; g_platform = nullptr;
     delete g_state;    g_state    = nullptr;
     LOGI("ares platform destroyed");
@@ -382,15 +394,98 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeVersion(
     return env->NewStringUTF(ares::Version.data());
 }
 
-// Phase 4 — GL renderer setup -----------------------------------------------
+// Phase 1.3 — Vulkan surface lifecycle + present ----------------------------
+//
+// The render thread drives these: surfaceCreated/Changed/Destroyed mirror the
+// SurfaceHolder callbacks, presentFrame runs once per loop after the tick(s),
+// setShader (un)loads a librashader preset, and screenshotRGBA reads the last
+// frame back. All run on the one render thread, same as tick().
 
 JNIEXPORT void JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetupRenderer(
-    JNIEnv*, jobject, jint textureId)
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSurfaceCreated(
+    JNIEnv* env, jobject, jobject surface)
 {
-    if (!g_state) return;
-    g_state->textureId = (GLuint)textureId;
-    LOGI("renderer bound to texture %d", textureId);
+    if (!surface) return;
+    // Lazily bring up the Vulkan device the first time a surface appears; it
+    // then persists across core stop/init and transient surface loss.
+    if (!g_vk) {
+        g_vk = new VulkanRenderer{};
+        if (!g_vk->initDevice()) {
+            LOGE("Vulkan device init failed — the surface will not render");
+            delete g_vk; g_vk = nullptr;
+            return;
+        }
+    }
+    ANativeWindow* window = ANativeWindow_fromSurface(env, surface);
+    if (!window) { LOGE("ANativeWindow_fromSurface returned null"); return; }
+    if (!g_vk->setSurface(window)) LOGE("Vulkan setSurface failed");
+}
+
+// Final teardown of the Vulkan renderer (device + instance), called when the
+// render thread exits. Transient surface loss uses nativeSurfaceDestroyed.
+JNIEXPORT void JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeReleaseRenderer(
+    JNIEnv*, jobject)
+{
+    delete g_vk; g_vk = nullptr;
+}
+
+JNIEXPORT void JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSurfaceChanged(
+    JNIEnv*, jobject, jint width, jint height)
+{
+    if (g_vk) g_vk->onResize((int)width, (int)height);
+}
+
+JNIEXPORT void JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSurfaceDestroyed(
+    JNIEnv*, jobject)
+{
+    if (g_vk) g_vk->clearSurface();
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativePresentFrame(
+    JNIEnv*, jobject, jint outX, jint outY, jint outW, jint outH)
+{
+    if (!g_vk || !g_state) return JNI_FALSE;
+    {
+        // Copy the freshest frame into the staging buffer under the frame lock;
+        // the GPU work in present() then runs without holding it.
+        std::lock_guard<std::mutex> lock(g_state->frameMutex);
+        if (g_state->frameDirty) {
+            g_vk->stageFrame(g_state->frameBuffer.data(),
+                             g_state->frameWidth, g_state->frameHeight);
+            g_state->frameDirty = false;
+        }
+    }
+    return g_vk->present((int)outX, (int)outY, (int)outW, (int)outH) ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetShader(
+    JNIEnv* env, jobject, jstring path)
+{
+    if (!g_vk) return JNI_FALSE;
+    if (!path) return g_vk->setShader(nullptr) ? JNI_TRUE : JNI_FALSE;
+    const char* p = env->GetStringUTFChars(path, nullptr);
+    bool ok = g_vk->setShader(p);
+    env->ReleaseStringUTFChars(path, p);
+    return ok ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jbyteArray JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeScreenshotRGBA(
+    JNIEnv* env, jobject)
+{
+    if (!g_vk) return nullptr;
+    std::vector<uint8_t> rgba;
+    uint32_t w = 0, h = 0;
+    if (!g_vk->screenshotRaw(rgba, w, h)) return nullptr;
+    jbyteArray arr = env->NewByteArray((jsize)rgba.size());
+    if (!arr) return nullptr;
+    env->SetByteArrayRegion(arr, 0, (jsize)rgba.size(), reinterpret_cast<const jbyte*>(rgba.data()));
+    return arr;
 }
 
 // Phase 4/11 → 4b — system staging + ROM-first boot ---------------------------
@@ -638,23 +733,8 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeTick(
         }
     }
 
-    // Upload the latest buffered frame — this runs on the GL thread; the
-    // frame itself arrived asynchronously from ares' screen worker thread.
-    if (g_state->textureId) {
-        std::lock_guard<std::mutex> lock(g_state->frameMutex);
-        if (g_state->frameDirty) {
-            g_state->frameDirty = false;
-            glBindTexture(GL_TEXTURE_2D, g_state->textureId);
-            // ares outputs ARGB8888 (little-endian BGRA in memory).
-            // We upload with GL_RGBA; the fragment shader swizzles.
-            glTexSubImage2D(GL_TEXTURE_2D, 0,
-                            0, 0,
-                            (GLsizei)g_state->frameWidth,
-                            (GLsizei)g_state->frameHeight,
-                            GL_RGBA, GL_UNSIGNED_BYTE,
-                            g_state->frameBuffer.data());
-        }
-    }
+    // The frame produced above stays in g_state->frameBuffer (frameDirty);
+    // the render thread's nativePresentFrame uploads + presents it via Vulkan.
 }
 
 // Phase 4 — frame dimensions ------------------------------------------------

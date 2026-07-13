@@ -1,14 +1,18 @@
 package com.kevinbatdorf.plugins.retroemulator
 
+import android.view.Surface
+
 /**
  * JNI wrapper around the ares emulator core.
  *
  * Threading: [init], [loadSystem], [loadRom], [tick], and [destroy] MUST be
- * called from the same thread (the GL thread) because the ares scheduler uses
- * libco coroutines that capture their stack context at [loadSystem] time.
+ * called from the same thread (the render thread) because the ares scheduler
+ * uses libco coroutines that capture their stack context at [loadSystem] time.
+ * The Vulkan surface calls ([surfaceCreated]/[presentFrame]/…) run on that same
+ * render thread.
  *
  * Lifecycle:
- *   init() → setupRenderer() → loadSystem() → loadRom() → tick() … → destroy()
+ *   init() → surfaceCreated() → loadSystem() → loadRom() → tick()/presentFrame() … → destroy()
  */
 class AresCore {
 
@@ -20,6 +24,10 @@ class AresCore {
     }
 
     init {
+        // Load the librashader Vulkan runtime first — libretro_emulator.so links
+        // it (NEEDED liblibrashader.so, resolved from jniLibs). Loading it
+        // explicitly first makes a missing/renamed lib fail loudly here.
+        System.loadLibrary("librashader")
         System.loadLibrary("retro_emulator")
     }
 
@@ -33,10 +41,39 @@ class AresCore {
     fun version(): String = nativeVersion()
 
     /**
-     * Bind a GL texture for frame delivery. Must be called from the GL thread
-     * after the texture has been allocated with glTexImage2D.
+     * Bind an Android [Surface] and build the Vulkan swapchain. Render thread only.
+     * Brings up the Vulkan device on first call; survives core stop/init.
      */
-    fun setupRenderer(textureId: Int) = nativeSetupRenderer(textureId)
+    fun surfaceCreated(surface: Surface) = nativeSurfaceCreated(surface)
+
+    /** Recreate the swapchain for a new surface size. Render thread only. */
+    fun surfaceChanged(width: Int, height: Int) = nativeSurfaceChanged(width, height)
+
+    /** Destroy the swapchain + surface (device survives). Render thread only. */
+    fun surfaceDestroyed() = nativeSurfaceDestroyed()
+
+    /** Tear down the Vulkan device + instance. Call once as the render thread exits. */
+    fun releaseRenderer() = nativeReleaseRenderer()
+
+    /**
+     * Upload the latest frame and present it, letterboxed into the given output
+     * rect (surface pixels), via Vulkan. Blocks on vsync (FIFO). Render thread only.
+     */
+    fun presentFrame(outX: Int, outY: Int, outW: Int, outH: Int): Boolean =
+        nativePresentFrame(outX, outY, outW, outH)
+
+    /**
+     * Apply a librashader `.slangp` preset by absolute path; null/empty clears it
+     * (passthrough). Returns false on a load/creation error. Render thread only.
+     */
+    fun setShader(path: String?): Boolean = nativeSetShader(path)
+
+    /**
+     * The last presented frame as raw RGBA8 bytes (row-major, width×height×4),
+     * or null if no frame yet. Width/height come from [getFrameWidth]/[getFrameHeight].
+     * Render thread only.
+     */
+    fun screenshotRGBA(): ByteArray? = nativeScreenshotRGBA()
 
     /**
      * STAGE a system declaration — no core boots until [loadRom] arrives with
@@ -117,8 +154,8 @@ class AresCore {
     fun getCoreBoolean(key: String): Int = nativeGetCoreBoolean(key)
 
     /**
-     * Run one emulated frame. The video callback fires synchronously and uploads
-     * the frame to the texture bound via [setupRenderer]. No-op if no ROM is
+     * Run one emulated frame. The video callback buffers the frame natively; the
+     * render thread uploads + presents it via [presentFrame]. No-op if no ROM is
      * loaded.
      */
     fun tick() = nativeTick()
@@ -276,7 +313,13 @@ class AresCore {
     private external fun nativeDestroy()
     private external fun nativeVersion(): String
 
-    private external fun nativeSetupRenderer(textureId: Int)
+    private external fun nativeSurfaceCreated(surface: Surface)
+    private external fun nativeSurfaceChanged(width: Int, height: Int)
+    private external fun nativeSurfaceDestroyed()
+    private external fun nativeReleaseRenderer()
+    private external fun nativePresentFrame(outX: Int, outY: Int, outW: Int, outH: Int): Boolean
+    private external fun nativeSetShader(path: String?): Boolean
+    private external fun nativeScreenshotRGBA(): ByteArray?
 
     private external fun nativeLoadSystem(systemId: String): Boolean
     private external fun nativeGetSupportedSystems(): String

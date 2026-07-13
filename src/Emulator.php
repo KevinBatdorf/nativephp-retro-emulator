@@ -472,10 +472,10 @@ class Emulator
     }
 
     /**
-     * Load a librashader-compatible shader preset by path. Pass null to clear.
-     *
-     * NOT implemented yet — loading a shader throws NOT_IMPLEMENTED until step
-     * 1.3 lands librashader (clearing succeeds; there is never an active shader).
+     * Apply a librashader `.slangp` preset by path; pass null to clear it
+     * (passthrough). Discover presets with {@see Shaders::in()}. A preset that
+     * fails to load surfaces as an EmulatorError event (SHADER_FAILED), not a
+     * throw — the command stays fluent.
      */
     public function setShader(?string $path): static
     {

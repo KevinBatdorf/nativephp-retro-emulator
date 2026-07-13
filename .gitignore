@@ -26,3 +26,6 @@ android/*.iml
 /build/
 .build/
 .swiftpm/
+# Dev-harness only: prebuilt librashader copied from resources/ by
+# scripts/build_librashader_android.sh (the committed source of truth).
+android/app/src/main/jniLibs/

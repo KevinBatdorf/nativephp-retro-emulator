@@ -37,6 +37,7 @@ enum EmulatorErrorCode: string
     case RewindFailed = 'REWIND_FAILED';
     case InvalidCheat = 'INVALID_CHEAT';
     case CheatFailed = 'CHEAT_FAILED';
+    case ShaderFailed = 'SHADER_FAILED';
 
     // Query failures. READ/WRITE throw on misuse (bad address / no core);
     // SCREENSHOT returns null instead of throwing.
@@ -58,7 +59,7 @@ enum EmulatorErrorCode: string
             self::RomNotFound, self::InvalidRom, self::LoadFailed,
             self::SlotEmpty, self::SaveFailed, self::UndoFailed,
             self::RewindFailed, self::InvalidCheat, self::CheatFailed,
-            self::ScreenshotFailed => false,
+            self::ShaderFailed, self::ScreenshotFailed => false,
             default => true,
         };
     }

@@ -735,10 +735,10 @@ object EmulatorFunctions {
         }
     }
 
-    /** Custom controller mappings are NOT implemented in v1 — hardware mappings are hardwired in EmulatorInput. */
+    /** Custom controller mappings are not implemented yet — hardware mappings are hardwired in EmulatorInput. */
     class SetInputMapping(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> =
-            BridgeResponse.error("NOT_IMPLEMENTED", "custom input mappings are not supported in v1")
+            BridgeResponse.error("NOT_IMPLEMENTED", "custom input mappings are not supported yet")
     }
 
     /**
@@ -761,16 +761,25 @@ object EmulatorFunctions {
     }
 
     /**
-     * Shaders (librashader) are NOT implemented in v1. Passing null/"none"
-     * (a clear) succeeds — there is never an active shader to remove.
+     * Apply a librashader `.slangp` preset by path; null/"none"/"" clears it
+     * (passthrough). The Vulkan filter chain is (re)built on the render thread.
+     * A preset that fails to load surfaces as an EmulatorError (SHADER_FAILED),
+     * so the fluent command still returns cleanly.
      */
     class SetShader(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
-            val path = parameters["path"] as? String
-            if (path == null || path == "none") {
-                return BridgeResponse.success(mapOf("status" to "cleared"))
+            val (entry, err) = entry(parameters)
+            if (err != null) return err
+            val raw = parameters["path"] as? String
+            val path = if (raw == null || raw == "none" || raw.isEmpty()) null else raw
+            return when (entry!!.renderer.syncSetShader(path)) {
+                true -> BridgeResponse.success(
+                    mapOf("status" to if (path == null) "cleared" else "applied"))
+                false -> operationalError(
+                    entry, "SHADER_FAILED", "Failed to load shader preset '${path ?: ""}'")
+                null -> operationalError(
+                    entry, "SHADER_FAILED", "Renderer not ready or shader load timed out")
             }
-            return BridgeResponse.error("NOT_IMPLEMENTED", "shaders are not supported in v1")
         }
     }
 
