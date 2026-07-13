@@ -597,8 +597,9 @@ object EmulatorFunctions {
             if (err != null) return err
             @Suppress("UNCHECKED_CAST")
             val options = paramMap(parameters, "options") ?: emptyMap()
-            val volume  = ((options["volume"]  as? Number)?.toFloat() ?: 100f) / 100f
-            val balance = ((options["balance"] as? Number)?.toFloat() ?: 0f) / 100f
+            // Only the knobs actually sent update; the rest keep their value.
+            val volume  = (options["volume"]  as? Number)?.toFloat()?.div(100f)
+            val balance = (options["balance"] as? Number)?.toFloat()?.div(100f)
             entry!!.renderer.setAudioOptions(volume, balance)
             return BridgeResponse.success(mapOf("status" to "ok"))
         }

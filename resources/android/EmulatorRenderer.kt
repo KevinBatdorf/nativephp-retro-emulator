@@ -834,8 +834,17 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
     // Phase 14 — audio / video options
     // ---------------------------------------------------------------------------
 
-    /** Master volume (0–1) and stereo balance (−1 … +1). Safe from any thread. */
-    fun setAudioOptions(volume: Float, balance: Float) = core.setAudio(volume, balance)
+    // Current audio mix, merged per-key so setVolume() and setBalance() don't
+    // clobber each other — each call updates only the knobs it carries.
+    @Volatile private var audioVolume = 1.0f
+    @Volatile private var audioBalance = 0.0f
+
+    /** Master volume (0–1) and stereo balance (−1 … +1); null keeps the current value. */
+    fun setAudioOptions(volume: Float? = null, balance: Float? = null) {
+        volume?.let { audioVolume = it }
+        balance?.let { audioBalance = it }
+        core.setAudio(audioVolume, audioBalance)
+    }
 
     /**
      * Merge video options onto the GL thread — null keeps the current value.
