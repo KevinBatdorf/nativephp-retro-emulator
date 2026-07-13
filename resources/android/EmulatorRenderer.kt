@@ -787,6 +787,9 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     fun connectDevice(port: Int, device: String): String =
         core.connectDevice(stagedSystemId, port, device)
 
+    /** Logical ports a physical port's device occupies (see [AresCore.devicePorts]). */
+    fun devicePorts(port: Int): IntArray = core.devicePorts(stagedSystemId, port)
+
     /** Set/clear a software button on a port (see [AresCore.pressButton]). Thread-safe. */
     fun pressButton(port: Int, name: String, down: Boolean): String =
         core.pressButton(port, name, down)

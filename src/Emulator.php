@@ -407,21 +407,31 @@ class Emulator
     /**
      * Register (or swap) the controller on a port and return its {@see Controller}
      * handle — controllers are explicit, never auto-allocated. Drive it through
-     * the handle (press/release/setButtons/setAxis/remap). The registration
+     * the handle (press/release/setButtons/setAxis/aimAt/remap). The registration
      * persists across loadRom.
+     *
+     * A device that fans out to several players — the Super Multitap — returns an
+     * array of Controllers, one per player:
+     * `[$p2, $p3, $p4, $p5] = $emu->connectDevice(2, Device::SuperMultitap);`
+     * A normal controller returns a single Controller.
      *
      * An unsupported device, a bad port, or no staged system is a programmer
      * error and throws EmulatorException synchronously.
+     *
+     * @return Controller|Controller[]
      */
-    public function connectDevice(int $port, Device|string $device): Controller
+    public function connectDevice(int $port, Device|string $device): Controller|array
     {
-        $this->call('Emulator.ConnectDevice', [
+        $result = $this->call('Emulator.ConnectDevice', [
             'surface' => $this->surface,
             'port' => $port,
             'device' => $device instanceof Device ? $device->value : $device,
         ]);
 
-        return new Controller($this->surface, $port);
+        $ports = $result['ports'] ?? [$port];
+        $handles = array_map(fn (int $p) => new Controller($this->surface, $p), $ports);
+
+        return count($handles) === 1 ? $handles[0] : $handles;
     }
 
     /**

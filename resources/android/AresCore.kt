@@ -238,6 +238,9 @@ class AresCore {
     fun connectDevice(systemId: String, port: Int, device: String): String =
         nativeConnectDevice(systemId, port, device)
 
+    /** The logical port(s) a physical port's device occupies — 4 for a multitap, else 1. */
+    fun devicePorts(systemId: String, port: Int): IntArray = nativeDevicePorts(systemId, port)
+
     /**
      * Set or clear one software button on a port, resolved against the connected
      * device's own button set (software bits merge with the hardware pad).
@@ -413,6 +416,7 @@ class AresCore {
     ): String
     private external fun nativeGetButtonBit(port: Int, name: String): Int
     private external fun nativeConnectDevice(systemId: String, port: Int, device: String): String
+    private external fun nativeDevicePorts(systemId: String, port: Int): IntArray
     private external fun nativePressButton(port: Int, name: String, down: Boolean): String
     private external fun nativeSetAxis(port: Int, name: String, value: Int): String
     private external fun nativeAimAt(port: Int, x: Float, y: Float): String

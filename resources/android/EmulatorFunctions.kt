@@ -900,7 +900,11 @@ object EmulatorFunctions {
                 ?: return BridgeResponse.error("INVALID_PARAMETERS", "port is required")
             val device = parameters["device"] as? String ?: ""
             return when (val result = entry!!.renderer.connectDevice(port, device)) {
-                "" -> BridgeResponse.success(mapOf("status" to "connected", "port" to port, "device" to device))
+                "" -> BridgeResponse.success(mapOf(
+                    "status" to "connected", "port" to port, "device" to device,
+                    // Logical ports this device occupies (4 for a multitap) — one
+                    // Controller handle each on the PHP side.
+                    "ports" to entry.renderer.devicePorts(port).toList()))
                 "SYSTEM_NOT_LOADED" -> BridgeResponse.error("SYSTEM_NOT_LOADED", "no system is loaded")
                 "UNSUPPORTED_DEVICE" -> BridgeResponse.error("UNSUPPORTED_DEVICE", "device not supported: $device")
                 else -> BridgeResponse.error("INVALID_PARAMETERS", "invalid port for this system")

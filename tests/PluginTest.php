@@ -722,6 +722,17 @@ describe('Typed layer', function () {
         expect($call['payload']['device'])->toBe('Mouse');
     });
 
+    it('connectDevice returns four Controllers for a multitap', function () {
+        $GLOBALS['__nativephp_mock']['Emulator.ConnectDevice'] =
+            '{"status":"connected","port":2,"device":"Super Multitap","ports":[2,3,4,5]}';
+
+        $players = Emulator::surface()->connectDevice(2, Device::SuperMultitap);
+
+        expect($players)->toBeArray()->toHaveCount(4);
+        expect(array_map(fn ($c) => $c->port, $players))->toBe([2, 3, 4, 5]);
+        expect($players[2])->toBeInstanceOf(\KevinBatdorf\RetroEmulator\Controller::class);
+    });
+
     it('the handle presses a button on its port', function () {
         Emulator::surface()->getDevice(1)->press(SfcButton::A);
 

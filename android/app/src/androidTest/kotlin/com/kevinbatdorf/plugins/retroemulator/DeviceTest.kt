@@ -117,6 +117,43 @@ class DeviceTest {
         }
     }
 
+    @Test
+    fun multitapFansOutToFourPlayers() {
+        val core = AresCore()
+        try {
+            assert(core.init())
+            assert(core.loadSystem("sfc"))
+            assert(core.loadRom(makeLoRom(), null) == AresCore.LOAD_OK)
+
+            // Player 1 pad on port 1; multitap on port 2 → players 2,3,4,5.
+            assert(core.connectDevice("sfc", 1, "Gamepad").isEmpty())
+            assert(core.connectDevice("sfc", 2, "Super Multitap").isEmpty()) { "connect multitap" }
+            core.tick()
+
+            assert(core.devicePorts("sfc", 1).contentEquals(intArrayOf(1))) { "port 1 → [1]" }
+            assert(core.devicePorts("sfc", 2).contentEquals(intArrayOf(2, 3, 4, 5))) {
+                "port 2 multitap → [2,3,4,5]"
+            }
+
+            // Every logical player exposes gamepad buttons.
+            for (p in 1..5) {
+                assert(core.getButtonBit(p, "A") == EmulatorInput.BTN_A) { "player $p has A" }
+            }
+
+            // Per-player software input is independent.
+            assert(core.pressButton(4, "Start", true).isEmpty()) { "press player 4 Start" }
+            assert(core.getInputState(4) and EmulatorInput.BTN_START != 0) { "player 4 Start held" }
+            assert(core.getInputState(3) == 0) { "player 3 untouched" }
+
+            // Remap works on a multitap player too.
+            assert(core.setInputMapping(5, arrayOf("A"), arrayOf("B")).isEmpty()) { "remap player 5" }
+            core.tick()
+            assert(core.getButtonBit(5, "A") == EmulatorInput.BTN_B) { "player 5 A remapped to B slot" }
+        } finally {
+            core.destroy()
+        }
+    }
+
     /** Same synthetic ROM-only LoROM as CoreOptionsTest / RemapTest. */
     private fun makeLoRom(): ByteArray {
         val rom = ByteArray(0x8000)

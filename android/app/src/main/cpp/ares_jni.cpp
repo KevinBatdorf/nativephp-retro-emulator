@@ -118,10 +118,11 @@ struct EmulatorState {
     int32_t lightgunX[kMaxPorts];
     int32_t lightgunY[kMaxPorts];
 
-    // Explicit device registration: the device name the dev connected to each
-    // port ("" = nothing plugged in; no input until connectDevice). Persisted
-    // across boots so a re-loadRom re-connects. Written by the bridge thread
-    // under deviceMutex; the GL thread rebuilds the caches when deviceDirty.
+    // Explicit device registration by PHYSICAL port (index 0 = port 1, only the
+    // system's real ports). "" = nothing plugged in. Persisted across boots.
+    // A Super Multitap here fans out to several LOGICAL ports; the logical→device
+    // mapping is derived on demand (see connectedDescriptor). Guarded by
+    // deviceMutex.
     std::string       connectedDevice[kMaxPorts];
     std::mutex        deviceMutex;
     std::atomic<bool> deviceDirty {false};
@@ -411,6 +412,9 @@ static const std::unordered_map<std::string,
             {"Super Scope", {{{"Trigger", 1u << 0}, {"Cursor", 1u << 1},
                               {"Turbo", 1u << 2}, {"Pause", 1u << 3}}, {"X", "Y"}}},
             {"Justifier", {{{"Trigger", 1u << 0}, {"Start", 1u << 3}}, {"X", "Y"}}},
+            // Container device — no inputs of its own; fans out to 4 gamepad
+            // sub-ports (handled specially in applyConnectedDevices).
+            {"Super Multitap", {{}, {}}},
         }},
     };
     return t;
@@ -441,6 +445,11 @@ static std::vector<std::string> supportedDevices(const SystemRegistry::SystemDef
         for (auto& [n, _] : sit->second) v.push_back(n);
     return v;
 }
+
+static const char* kMultitap = "Super Multitap";
+static bool isMultitap(const std::string& name) { return name == kMultitap; }
+// Logical ports a physical port consumes: a multitap fans out to 4, else 1.
+static int portBlock(const std::string& name) { return isMultitap(name) ? 4 : 1; }
 
 // Cache a device's button + axis nodes under `parent` for `port` (1-based).
 static void cacheDevice(ares::Node::Object parent,
@@ -490,15 +499,17 @@ static void applyConnectedDevices() {
     g_state->inputCache.clear();
     g_state->axisCache.clear();
 
-    if (def.ports == 0) {
-        DeviceDescriptor desc;
-        desc.buttons = def.buttons;
+    if (def.ports == 0) {   // built-in controls (Game Boy) — always on logical 1
+        DeviceDescriptor desc; desc.buttons = def.buttons;
         cacheDevice(g_state->root, desc, 1);
         applyInputRemap();
         return;
     }
 
-    for (int p = 1; p <= def.ports && p <= EmulatorState::kMaxPorts; p++) {
+    // Walk physical ports, expanding a multitap into 4 gamepad sub-ports, and
+    // assign consecutive LOGICAL port numbers (a multitap on port 2 → 2,3,4,5).
+    int logical = 1;
+    for (int p = 1; p <= def.ports && logical <= EmulatorState::kMaxPorts; p++) {
         std::string name;
         {
             std::lock_guard<std::mutex> lock(g_state->deviceMutex);
@@ -506,13 +517,32 @@ static void applyConnectedDevices() {
         }
         auto portName = std::string("Controller Port ") + std::to_string(p);
         auto port = g_state->root->find<ares::Node::Port>(portName.c_str());
-        if (!port) continue;
-        if (name.empty()) { port->disconnect(); continue; }
-        DeviceDescriptor desc;
-        if (!resolveDevice(def, name, desc)) continue;
-        port->allocate(name.c_str());
-        port->connect();
-        cacheDevice(port, desc, p);
+
+        if (name.empty()) { if (port) port->disconnect(); logical += 1; continue; }
+        if (!port) { logical += portBlock(name); continue; }
+
+        if (isMultitap(name)) {
+            port->allocate(kMultitap);
+            port->connect();
+            auto tap = port->connected();   // the Super Multitap peripheral
+            DeviceDescriptor gp; gp.buttons = def.buttons;   // each sub-port is a gamepad
+            for (int i = 1; i <= 4 && logical <= EmulatorState::kMaxPorts; i++, logical++) {
+                auto sub = tap ? tap->find<ares::Node::Port>(
+                    (std::string("Controller Port ") + std::to_string(i)).c_str()) : nullptr;
+                if (!sub) continue;
+                sub->allocate("Gamepad");
+                sub->connect();
+                cacheDevice(sub, gp, logical);
+            }
+        } else {
+            DeviceDescriptor desc;
+            if (resolveDevice(def, name, desc)) {
+                port->allocate(name.c_str());
+                port->connect();
+                cacheDevice(port, desc, logical);
+            }
+            logical += 1;
+        }
     }
     applyInputRemap();
 }
@@ -1035,6 +1065,9 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetInputState(
                            | g_state->swMask[i].load(std::memory_order_relaxed));
 }
 
+// Defined below with the other input helpers; used by the remap validation.
+static bool connectedDescriptor(int port, DeviceDescriptor& out);
+
 /**
  * Merge a per-port controller remap. `emulated[i]` is a core button (as named
  * by GetPorts); `source[i]` is the positional slot that should drive it — both
@@ -1055,23 +1088,12 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetInputMapping(
     if (!g_state || !g_state->system) return ret("SYSTEM_NOT_LOADED");
     auto& def = *g_state->system;
 
-    int maxPort = def.ports == 0 ? 1 : std::min(def.ports, EmulatorState::kMaxPorts);
-    if (port < 1 || port > maxPort) return ret("INVALID_PARAMETERS");
+    if (port < 1 || port > EmulatorState::kMaxPorts) return ret("INVALID_PARAMETERS");
 
-    // Remap names belong to the device connected on this port.
-    std::string devName;
-    {
-        std::lock_guard<std::mutex> lock(g_state->deviceMutex);
-        devName = def.ports == 0 && def.device == nullptr
-            ? std::string()               // built-in controls: use def.buttons below
-            : g_state->connectedDevice[port - 1];
-    }
+    // Remap names belong to the device at this logical port (multitap-aware).
     DeviceDescriptor desc;
-    if (def.ports == 0) {
-        desc.buttons = def.buttons;       // built-in-controls system (Game Boy)
-    } else if (devName.empty() || !resolveDevice(def, devName, desc)) {
+    if (!connectedDescriptor(port, desc))
         return ret("INVALID_PARAMETERS"); // no controller registered on this port
-    }
 
     jsize count = emulated ? env->GetArrayLength(emulated) : 0;
     if (!source || env->GetArrayLength(source) != count) return ret("INVALID_PARAMETERS");
@@ -1143,8 +1165,10 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetAxisAccum(
     return it == m.end() ? 0 : static_cast<jint>(it->second);
 }
 
-// Resolve the descriptor of the device connected to `port` (or the built-in
-// controls for a ports==0 system). Returns false if nothing is connected.
+// Resolve the descriptor of the device at a LOGICAL port (a multitap sub-port
+// reads "Gamepad"), or the built-in controls for a ports==0 system. Computed
+// on-demand from the synchronously-set connectedDevice[] so it never races the
+// deferred allocate. Returns false if nothing is connected there.
 static bool connectedDescriptor(int port, DeviceDescriptor& out) {
     if (!g_state || !g_state->system) return false;
     auto& def = *g_state->system;
@@ -1152,8 +1176,15 @@ static bool connectedDescriptor(int port, DeviceDescriptor& out) {
     std::string name;
     {
         std::lock_guard<std::mutex> lock(g_state->deviceMutex);
-        if (port < 1 || port > EmulatorState::kMaxPorts) return false;
-        name = g_state->connectedDevice[port - 1];
+        int logical = 1;
+        for (int p = 1; p <= def.ports && logical <= EmulatorState::kMaxPorts; p++) {
+            auto& dev = g_state->connectedDevice[p - 1];
+            int block = portBlock(dev);
+            for (int i = 0; i < block && logical <= EmulatorState::kMaxPorts; i++, logical++) {
+                if (logical == port) { name = isMultitap(dev) ? std::string("Gamepad") : dev; }
+            }
+            if (!name.empty()) break;
+        }
     }
     if (name.empty()) return false;
     return resolveDevice(def, name, out);
@@ -1203,6 +1234,37 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeConnectDevice(
     }
     g_state->deviceDirty.store(true, std::memory_order_relaxed);
     return ret("");
+}
+
+/**
+ * The LOGICAL port(s) a physical port's registered device occupies — one for a
+ * normal controller, four for a Super Multitap (its four players). Computed from
+ * the current registrations so the bridge can hand back one Controller per
+ * logical port. Empty if the system isn't found.
+ */
+JNIEXPORT jintArray JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeDevicePorts(
+    JNIEnv* env, jobject, jstring systemIdStr, jint physical)
+{
+    std::vector<jint> out;
+    auto* def = SystemRegistry::find(jstringToString(env, systemIdStr));
+    if (def) {
+        int logical = 1;
+        for (int p = 1; p <= def->ports && logical <= EmulatorState::kMaxPorts; p++) {
+            std::string name;
+            {
+                std::lock_guard<std::mutex> lock(g_state->deviceMutex);
+                name = g_state->connectedDevice[p - 1];
+            }
+            int block = portBlock(name);
+            for (int i = 0; i < block && logical <= EmulatorState::kMaxPorts; i++, logical++) {
+                if (p == physical) out.push_back(logical);
+            }
+        }
+    }
+    jintArray arr = env->NewIntArray((jsize)out.size());
+    if (!out.empty()) env->SetIntArrayRegion(arr, 0, (jsize)out.size(), out.data());
+    return arr;
 }
 
 /**
@@ -1572,24 +1634,32 @@ static std::string buildPortsJson() {
     }
 
     std::string json = "[";
-    int maxPort = std::min(def.ports, EmulatorState::kMaxPorts);
-    for (int p = 1; p <= maxPort; p++) {
+    auto emit = [&](int lport, const std::string& devName, const DeviceDescriptor* d) {
+        if (json.size() > 1) json += ",";
+        json += "{\"port\":" + std::to_string(lport)
+              + ",\"device\":" + (devName.empty() ? "null" : "\"" + devName + "\"")
+              + ",\"buttons\":" + (d ? jsonStringArray(orderedButtons(*d)) : "[]")
+              + ",\"axes\":" + (d ? jsonStringArray(d->axes) : "[]")
+              + ",\"supported\":" + supported + "}";
+    };
+
+    int logical = 1;
+    for (int p = 1; p <= def.ports && logical <= EmulatorState::kMaxPorts; p++) {
         std::string name;
         {
             std::lock_guard<std::mutex> lock(g_state->deviceMutex);
             name = g_state->connectedDevice[p - 1];
         }
-        std::string deviceJson = "null", buttons = "[]", axes = "[]";
-        DeviceDescriptor desc;
-        if (!name.empty() && resolveDevice(def, name, desc)) {
-            deviceJson = "\"" + name + "\"";
-            buttons = jsonStringArray(orderedButtons(desc));
-            axes = jsonStringArray(desc.axes);
+        if (isMultitap(name)) {   // fans out to 4 gamepad logical ports
+            DeviceDescriptor gp; gp.buttons = def.buttons;
+            for (int i = 0; i < 4 && logical <= EmulatorState::kMaxPorts; i++, logical++)
+                emit(logical, "Gamepad", &gp);
+        } else {
+            DeviceDescriptor desc;
+            bool ok = !name.empty() && resolveDevice(def, name, desc);
+            emit(logical, ok ? name : std::string(), ok ? &desc : nullptr);
+            logical++;
         }
-        if (json.size() > 1) json += ",";
-        json += "{\"port\":" + std::to_string(p) + ",\"device\":" + deviceJson
-              + ",\"buttons\":" + buttons + ",\"axes\":" + axes
-              + ",\"supported\":" + supported + "}";
     }
     return json + "]";
 }
