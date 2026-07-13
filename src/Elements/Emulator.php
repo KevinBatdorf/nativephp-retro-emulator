@@ -156,8 +156,9 @@ class Emulator extends Element
             unset($config['inputCapture']);
         }
 
+        // EDGE props are scalar-only (no nested map), so config crosses as JSON.
         if ($config !== []) {
-            $props['config'] = $config;
+            $props['config'] = json_encode($config);
         }
         if ($this->rom !== null) {
             $props['rom'] = $this->rom;

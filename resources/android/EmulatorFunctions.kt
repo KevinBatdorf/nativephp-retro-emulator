@@ -58,6 +58,69 @@ object EmulatorFunctions {
         Log.d(TAG, "Surface unregistered: $name")
     }
 
+    /**
+     * Apply a `<native:emulator>` element's declarative setup — the same
+     * staging → boot path Emulator::loadSystem() / loadRom() drive imperatively,
+     * routed through the real bridge appliers so behavior is identical by
+     * construction. [configJson] is the merged effective config (global ⊕
+     * system, inputCapture already hoisted onto the surface) as a JSON object
+     * string. Runs off the caller's thread: LoadRom reads the ROM file inline
+     * and the appliers block on the GL thread.
+     */
+    @JvmStatic
+    fun applyDeclarativeSetup(surface: String, system: String, configJson: String, rom: String) {
+        if (system.isEmpty()) return
+        val activity = surfaces[surface]?.activity ?: return
+
+        Thread {
+            val config = if (configJson.isNotEmpty()) {
+                runCatching { JSONObject(configJson) }.getOrDefault(JSONObject())
+            } else {
+                JSONObject()
+            }
+
+            // Stage the system with its playback/system config — LoadSystem
+            // reads the staged + core-toggle keys and ignores the presentation
+            // keys, which fan out to their own channels below.
+            LoadSystem(activity).execute(params(JSONObject()
+                .put("surface", surface).put("system", system).put("config", config)))
+
+            if (surfaces[surface]?.renderer?.stagedSystemId != system) {
+                Log.e(TAG, "Declarative boot: system '$system' did not stage on '$surface'")
+                return@Thread
+            }
+
+            // Fan the presentation/AV knobs out, mirroring applyPresentation().
+            // SetVideo null-merges so it's safe to call unconditionally; SetAudio
+            // defaults the missing key, so gate it on an actual audio knob.
+            SetVideo(activity).execute(params(JSONObject()
+                .put("surface", surface).put("options", config)))
+            if (config.has("volume") || config.has("balance")) {
+                SetAudio(activity).execute(params(JSONObject()
+                    .put("surface", surface).put("options", config)))
+            }
+            if (config.has("rumble")) {
+                SetRumble(activity).execute(params(JSONObject()
+                    .put("surface", surface).put("enabled", config.getBoolean("rumble"))))
+            }
+            if (config.has("shader")) {
+                SetShader(activity).execute(params(JSONObject()
+                    .put("surface", surface).put("path", config.getString("shader"))))
+            }
+
+            // Boot the staged system with the ROM (every load is a fresh boot).
+            if (rom.isNotEmpty()) {
+                LoadRom(activity).execute(params(JSONObject()
+                    .put("surface", surface).put("path", rom)))
+            }
+        }.also { it.name = "emu-declarative-boot-$surface"; it.start() }
+    }
+
+    // Unmarshal a payload exactly as the bridge router does, so the appliers
+    // receive params identical to a real nativephp_call.
+    private fun params(payload: JSONObject): Map<String, Any> =
+        BridgeParams.unmarshalLikeBridgeRouter(payload.toString())
+
     private fun surface(parameters: Map<String, Any>): String =
         parameters["surface"] as? String ?: "main"
 

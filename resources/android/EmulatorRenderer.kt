@@ -59,6 +59,15 @@ class EmulatorRenderer(context: Context) : GLSurfaceView(context) {
     private val audio = EmulatorAudio(core)
     val input = EmulatorInput(core)
 
+    // Set when this surface installs a global gamepad capturer on the host
+    // window (input-capture="global"); invoked on release to restore the
+    // original window callback.
+    var windowCaptureRestore: (() -> Unit)? = null
+
+    // Last declarative setup (system/config/rom) applied on mount, so a
+    // recomposition only re-stages when the element's props actually change.
+    var declaredBootKey: String? = null
+
     private val vibrator: Vibrator? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
     } else {

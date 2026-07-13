@@ -66,8 +66,19 @@ describe('EDGE element contract', function () {
             ->toArray(new CallbackRegistry);
 
         expect($node['props']['system'])->toBe('sfc');
-        expect($node['props']['config'])->toBe(['volume' => 80]);
+        expect(json_decode($node['props']['config'], true))->toBe(['volume' => 80]);
         expect($node['props']['rom'])->toBe('/roms/game.sfc');
+    });
+
+    it('serializes config as a wire-safe JSON string, not a nested map', function () {
+        // The EDGE wire format carries only scalar props; a nested array would
+        // never reach native, so config must cross as a string.
+        $config = (new EmulatorElement)
+            ->config(new Config(volume: 80))
+            ->toArray(new CallbackRegistry)['props']['config'];
+
+        expect($config)->toBeString();
+        expect(json_decode($config, true))->toBe(['volume' => 80]);
     });
 
     it('merges the global config under the system config, system winning', function () {
@@ -76,7 +87,7 @@ describe('EDGE element contract', function () {
             ->systemConfig(new SfcConfig(volume: 50, deepBlackBoost: true))
             ->toArray(new CallbackRegistry);
 
-        expect($node['props']['config'])->toBe([
+        expect(json_decode($node['props']['config'], true))->toBe([
             'luminance' => 100,
             'volume' => 50,
             'deepBlackBoost' => true,
@@ -89,7 +100,7 @@ describe('EDGE element contract', function () {
             ->toArray(new CallbackRegistry);
 
         expect($node['props']['input_capture'])->toBe('global');
-        expect($node['props']['config'])->toBe(['volume' => 70]);
+        expect(json_decode($node['props']['config'], true))->toBe(['volume' => 70]);
     });
 
     it('maps object config attributes to serialized props', function () {
@@ -103,7 +114,7 @@ describe('EDGE element contract', function () {
 
         $props = $element->toArray(new CallbackRegistry)['props'];
         expect($props['system'])->toBe('gb');
-        expect($props['config'])->toBe(['rewind' => true, 'colorEmulation' => true]);
+        expect(json_decode($props['config'], true))->toBe(['rewind' => true, 'colorEmulation' => true]);
         expect($props['rom'])->toBe('/roms/x.gb');
     });
 });
@@ -149,7 +160,7 @@ describe('Blade component emits the element', function () {
             : collect($node['children'] ?? [])->firstWhere('type', 'emulator');
 
         expect($emulator['props']['system'])->toBe('gb');
-        expect($emulator['props']['config'])->toBe(['volume' => 60]);
+        expect(json_decode($emulator['props']['config'], true))->toBe(['volume' => 60]);
         expect($emulator['props']['rom'])->toBe('/roms/y.gb');
     });
 });
