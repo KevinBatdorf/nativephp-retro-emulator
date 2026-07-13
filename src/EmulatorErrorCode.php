@@ -22,8 +22,8 @@ enum EmulatorErrorCode: string
     case UnknownButton = 'UNKNOWN_BUTTON';
     case RewindDisabled = 'REWIND_DISABLED';
 
-    // Transitional: a feature the API exposes but native hasn't wired yet.
-    // Removed when shaders (step 1.3) and input remapping (step 1.4) land.
+    // Transitional, iOS-only: setShader and setInputMapping are live on Android
+    // but await the iOS host renderer (step 3). Removed when that lands.
     case NotImplemented = 'NOT_IMPLEMENTED';
 
     // Operational outcomes — the call was valid but the world said no.

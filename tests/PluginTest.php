@@ -245,12 +245,15 @@ describe('Error handling', function () {
 
     it('error codes match the native source', function () {
         $sources = file_get_contents(dirname(__DIR__).'/resources/android/EmulatorFunctions.kt')
-            .file_get_contents(dirname(__DIR__).'/resources/android/EmulatorRenderer.kt');
+            .file_get_contents(dirname(__DIR__).'/resources/android/EmulatorRenderer.kt')
+            .file_get_contents(dirname(__DIR__).'/resources/ios/EmulatorFunctions.swift');
 
-        // Codes surface three ways: a bridge error (code is arg 1), a direct
-        // onError (arg 1), or operationalError(entry, code, …) (arg 2).
+        // Codes surface as a bridge error (code is arg 1, or iOS's `code:`
+        // label), a direct onError (arg 1), or operationalError(entry, code, …)
+        // (arg 2). The enum is the union across both platforms — NOT_IMPLEMENTED
+        // is iOS-only until the iOS host renderer lands (step 3).
         preg_match_all(
-            '/(?:BridgeResponse\.error|\.onError)\s*\(\s*"([A-Z_]+)"|operationalError\([^,]+,\s*"([A-Z_]+)"/s',
+            '/(?:BridgeResponse\.error|\.onError)\s*\(\s*(?:code:\s*)?"([A-Z_]+)"|operationalError\([^,]+,\s*"([A-Z_]+)"/s',
             $sources,
             $m,
         );
@@ -280,6 +283,14 @@ describe('Error handling', function () {
             '{"status":"error","code":"UNSUPPORTED_SYSTEM","message":"nope"}';
 
         expect(fn () => Emulator::surface('main')->loadSystem('xyz'))
+            ->toThrow(EmulatorException::class);
+    });
+
+    it('throws when setInputMapping names an unknown button', function () {
+        $GLOBALS['__nativephp_mock']['Emulator.SetInputMapping'] =
+            '{"status":"error","code":"UNKNOWN_BUTTON","message":"Unknown button: q"}';
+
+        expect(fn () => Emulator::surface('main')->setInputMapping(1, ['q' => 'a']))
             ->toThrow(EmulatorException::class);
     });
 
@@ -691,6 +702,22 @@ describe('Typed layer', function () {
 
         $call = collect($GLOBALS['__nativephp_calls'])->firstWhere('function', 'Emulator.SetButtons');
         expect($call['payload']['state'])->toBe(['Up' => true, 'A' => true]);
+    });
+
+    it('setInputMapping sends the port and mapping merge', function () {
+        Emulator::surface()->setInputMapping(1, ['a' => 'b', 'b' => 'a']);
+
+        $call = collect($GLOBALS['__nativephp_calls'])->firstWhere('function', 'Emulator.SetInputMapping');
+        expect($call['payload']['port'])->toBe(1);
+        expect($call['payload']['mappings'])->toBe(['a' => 'b', 'b' => 'a']);
+    });
+
+    it('setInputMapping sends an empty map to reset a port', function () {
+        Emulator::surface()->setInputMapping(2, []);
+
+        $call = collect($GLOBALS['__nativephp_calls'])->firstWhere('function', 'Emulator.SetInputMapping');
+        expect($call['payload']['port'])->toBe(2);
+        expect($call['payload']['mappings'])->toBe([]);
     });
 
     it('watchMemory sends a single address entry with length', function () {

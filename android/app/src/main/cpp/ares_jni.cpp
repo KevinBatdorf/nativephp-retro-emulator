@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <map>
@@ -82,13 +83,27 @@ struct EmulatorState {
     std::atomic<uint32_t> inputMaskPort2 {0};
 
     // Cached mapping from ares button node → (port mask pointer, bit).
-    // Built once on the GL thread after nativeLoadSystem; read-only thereafter.
+    // Built on the GL thread after nativeLoadRom. `bit` is the positional slot
+    // the node reads; `defaultBit` is its unremapped value, kept so a remap can
+    // be recomputed against defaults. Mutated only on the GL thread (build +
+    // applyInputRemap), read on the GL thread (Platform::input) — no atomics.
     struct CachedButton {
         ares::Node::Input::Button node;
         std::atomic<uint32_t>*   mask;
         uint32_t                 bit;
+        uint32_t                 defaultBit;
     };
     std::vector<CachedButton> inputCache;
+
+    // Per-port controller remap: lowercased core-button name → the positional
+    // bit that button should read (see def.buttons for the slot vocabulary).
+    // Positional bits are system-independent, so a remap persists across a
+    // system change and is re-applied to whatever loads. Written by the bridge
+    // thread under inputRemapMutex; consumed on the GL thread when
+    // inputRemapDirty is set (top of nativeTick) or right after cacheButtons.
+    std::unordered_map<int, std::unordered_map<std::string, uint32_t>> inputRemap;
+    std::mutex        inputRemapMutex;
+    std::atomic<bool> inputRemapDirty {false};
 
     // Phase 7 — emulator control.
     std::atomic<bool> paused {false};
@@ -335,8 +350,43 @@ static void cacheButtons(ares::Node::Object parent,
     for (auto& btn : parent->find<ares::Node::Input::Button>()) {
         auto it = def.buttons.find(std::string((const char*)btn->name()));
         if (it != def.buttons.end()) {
-            g_state->inputCache.push_back({btn, &mask, it->second});
+            g_state->inputCache.push_back({btn, &mask, it->second, it->second});
         }
+    }
+}
+
+static std::string toLower(std::string s) {
+    for (auto& c : s) c = (char)std::tolower((unsigned char)c);
+    return s;
+}
+
+// The 1-based port a cache entry belongs to (built-in controls count as port 1).
+static int portOfMask(const std::atomic<uint32_t>* mask) {
+    return mask == &g_state->inputMaskPort2 ? 2 : 1;
+}
+
+// Default positional bit for a button name, case-insensitively, or false if the
+// staged system has no such button.
+static bool bitForButtonName(const SystemRegistry::SystemDef& def,
+                             const std::string& name, uint32_t& out) {
+    auto lname = toLower(name);
+    for (auto& [key, bit] : def.buttons) {
+        if (toLower(key) == lname) { out = bit; return true; }
+    }
+    return false;
+}
+
+// Recompute every cached button's read-bit from its default, overridden by the
+// stored per-port remap. GL thread only (cached.bit is not atomic).
+static void applyInputRemap() {
+    if (!g_state) return;
+    std::lock_guard<std::mutex> lock(g_state->inputRemapMutex);
+    for (auto& cached : g_state->inputCache) {
+        cached.bit = cached.defaultBit;
+        auto pit = g_state->inputRemap.find(portOfMask(cached.mask));
+        if (pit == g_state->inputRemap.end()) continue;
+        auto it = pit->second.find(toLower(std::string((const char*)cached.node->name())));
+        if (it != pit->second.end()) cached.bit = it->second;
     }
 }
 
@@ -626,6 +676,11 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadRom(
         }
     }
 
+    // Re-apply any stored controller remap onto the fresh cache (positional
+    // bits persist across boots and system changes).
+    applyInputRemap();
+    g_state->inputRemapDirty.store(false, std::memory_order_relaxed);
+
     // Desktop applies its overscan setting to every screen on load
     // (emulator.cpp:137 → setOverscan scan, emulator.cpp:242-246). Cores
     // consult screen->overscan() per frame, so this takes effect immediately.
@@ -695,6 +750,14 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeTick(
     JNIEnv*, jobject)
 {
     if (!g_state || !g_state->romLoaded) return;
+
+    // Consume a pending controller remap on the GL thread (the bridge thread
+    // only stored it + flagged). Runs even while paused so it takes effect on
+    // resume; the read side (Platform::input) is this same thread.
+    if (g_state->inputRemapDirty.exchange(false, std::memory_order_relaxed)) {
+        applyInputRemap();
+    }
+
     if (!g_state->paused.load(std::memory_order_relaxed)) {
         // Gate DRC off during fast-forward, porting desktop's Program::event
         // FastForwardOn -> ruby::audio.setDynamic(false) (platform.cpp:29-45):
@@ -854,6 +917,84 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetInputState(
     if (port == 1) return static_cast<jint>(g_state->inputMaskPort1.load(std::memory_order_relaxed));
     if (port == 2) return static_cast<jint>(g_state->inputMaskPort2.load(std::memory_order_relaxed));
     return 0;
+}
+
+/**
+ * Merge a per-port controller remap. `emulated[i]` is a core button (as named
+ * by GetPorts); `source[i]` is the positional slot that should drive it — both
+ * validated against the staged system. Stores the resolved positional bits and
+ * flags the GL thread to re-apply them onto the live cache on its next tick.
+ * An empty pair of arrays resets the port to defaults.
+ *
+ * Returns "" on success, else a category-A error string for the bridge to raise
+ * synchronously: "SYSTEM_NOT_LOADED", "INVALID_PARAMETERS", or
+ * "UNKNOWN_BUTTON:<name>". Validation is authoritative here (native owns the
+ * per-system def.buttons); the bridge thread never touches the cache directly.
+ */
+JNIEXPORT jstring JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetInputMapping(
+    JNIEnv* env, jobject, jint port, jobjectArray emulated, jobjectArray source)
+{
+    auto ret = [&](const char* s) { return env->NewStringUTF(s); };
+    if (!g_state || !g_state->system) return ret("SYSTEM_NOT_LOADED");
+    auto& def = *g_state->system;
+
+    // Port 1 always valid; port 2 only when the system exposes it.
+    int maxPort = def.ports >= 2 ? 2 : 1;
+    if (port < 1 || port > maxPort) return ret("INVALID_PARAMETERS");
+
+    jsize count = emulated ? env->GetArrayLength(emulated) : 0;
+    if (!source || env->GetArrayLength(source) != count) return ret("INVALID_PARAMETERS");
+
+    // Resolve+validate the whole batch before mutating any state, so a bad entry
+    // leaves the existing remap untouched.
+    std::unordered_map<std::string, uint32_t> resolved;
+    for (jsize i = 0; i < count; i++) {
+        auto emu = (jstring)env->GetObjectArrayElement(emulated, i);
+        auto src = (jstring)env->GetObjectArrayElement(source, i);
+        auto emuName = jstringToString(env, emu);
+        auto srcName = jstringToString(env, src);
+        env->DeleteLocalRef(emu);
+        env->DeleteLocalRef(src);
+
+        uint32_t emuBit, srcBit;
+        if (!bitForButtonName(def, emuName, emuBit))
+            return ret((std::string("UNKNOWN_BUTTON:") + emuName).c_str());
+        if (!bitForButtonName(def, srcName, srcBit))
+            return ret((std::string("UNKNOWN_BUTTON:") + srcName).c_str());
+        resolved[toLower(emuName)] = srcBit;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_state->inputRemapMutex);
+        if (count == 0) {
+            g_state->inputRemap.erase(port);
+        } else {
+            auto& portMap = g_state->inputRemap[port];
+            for (auto& [name, bit] : resolved) portMap[name] = bit;
+        }
+    }
+    g_state->inputRemapDirty.store(true, std::memory_order_relaxed);
+    return ret("");
+}
+
+/**
+ * The positional bit a core button currently reads (post-remap), or -1 if the
+ * staged system has no such button / nothing is loaded. Test/diagnostic seam;
+ * reflects the last applied remap (call tick() after SetInputMapping to apply).
+ */
+JNIEXPORT jint JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetButtonBit(
+    JNIEnv* env, jobject, jint port, jstring nameStr)
+{
+    if (!g_state) return -1;
+    auto name = toLower(jstringToString(env, nameStr));
+    for (auto& cached : g_state->inputCache) {
+        if (portOfMask(cached.mask) != port) continue;
+        if (toLower(std::string((const char*)cached.node->name())) == name)
+            return static_cast<jint>(cached.bit);
+    }
+    return -1;
 }
 
 // Phase 7 — pause / resume / stop ------------------------------------------

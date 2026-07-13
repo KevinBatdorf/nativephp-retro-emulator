@@ -547,11 +547,12 @@ enum EmulatorFunctions {
         }
     }
 
-    /// Custom controller mappings are not implemented yet — hardware
-    /// mappings are hardwired in EmulatorInput.
+    /// Per-port controller remapping is live on Android; on iOS it arrives with
+    /// the iOS host renderer (step 3). Until then hardware mappings are hardwired
+    /// in EmulatorInput.
     class SetInputMapping: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
-            BridgeResponse.error(code: "NOT_IMPLEMENTED", message: "custom input mappings are not supported yet")
+            BridgeResponse.error(code: "NOT_IMPLEMENTED", message: "iOS input remapping arrives with the iOS renderer (step 3)")
         }
     }
 

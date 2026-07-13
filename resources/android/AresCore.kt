@@ -205,6 +205,27 @@ class AresCore {
      */
     fun getInputState(port: Int): Int = nativeGetInputState(port)
 
+    /**
+     * Merge a per-port controller remap. Each `emulated[i]` core button (named
+     * as [getPortsJson] reports) is set to read the positional slot named by
+     * `source[i]`; both are validated against the staged system. Positional bits
+     * are system-independent, so a remap persists across boots and system
+     * changes. Passing empty arrays resets the port to defaults. Thread-safe;
+     * applied on the render thread's next tick.
+     *
+     * @return "" on success, or a category-A error string:
+     *   "SYSTEM_NOT_LOADED", "INVALID_PARAMETERS", or "UNKNOWN_BUTTON:<name>".
+     */
+    fun setInputMapping(port: Int, emulated: Array<String>, source: Array<String>): String =
+        nativeSetInputMapping(port, emulated, source)
+
+    /**
+     * The positional bit a core button currently reads after any remap, or -1
+     * if the staged system has no such button. Test/diagnostic seam; call
+     * [tick] after [setInputMapping] so the pending remap is applied first.
+     */
+    fun getButtonBit(port: Int, name: String): Int = nativeGetButtonBit(port, name)
+
     /** Pause emulation — tick() becomes a no-op until resume(). Safe to call from any thread. */
     fun pause() = nativePause()
 
@@ -348,6 +369,10 @@ class AresCore {
 
     private external fun nativeSetInputState(port: Int, buttons: Int)
     private external fun nativeGetInputState(port: Int): Int
+    private external fun nativeSetInputMapping(
+        port: Int, emulated: Array<String>, source: Array<String>,
+    ): String
+    private external fun nativeGetButtonBit(port: Int, name: String): Int
 
     private external fun nativePause()
     private external fun nativeResume()

@@ -735,10 +735,47 @@ object EmulatorFunctions {
         }
     }
 
-    /** Custom controller mappings are not implemented yet — hardware mappings are hardwired in EmulatorInput. */
+    /**
+     * Merge a per-port controller remap: each `emulated => source` pair sets the
+     * in-game button `emulated` to read the positional input of `source`. Names
+     * are validated natively against the staged system; an empty map resets the
+     * port to defaults. Validation failures are category-A programmer errors the
+     * PHP wrapper raises synchronously.
+     */
     class SetInputMapping(private val activity: FragmentActivity) : BridgeFunction {
-        override fun execute(parameters: Map<String, Any>): Map<String, Any> =
-            BridgeResponse.error("NOT_IMPLEMENTED", "custom input mappings are not supported yet")
+        override fun execute(parameters: Map<String, Any>): Map<String, Any> {
+            val (entry, err) = entry(parameters)
+            if (err != null) return err
+            val port = (parameters["port"] as? Number)?.toInt()
+                ?: return BridgeResponse.error("INVALID_PARAMETERS", "port is required")
+            // PHP encodes an empty map as a JSON array ([]); accept it as the
+            // reset-to-defaults case rather than a malformed map. (The raw value
+            // is an org.json JSONArray, so read it through paramList, not a cast.)
+            val emptyReset = paramList(parameters, "mappings")?.isEmpty() == true
+            val mappings = paramMap(parameters, "mappings")
+                ?: if (emptyReset) emptyMap()
+                   else return BridgeResponse.error("INVALID_PARAMETERS", "mappings map is required")
+
+            val pairs = mappings.entries.toList()
+            val emulated = pairs.map { it.key }.toTypedArray()
+            val source = pairs.map { it.value.toString() }.toTypedArray()
+
+            val result = entry!!.renderer.setInputMapping(port, emulated, source)
+            if (result.isEmpty()) {
+                return BridgeResponse.success(mapOf("status" to "mapped", "count" to emulated.size))
+            }
+            // Native returns "CODE" or "CODE:detail" — re-raise as a bridge error
+            // (code held in a variable so it stays off the enum drift scan).
+            val code = result.substringBefore(':')
+            val detail = result.substringAfter(':', "")
+            val message = when (code) {
+                "SYSTEM_NOT_LOADED" -> "no system is loaded"
+                "INVALID_PARAMETERS" -> "invalid port or mismatched mappings"
+                "UNKNOWN_BUTTON" -> "Unknown button: $detail"
+                else -> result
+            }
+            return BridgeResponse.error(code, message)
+        }
     }
 
     /**

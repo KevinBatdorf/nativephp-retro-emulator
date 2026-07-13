@@ -766,6 +766,19 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     /** Whether this device can rumble at all. */
     fun hasVibrator(): Boolean = vibrator?.hasVibrator() == true
 
+    /**
+     * Merge a per-port controller remap (see [AresCore.setInputMapping]).
+     * Native stores it under a lock and applies it on the render thread, so this
+     * is safe to call from the bridge thread. Returns "" on success or a
+     * category-A error string ("SYSTEM_NOT_LOADED" / "INVALID_PARAMETERS" /
+     * "UNKNOWN_BUTTON:<name>").
+     */
+    fun setInputMapping(port: Int, emulated: Array<String>, source: Array<String>): String =
+        core.setInputMapping(port, emulated, source)
+
+    /** Test seam: the positional bit a core button currently reads (see [AresCore.getButtonBit]). */
+    fun getButtonBit(port: Int, name: String): Int = core.getButtonBit(port, name)
+
     private fun applyRumble(state: Int) {
         val v = vibrator ?: return
         if (state == 0) {

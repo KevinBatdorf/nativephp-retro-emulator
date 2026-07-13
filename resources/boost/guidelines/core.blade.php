@@ -75,9 +75,10 @@ public function onMemoryChanged(string $surface, int $address, int $oldValue, in
 </code-snippet>
 @endverbatim
 
-### Not implemented yet
+### Platform notes
 
-`setInputMapping` (custom per-port input remapping) returns a `NOT_IMPLEMENTED` bridge
-error — do not generate code that relies on it. Everything else the API exposes works,
-including `setShader`, which applies librashader `.slangp` presets (Android; iOS lands with
-the iOS renderer). A preset that fails to load reports an `EmulatorError` (`SHADER_FAILED`).
+Everything the API exposes works on Android. `setShader` applies librashader
+`.slangp` presets (a preset that fails to load reports an `EmulatorError`,
+`SHADER_FAILED`); `setInputMapping` merges a per-port controller remap
+(`['a' => 'b', 'b' => 'a']` swaps A and B; unknown buttons throw). On iOS both
+of these await the iOS host renderer and return `NOT_IMPLEMENTED` until then.

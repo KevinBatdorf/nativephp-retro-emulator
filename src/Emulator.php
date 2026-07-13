@@ -436,12 +436,18 @@ class Emulator
     }
 
     /**
-     * Merge controller input mappings for a port.
+     * Merge a per-port controller remap. Each `emulated => source` pair points
+     * an in-game button at a different positional input: `['a' => 'b', 'b' =>
+     * 'a']` swaps A and B on the port. Keys and values use the button names
+     * getPorts() reports; the mapping composes on top of the per-system defaults
+     * (including the Xbox↔Nintendo face swap). Only listed buttons change; pass
+     * an empty array to reset the port to defaults. Positional slots are
+     * system-independent, so a remap persists across a system change.
      *
-     * NOT implemented yet — the bridge throws NOT_IMPLEMENTED until step 1.4
-     * lands real per-port remapping.
+     * An unknown button name, a bad port, or no staged system is a programmer
+     * error and throws EmulatorException synchronously.
      *
-     * @param  array<string, string>  $mappings
+     * @param  array<string, string>  $mappings  emulated button => source input
      */
     public function setInputMapping(int $port, array $mappings): static
     {
