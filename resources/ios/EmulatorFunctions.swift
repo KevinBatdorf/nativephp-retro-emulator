@@ -556,6 +556,22 @@ enum EmulatorFunctions {
         }
     }
 
+    /// Device selection (mouse / light-guns / multitap) is live on Android; on
+    /// iOS it arrives with the iOS host renderer (step 3).
+    class ConnectDevice: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            BridgeResponse.error(code: "NOT_IMPLEMENTED", message: "iOS device selection arrives with the iOS renderer (step 3)")
+        }
+    }
+
+    /// Axis input (mouse / light-gun motion) is live on Android; on iOS it
+    /// arrives with the iOS host renderer (step 3).
+    class SetAxis: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            BridgeResponse.error(code: "NOT_IMPLEMENTED", message: "iOS axis input arrives with the iOS renderer (step 3)")
+        }
+    }
+
     /// Gate rumble forwarding: while enabled, motor state published by the
     /// emulated hardware (SFC Rumble Gamepad, GB MBC5 rumble carts, N64
     /// Rumble Pak) drives CoreHaptics. The response reports whether this

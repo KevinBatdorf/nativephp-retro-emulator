@@ -17,6 +17,7 @@ enum EmulatorErrorCode: string
     // Programmer errors — the call is wrong. Thrown as EmulatorException.
     case SurfaceNotFound = 'SURFACE_NOT_FOUND';
     case UnsupportedSystem = 'UNSUPPORTED_SYSTEM';
+    case UnsupportedDevice = 'UNSUPPORTED_DEVICE';
     case SystemNotLoaded = 'SYSTEM_NOT_LOADED';
     case InvalidParameters = 'INVALID_PARAMETERS';
     case UnknownButton = 'UNKNOWN_BUTTON';

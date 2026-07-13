@@ -54,12 +54,11 @@ class EmulatorInput(private val core: AresCore) {
         }
     }
 
-    // Current button state split into independent sources that are OR'd together.
-    // Each source is updated on a different thread; none overrides the others.
-    private var keyBits      = 0  // hardware key events (UI thread)
-    private var motionBits   = 0  // hardware hat-switch + left-stick motion events (UI thread)
-    @Volatile private var softBitsPort1 = 0  // PHP software presses (bridge thread)
-    @Volatile private var softBitsPort2 = 0  // PHP software presses, port 2
+    // Hardware gamepad state (UI thread). Software presses live natively now
+    // (swMask, resolved per connected device) and are OR'd in by Platform::input,
+    // so this class only owns the physical pad's positional bits for port 1.
+    private var keyBits      = 0  // hardware key events
+    private var motionBits   = 0  // hardware hat-switch + left-stick motion events
 
     /**
      * Process a key event from a connected gamepad. Returns true if the event
@@ -114,38 +113,15 @@ class EmulatorInput(private val core: AresCore) {
         return mask
     }
 
-    /** Clear all button state (call when the activity loses focus). */
+    /** Clear hardware button state (call when the activity loses focus). */
     fun reset() {
-        keyBits      = 0
-        motionBits   = 0
-        softBitsPort1 = 0
-        softBitsPort2 = 0
+        keyBits    = 0
+        motionBits = 0
         pushPort1()
-        pushPort2()
-    }
-
-    /** Set a button to pressed in the software state map for [port] (1 or 2). */
-    fun pressSoftwareButton(port: Int, bit: Int) {
-        when (port) {
-            1 -> { softBitsPort1 = softBitsPort1 or bit; pushPort1() }
-            2 -> { softBitsPort2 = softBitsPort2 or bit; pushPort2() }
-        }
-    }
-
-    /** Set a button to released in the software state map for [port] (1 or 2). */
-    fun releaseSoftwareButton(port: Int, bit: Int) {
-        when (port) {
-            1 -> { softBitsPort1 = softBitsPort1 and bit.inv(); pushPort1() }
-            2 -> { softBitsPort2 = softBitsPort2 and bit.inv(); pushPort2() }
-        }
     }
 
     private fun pushPort1() {
-        core.setInputState(1, keyBits or motionBits or softBitsPort1)
-    }
-
-    private fun pushPort2() {
-        core.setInputState(2, softBitsPort2)
+        core.setInputState(1, keyBits or motionBits)
     }
 
     private fun keycodeToBit(keyCode: Int): Int? = when (keyCode) {

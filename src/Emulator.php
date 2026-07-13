@@ -2,11 +2,14 @@
 
 namespace KevinBatdorf\RetroEmulator;
 
+use KevinBatdorf\RetroEmulator\Concerns\InteractsWithBridge;
 use KevinBatdorf\RetroEmulator\Config\Config;
 use KevinBatdorf\RetroEmulator\Config\SystemConfig;
 
 class Emulator
 {
+    use InteractsWithBridge;
+
     private string $surface = 'main';
 
     /**
@@ -19,40 +22,6 @@ class Emulator
         'output', 'fixedScale', 'aspectCorrection',
         'volume', 'balance', 'rumble', 'shader', 'inputCapture',
     ];
-
-    /**
-     * Send a bridge call and route its outcome to the right channel.
-     *
-     * A programmer-error bridge response (status "error") throws an
-     * EmulatorException synchronously — without this, fluent commands discard
-     * the native return and a bad call reaches the dev nowhere. SCREENSHOT_FAILED
-     * is the one error that does not throw; screenshot() returns null instead.
-     * Operational failures (a missing ROM, a failed save) never arrive here as
-     * errors — native dispatches them as EmulatorError events.
-     *
-     * Returns the decoded response, or null when the runtime is absent.
-     *
-     * @param  array<string, mixed>  $payload
-     * @return array<string, mixed>|null
-     */
-    private function call(string $function, array $payload): ?array
-    {
-        if (! function_exists('nativephp_call')) {
-            return null;
-        }
-
-        $raw = nativephp_call($function, json_encode($payload));
-        $decoded = $raw === null ? null : json_decode($raw, true);
-
-        if (is_array($decoded) && ($decoded['status'] ?? null) === 'error') {
-            $code = EmulatorErrorCode::from($decoded['code']);
-            if ($code->throwsAsException()) {
-                throw new EmulatorException($code, $decoded['message'] ?? '');
-            }
-        }
-
-        return is_array($decoded) ? $decoded : null;
-    }
 
     /**
      * Runtime handle for the named surface declared by
@@ -436,28 +405,33 @@ class Emulator
     }
 
     /**
-     * Merge a per-port controller remap. Each `emulated => source` pair points
-     * an in-game button at a different positional input: `['a' => 'b', 'b' =>
-     * 'a']` swaps A and B on the port. Keys and values use the button names
-     * getPorts() reports; the mapping composes on top of the per-system defaults
-     * (including the Xbox↔Nintendo face swap). Only listed buttons change; pass
-     * an empty array to reset the port to defaults. Positional slots are
-     * system-independent, so a remap persists across a system change.
+     * Register (or swap) the controller on a port and return its {@see Controller}
+     * handle — controllers are explicit, never auto-allocated. Drive it through
+     * the handle (press/release/setButtons/setAxis/remap). The registration
+     * persists across loadRom.
      *
-     * An unknown button name, a bad port, or no staged system is a programmer
+     * An unsupported device, a bad port, or no staged system is a programmer
      * error and throws EmulatorException synchronously.
-     *
-     * @param  array<string, string>  $mappings  emulated button => source input
      */
-    public function setInputMapping(int $port, array $mappings): static
+    public function connectDevice(int $port, Device|string $device): Controller
     {
-        $this->call('Emulator.SetInputMapping', [
+        $this->call('Emulator.ConnectDevice', [
             'surface' => $this->surface,
             'port' => $port,
-            'mappings' => $mappings,
+            'device' => $device instanceof Device ? $device->value : $device,
         ]);
 
-        return $this;
+        return new Controller($this->surface, $port);
+    }
+
+    /**
+     * Handle for the controller already registered on a port (e.g. connected
+     * declaratively, or earlier in this session). A thin handle — it does not
+     * verify a device is present; driving an empty port throws UNKNOWN_BUTTON.
+     */
+    public function getDevice(int $port): Controller
+    {
+        return new Controller($this->surface, $port);
     }
 
     /**
@@ -586,50 +560,6 @@ class Emulator
         return $cheats;
     }
 
-    public function pressButton(int $port, \BackedEnum|string $button): static
-    {
-        $this->call('Emulator.PressButton', [
-            'surface' => $this->surface,
-            'port' => $port,
-            'button' => $button instanceof \BackedEnum ? $button->value : $button,
-        ]);
-
-        return $this;
-    }
-
-    public function releaseButton(int $port, \BackedEnum|string $button): static
-    {
-        $this->call('Emulator.ReleaseButton', [
-            'surface' => $this->surface,
-            'port' => $port,
-            'button' => $button instanceof \BackedEnum ? $button->value : $button,
-        ]);
-
-        return $this;
-    }
-
-    /**
-     * Press multiple buttons atomically — all land in the same input frame,
-     * unlike chained pressButton() calls. Release them individually.
-     *
-     * @param  array<\BackedEnum|string>  $buttons
-     */
-    public function pressButtons(int $port, array $buttons): static
-    {
-        $state = [];
-        foreach ($buttons as $button) {
-            $state[$button instanceof \BackedEnum ? $button->value : $button] = true;
-        }
-
-        $this->call('Emulator.SetButtons', [
-            'surface' => $this->surface,
-            'port' => $port,
-            'state' => $state,
-        ]);
-
-        return $this;
-    }
-
     /** Capture the current frame as a PNG; returns its path, or null on failure. */
     public function screenshot(): ?string
     {
@@ -645,7 +575,13 @@ class Emulator
         return Status::tryFrom($result['status'] ?? '') ?? Status::Stopped;
     }
 
-    /** @return array<int, array{port: int, buttons: string[]}> */
+    /**
+     * The controller ports of the staged system: the device connected to each
+     * (null if none), its button + axis names, and which devices the port
+     * supports (for connectDevice).
+     *
+     * @return array<int, array{port: int, device: ?string, buttons: string[], axes: string[], supported: string[]}>
+     */
     public function ports(): array
     {
         $result = $this->call('Emulator.GetPorts', ['surface' => $this->surface]);

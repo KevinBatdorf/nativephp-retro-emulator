@@ -20,6 +20,8 @@ class RemapTest {
             assert(core.init())
             assert(core.loadSystem("sfc"))
             assert(core.loadRom(makeLoRom(), null) == AresCore.LOAD_OK)
+            // Controllers are explicit — register a gamepad on port 1 first.
+            assert(core.connectDevice("sfc", 1, "Gamepad").isEmpty()) { "connect gamepad" }
             core.tick()
 
             // Defaults: A on face-east (bit 8), B on face-south (bit 0).
@@ -40,7 +42,9 @@ class RemapTest {
             assert(core.getButtonBit(1, "A") == EmulatorInput.BTN_Y) { "A now reads Y's slot" }
             assert(core.getButtonBit(1, "B") == EmulatorInput.BTN_A) { "B keeps its earlier remap" }
 
-            // Port 2 is independent — untouched by the port 1 remap.
+            // Port 2 is independent — register a gamepad and it keeps defaults.
+            assert(core.connectDevice("sfc", 2, "Gamepad").isEmpty()) { "connect gamepad on port 2" }
+            core.tick()
             assert(core.getButtonBit(2, "A") == EmulatorInput.BTN_A) { "port 2 A is still default" }
 
             // Empty map resets the whole port to defaults.
@@ -66,6 +70,13 @@ class RemapTest {
 
             assert(core.loadSystem("sfc"))
             assert(core.loadRom(makeLoRom(), null) == AresCore.LOAD_OK)
+            core.tick()
+
+            // No controller registered on the port yet.
+            assert(core.setInputMapping(1, arrayOf("A"), arrayOf("B")) == "INVALID_PARAMETERS") {
+                "remap with no device is INVALID_PARAMETERS"
+            }
+            assert(core.connectDevice("sfc", 1, "Gamepad").isEmpty()) { "connect gamepad" }
             core.tick()
 
             // sfc has 2 ports — port 3 is out of range.

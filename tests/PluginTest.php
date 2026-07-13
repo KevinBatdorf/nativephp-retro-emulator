@@ -10,6 +10,7 @@ use KevinBatdorf\RetroEmulator\Config\Config;
 use KevinBatdorf\RetroEmulator\Config\GbConfig;
 use KevinBatdorf\RetroEmulator\Config\MdConfig;
 use KevinBatdorf\RetroEmulator\Config\RegionalSystemConfig;
+use KevinBatdorf\RetroEmulator\Device;
 use KevinBatdorf\RetroEmulator\Config\SfcConfig;
 use KevinBatdorf\RetroEmulator\Elements\Emulator as EmulatorElement;
 use KevinBatdorf\RetroEmulator\Emulator;
@@ -72,6 +73,8 @@ describe('Plugin Manifest', function () {
             'Emulator.SetSystemOptions',
             'Emulator.FastForward',
             'Emulator.SetInputMapping',
+            'Emulator.ConnectDevice',
+            'Emulator.SetAxis',
             'Emulator.SetRumble',
             'Emulator.SetShader',
             'Emulator.AddCheat',
@@ -162,16 +165,22 @@ describe('Emulator class', function () {
             'watchMemory', 'unwatchMemory', 'clearMemoryWatches',
             'setVolume', 'setBalance', 'setVideo', 'configure', 'setSystemOptions',
             'fastForward', 'toggleRewind', 'setSpeed',
-            'setInputMapping', 'setRumble',
+            'connectDevice', 'getDevice', 'setRumble',
             'setShader',
             'addCheat', 'removeCheat', 'clearCheats',
-            'pressButton', 'releaseButton', 'pressButtons',
             'screenshot', 'status', 'ports', 'region',
         ];
 
         foreach ($methods as $method) {
             expect(method_exists(Emulator::class, $method))
                 ->toBeTrue("Emulator::{$method}() is missing");
+        }
+    });
+
+    it('Controller has all input methods', function () {
+        foreach (['press', 'release', 'setButtons', 'setAxis', 'remap'] as $method) {
+            expect(method_exists(\KevinBatdorf\RetroEmulator\Controller::class, $method))
+                ->toBeTrue("Controller::{$method}() is missing");
         }
     });
 
@@ -286,11 +295,19 @@ describe('Error handling', function () {
             ->toThrow(EmulatorException::class);
     });
 
-    it('throws when setInputMapping names an unknown button', function () {
+    it('throws when a remap names an unknown button', function () {
         $GLOBALS['__nativephp_mock']['Emulator.SetInputMapping'] =
             '{"status":"error","code":"UNKNOWN_BUTTON","message":"Unknown button: q"}';
 
-        expect(fn () => Emulator::surface('main')->setInputMapping(1, ['q' => 'a']))
+        expect(fn () => Emulator::surface('main')->getDevice(1)->remap(['q' => 'a']))
+            ->toThrow(EmulatorException::class);
+    });
+
+    it('throws when connecting an unsupported device', function () {
+        $GLOBALS['__nativephp_mock']['Emulator.ConnectDevice'] =
+            '{"status":"error","code":"UNSUPPORTED_DEVICE","message":"device not supported: Mouse"}';
+
+        expect(fn () => Emulator::surface('main')->connectDevice(1, Device::Mouse))
             ->toThrow(EmulatorException::class);
     });
 
@@ -694,26 +711,50 @@ describe('Typed layer', function () {
         expect($calls->firstWhere('function', 'Emulator.SetVideo'))->toBeNull();
     });
 
-    it('pressButtons sends an atomic all-pressed state map', function () {
-        Emulator::surface()->pressButtons(1, [
-            SfcButton::Up,
-            SfcButton::A,
-        ]);
+    it('connectDevice registers a device and returns a Controller for the port', function () {
+        $controller = Emulator::surface()->connectDevice(2, Device::Mouse);
+
+        expect($controller)->toBeInstanceOf(\KevinBatdorf\RetroEmulator\Controller::class);
+        expect($controller->port)->toBe(2);
+        $call = collect($GLOBALS['__nativephp_calls'])->firstWhere('function', 'Emulator.ConnectDevice');
+        expect($call['payload']['port'])->toBe(2);
+        expect($call['payload']['device'])->toBe('Mouse');
+    });
+
+    it('the handle presses a button on its port', function () {
+        Emulator::surface()->getDevice(1)->press(SfcButton::A);
+
+        $call = collect($GLOBALS['__nativephp_calls'])->firstWhere('function', 'Emulator.PressButton');
+        expect($call['payload']['port'])->toBe(1);
+        expect($call['payload']['button'])->toBe('A');
+    });
+
+    it('the handle sets an atomic button snapshot', function () {
+        Emulator::surface()->getDevice(1)->setButtons(['Up' => true, 'A' => true]);
 
         $call = collect($GLOBALS['__nativephp_calls'])->firstWhere('function', 'Emulator.SetButtons');
         expect($call['payload']['state'])->toBe(['Up' => true, 'A' => true]);
     });
 
-    it('setInputMapping sends the port and mapping merge', function () {
-        Emulator::surface()->setInputMapping(1, ['a' => 'b', 'b' => 'a']);
+    it('the handle feeds a relative axis delta', function () {
+        Emulator::surface()->getDevice(1)->setAxis('X', -12);
+
+        $call = collect($GLOBALS['__nativephp_calls'])->firstWhere('function', 'Emulator.SetAxis');
+        expect($call['payload']['port'])->toBe(1);
+        expect($call['payload']['axis'])->toBe('X');
+        expect($call['payload']['value'])->toBe(-12);
+    });
+
+    it('the handle remaps buttons on its port', function () {
+        Emulator::surface()->getDevice(1)->remap(['a' => 'b', 'b' => 'a']);
 
         $call = collect($GLOBALS['__nativephp_calls'])->firstWhere('function', 'Emulator.SetInputMapping');
         expect($call['payload']['port'])->toBe(1);
         expect($call['payload']['mappings'])->toBe(['a' => 'b', 'b' => 'a']);
     });
 
-    it('setInputMapping sends an empty map to reset a port', function () {
-        Emulator::surface()->setInputMapping(2, []);
+    it('the handle resets a remap with an empty map', function () {
+        Emulator::surface()->getDevice(2)->remap([]);
 
         $call = collect($GLOBALS['__nativephp_calls'])->firstWhere('function', 'Emulator.SetInputMapping');
         expect($call['payload']['port'])->toBe(2);

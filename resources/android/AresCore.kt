@@ -226,6 +226,38 @@ class AresCore {
      */
     fun getButtonBit(port: Int, name: String): Int = nativeGetButtonBit(port, name)
 
+    /**
+     * Register (or swap) the device on a port — controllers are explicit, never
+     * auto-allocated. An empty [device] disconnects the port. Validated against
+     * the staged system; the allocate/rebuild happens on the render thread's
+     * next tick, and the registration persists across [loadRom].
+     *
+     * @return "" on success, or "SYSTEM_NOT_LOADED" / "INVALID_PARAMETERS" /
+     *   "UNSUPPORTED_DEVICE".
+     */
+    fun connectDevice(systemId: String, port: Int, device: String): String =
+        nativeConnectDevice(systemId, port, device)
+
+    /**
+     * Set or clear one software button on a port, resolved against the connected
+     * device's own button set (software bits merge with the hardware pad).
+     *
+     * @return "" on success, or "SYSTEM_NOT_LOADED" / "UNKNOWN_BUTTON:<name>".
+     */
+    fun pressButton(port: Int, name: String, down: Boolean): String =
+        nativePressButton(port, name, down)
+
+    /**
+     * Accumulate a relative delta on one axis of the connected device (mouse /
+     * light-gun X/Y); consumed on the next poll.
+     *
+     * @return "" on success, or "SYSTEM_NOT_LOADED" / "INVALID_PARAMETERS".
+     */
+    fun setAxis(port: Int, name: String, value: Int): String = nativeSetAxis(port, name, value)
+
+    /** Test seam: pending (unconsumed) accumulated delta on an axis; drained by a poll. */
+    fun getAxisAccum(port: Int, name: String): Int = nativeGetAxisAccum(port, name)
+
     /** Pause emulation — tick() becomes a no-op until resume(). Safe to call from any thread. */
     fun pause() = nativePause()
 
@@ -373,6 +405,10 @@ class AresCore {
         port: Int, emulated: Array<String>, source: Array<String>,
     ): String
     private external fun nativeGetButtonBit(port: Int, name: String): Int
+    private external fun nativeConnectDevice(systemId: String, port: Int, device: String): String
+    private external fun nativePressButton(port: Int, name: String, down: Boolean): String
+    private external fun nativeSetAxis(port: Int, name: String, value: Int): String
+    private external fun nativeGetAxisAccum(port: Int, name: String): Int
 
     private external fun nativePause()
     private external fun nativeResume()

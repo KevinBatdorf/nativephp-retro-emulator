@@ -76,31 +76,53 @@ struct EmulatorState {
     // persisting for the rest of the session.
     static constexpr size_t kAudioCap = 12000u;
 
-    // Phase 6 — input.
-    // Written by the main thread via nativeSetInputState; read by the GL thread
-    // inside Platform::input(). Atomic so no mutex is needed.
-    std::atomic<uint32_t> inputMaskPort1 {0};
-    std::atomic<uint32_t> inputMaskPort2 {0};
+    // Phase 6 — input. Two per-port button masks OR'd together at poll time:
+    //   hwMask — hardware gamepad bits, written by the UI thread via
+    //            nativeSetInputState (keycode/motion → positional bits).
+    //   swMask — software bits, written natively by pressButton/setButtons with
+    //            the connected device's own bit for the named button.
+    // Ports are 1-based; index [0]=port1 … up to kMaxPorts (multitap territory).
+    static constexpr int kMaxPorts = 5;
+    std::atomic<uint32_t> hwMask[kMaxPorts] {};
+    std::atomic<uint32_t> swMask[kMaxPorts] {};
 
-    // Cached mapping from ares button node → (port mask pointer, bit).
-    // Built on the GL thread after nativeLoadRom. `bit` is the positional slot
-    // the node reads; `defaultBit` is its unremapped value, kept so a remap can
-    // be recomputed against defaults. Mutated only on the GL thread (build +
-    // applyInputRemap), read on the GL thread (Platform::input) — no atomics.
+    // Cached mapping from an ares button node → (1-based port, bit). Built on the
+    // GL thread when a device is (re)connected. `bit` is the slot the node reads;
+    // `defaultBit` is its unremapped value, kept so a remap recomputes against
+    // defaults. Mutated only on the GL thread (build + applyInputRemap), read on
+    // the GL thread (Platform::input) — no atomics needed on the entries.
     struct CachedButton {
         ares::Node::Input::Button node;
-        std::atomic<uint32_t>*   mask;
-        uint32_t                 bit;
-        uint32_t                 defaultBit;
+        int      port;
+        uint32_t bit;
+        uint32_t defaultBit;
     };
     std::vector<CachedButton> inputCache;
 
-    // Per-port controller remap: lowercased core-button name → the positional
-    // bit that button should read (see def.buttons for the slot vocabulary).
-    // Positional bits are system-independent, so a remap persists across a
-    // system change and is re-applied to whatever loads. Written by the bridge
-    // thread under inputRemapMutex; consumed on the GL thread when
-    // inputRemapDirty is set (top of nativeTick) or right after cacheButtons.
+    // Cached axis nodes (mouse / light-gun X/Y). Each frame the core polls an
+    // axis; we hand it the accumulated relative delta for (port, name) and reset
+    // it to zero (accumulate-and-consume — matches ares' relative-motion model).
+    struct CachedAxis {
+        ares::Node::Input::Axis node;
+        int         port;
+        std::string name;
+    };
+    std::vector<CachedAxis> axisCache;
+    std::mutex axisMutex;   // guards axisAccum (bridge writes, GL thread consumes)
+    std::unordered_map<std::string, int32_t> axisAccum[kMaxPorts];
+
+    // Explicit device registration: the device name the dev connected to each
+    // port ("" = nothing plugged in; no input until connectDevice). Persisted
+    // across boots so a re-loadRom re-connects. Written by the bridge thread
+    // under deviceMutex; the GL thread rebuilds the caches when deviceDirty.
+    std::string       connectedDevice[kMaxPorts];
+    std::mutex        deviceMutex;
+    std::atomic<bool> deviceDirty {false};
+
+    // Per-port controller remap: lowercased core-button name → the bit that
+    // button should read. Written by the bridge thread under inputRemapMutex;
+    // consumed on the GL thread when inputRemapDirty is set (top of nativeTick)
+    // or right after a device (re)connect.
     std::unordered_map<int, std::unordered_map<std::string, uint32_t>> inputRemap;
     std::mutex        inputRemapMutex;
     std::atomic<bool> inputRemapDirty {false};
@@ -291,10 +313,26 @@ struct AndroidPlatform : ares::Platform {
         if (auto btn = node->cast<ares::Node::Input::Button>()) {
             for (auto& cached : g_state->inputCache) {
                 if (cached.node == btn) {
-                    btn->setValue(cached.mask->load(std::memory_order_relaxed) & cached.bit);
+                    int i = cached.port - 1;
+                    uint32_t mask = g_state->hwMask[i].load(std::memory_order_relaxed)
+                                  | g_state->swMask[i].load(std::memory_order_relaxed);
+                    btn->setValue(mask & cached.bit);
                     return;
                 }
             }
+            return;
+        }
+        if (auto axis = node->cast<ares::Node::Input::Axis>()) {
+            for (auto& cached : g_state->axisCache) {
+                if (cached.node == axis) {
+                    std::lock_guard<std::mutex> lock(g_state->axisMutex);
+                    auto& acc = g_state->axisAccum[cached.port - 1][cached.name];
+                    axis->setValue(acc);
+                    acc = 0;   // consume: a relative delta applies once per poll
+                    return;
+                }
+            }
+            axis->setValue(0);
             return;
         }
         if (auto rumble = node->cast<ares::Node::Input::Rumble>()) {
@@ -342,37 +380,79 @@ static std::string jstringToString(JNIEnv* env, jstring str) {
     return result;
 }
 
-// Cache button nodes under `parent` (a controller port or, for systems with
-// built-in controls, the root node) into the given port bitmask.
-static void cacheButtons(ares::Node::Object parent,
-                         const SystemRegistry::SystemDef& def,
-                         std::atomic<uint32_t>& mask) {
-    for (auto& btn : parent->find<ares::Node::Input::Button>()) {
-        auto it = def.buttons.find(std::string((const char*)btn->name()));
-        if (it != def.buttons.end()) {
-            g_state->inputCache.push_back({btn, &mask, it->second, it->second});
-        }
-    }
-}
-
 static std::string toLower(std::string s) {
     for (auto& c : s) c = (char)std::tolower((unsigned char)c);
     return s;
 }
 
-// The 1-based port a cache entry belongs to (built-in controls count as port 1).
-static int portOfMask(const std::atomic<uint32_t>* mask) {
-    return mask == &g_state->inputMaskPort2 ? 2 : 1;
+// A connectable device's inputs: button node name → bit, plus axis node names.
+struct DeviceDescriptor {
+    std::unordered_map<std::string, uint32_t> buttons;
+    std::vector<std::string> axes;
+};
+
+// Non-default-gamepad devices per system. The default gamepad (def.device) is
+// described by def.buttons in the registry; everything else lives here so the
+// registry (and its button drift test) stays gamepad-only. SNES-first: Mouse
+// now; light-guns / multitap land next.
+static const std::unordered_map<std::string,
+       std::unordered_map<std::string, DeviceDescriptor>>& deviceTable() {
+    static const std::unordered_map<std::string,
+           std::unordered_map<std::string, DeviceDescriptor>> t = {
+        {"sfc", {
+            {"Mouse", {{{"Left", 1u << 0}, {"Right", 1u << 1}}, {"X", "Y"}}},
+        }},
+    };
+    return t;
 }
 
-// Default positional bit for a button name, case-insensitively, or false if the
-// staged system has no such button.
-static bool bitForButtonName(const SystemRegistry::SystemDef& def,
+// Resolve a device name to its descriptor for a system, or false if unsupported.
+static bool resolveDevice(const SystemRegistry::SystemDef& def,
+                          const std::string& name, DeviceDescriptor& out) {
+    if (def.device && name == def.device) {          // the system's default pad
+        out.buttons = def.buttons;
+        out.axes.clear();
+        return true;
+    }
+    auto sit = deviceTable().find(def.id);
+    if (sit != deviceTable().end()) {
+        auto dit = sit->second.find(name);
+        if (dit != sit->second.end()) { out = dit->second; return true; }
+    }
+    return false;
+}
+
+// Device names this system accepts: the default gamepad + any table extras.
+static std::vector<std::string> supportedDevices(const SystemRegistry::SystemDef& def) {
+    std::vector<std::string> v;
+    if (def.device) v.emplace_back(def.device);
+    auto sit = deviceTable().find(def.id);
+    if (sit != deviceTable().end())
+        for (auto& [n, _] : sit->second) v.push_back(n);
+    return v;
+}
+
+// Cache a device's button + axis nodes under `parent` for `port` (1-based).
+static void cacheDevice(ares::Node::Object parent,
+                        const DeviceDescriptor& desc, int port) {
+    for (auto& btn : parent->find<ares::Node::Input::Button>()) {
+        auto it = desc.buttons.find(std::string((const char*)btn->name()));
+        if (it != desc.buttons.end())
+            g_state->inputCache.push_back({btn, port, it->second, it->second});
+    }
+    for (auto& ax : parent->find<ares::Node::Input::Axis>()) {
+        auto name = std::string((const char*)ax->name());
+        if (std::find(desc.axes.begin(), desc.axes.end(), name) != desc.axes.end())
+            g_state->axisCache.push_back({ax, port, name});
+    }
+}
+
+// Bit for a button name in a descriptor, case-insensitively; false if absent.
+static bool bitForButtonName(const DeviceDescriptor& desc,
                              const std::string& name, uint32_t& out) {
     auto lname = toLower(name);
-    for (auto& [key, bit] : def.buttons) {
+    for (auto& [key, bit] : desc.buttons)
         if (toLower(key) == lname) { out = bit; return true; }
-    }
     return false;
 }
 
@@ -383,11 +463,48 @@ static void applyInputRemap() {
     std::lock_guard<std::mutex> lock(g_state->inputRemapMutex);
     for (auto& cached : g_state->inputCache) {
         cached.bit = cached.defaultBit;
-        auto pit = g_state->inputRemap.find(portOfMask(cached.mask));
+        auto pit = g_state->inputRemap.find(cached.port);
         if (pit == g_state->inputRemap.end()) continue;
         auto it = pit->second.find(toLower(std::string((const char*)cached.node->name())));
         if (it != pit->second.end()) cached.bit = it->second;
     }
+}
+
+// Rebuild the input/axis caches to match connectedDevice[] on the live core.
+// GL thread only. Systems with built-in controls (ports == 0, e.g. Game Boy)
+// always cache their controls on the system node. Otherwise every registered
+// device is (re)allocated on its hot-swappable port; empty ports get nothing.
+static void applyConnectedDevices() {
+    if (!g_state || !g_state->system || !g_state->root) return;
+    auto& def = *g_state->system;
+    g_state->inputCache.clear();
+    g_state->axisCache.clear();
+
+    if (def.ports == 0) {
+        DeviceDescriptor desc;
+        desc.buttons = def.buttons;
+        cacheDevice(g_state->root, desc, 1);
+        applyInputRemap();
+        return;
+    }
+
+    for (int p = 1; p <= def.ports && p <= EmulatorState::kMaxPorts; p++) {
+        std::string name;
+        {
+            std::lock_guard<std::mutex> lock(g_state->deviceMutex);
+            name = g_state->connectedDevice[p - 1];
+        }
+        auto portName = std::string("Controller Port ") + std::to_string(p);
+        auto port = g_state->root->find<ares::Node::Port>(portName.c_str());
+        if (!port) continue;
+        if (name.empty()) { port->disconnect(); continue; }
+        DeviceDescriptor desc;
+        if (!resolveDevice(def, name, desc)) continue;
+        port->allocate(name.c_str());
+        port->connect();
+        cacheDevice(port, desc, p);
+    }
+    applyInputRemap();
 }
 
 // ---------------------------------------------------------------------------
@@ -589,6 +706,12 @@ static void unloadCore()
     g_state->systemPak.reset();
     g_state->cartridgePak.reset();
     g_state->inputCache.clear();
+    g_state->axisCache.clear();
+    // connectedDevice[] intentionally survives (registrations persist across a
+    // reboot); the swMask does not — a device teardown drops held buttons.
+    for (int i = 0; i < EmulatorState::kMaxPorts; i++) {
+        g_state->swMask[i].store(0, std::memory_order_relaxed);
+    }
     g_state->audioStreams.clear();
     {
         std::lock_guard<std::mutex> lock(g_state->audioMutex);
@@ -654,32 +777,13 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadRom(
         return -1;
     }
 
-    // Wire controllers and build the button cache. Ports JSON stays the
-    // registry's static form — same names, same order as the node walk.
-    std::atomic<uint32_t>* masks[2] = {
-        &g_state->inputMaskPort1, &g_state->inputMaskPort2,
-    };
-    if (def->ports == 0) {
-        // Built-in controls (e.g. Game Boy) — buttons live on the system node.
-        cacheButtons(g_state->root, *def, g_state->inputMaskPort1);
-    } else {
-        for (int i = 0; i < def->ports && i < 2; i++) {
-            auto portName = std::string("Controller Port ") + std::to_string(i + 1);
-            auto port = g_state->root->find<ares::Node::Port>(portName.c_str());
-            if (!port) {
-                LOGE("port '%s' not found", portName.c_str());
-                continue;
-            }
-            port->allocate(def->device);
-            port->connect();
-            cacheButtons(port, *def, *masks[i]);
-        }
-    }
-
-    // Re-apply any stored controller remap onto the fresh cache (positional
-    // bits persist across boots and system changes).
-    applyInputRemap();
+    // Controllers are registered explicitly (connectDevice), not auto-allocated:
+    // re-connect whatever the dev registered before this boot (persists across
+    // loadRom) and build its caches. A system with no registrations boots with
+    // no input; built-in-controls systems (ports == 0) always cache their node.
+    applyConnectedDevices();
     g_state->inputRemapDirty.store(false, std::memory_order_relaxed);
+    g_state->deviceDirty.store(false, std::memory_order_relaxed);
 
     // Desktop applies its overscan setting to every screen on load
     // (emulator.cpp:137 → setOverscan scan, emulator.cpp:242-246). Cores
@@ -751,10 +855,14 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeTick(
 {
     if (!g_state || !g_state->romLoaded) return;
 
-    // Consume a pending controller remap on the GL thread (the bridge thread
-    // only stored it + flagged). Runs even while paused so it takes effect on
-    // resume; the read side (Platform::input) is this same thread.
-    if (g_state->inputRemapDirty.exchange(false, std::memory_order_relaxed)) {
+    // Consume pending controller changes on the GL thread (the bridge thread
+    // only stored them + flagged). A device (re)connect rebuilds the caches
+    // (which re-applies the remap); a lone remap just recomputes bits. Runs even
+    // while paused; the read side (Platform::input) is this same thread.
+    if (g_state->deviceDirty.exchange(false, std::memory_order_relaxed)) {
+        applyConnectedDevices();
+        g_state->inputRemapDirty.store(false, std::memory_order_relaxed);
+    } else if (g_state->inputRemapDirty.exchange(false, std::memory_order_relaxed)) {
         applyInputRemap();
     }
 
@@ -899,24 +1007,22 @@ JNIEXPORT void JNICALL
 Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetInputState(
     JNIEnv*, jobject, jint port, jint buttons)
 {
-    if (!g_state) return;
-    auto mask = static_cast<uint32_t>(buttons);
-    if (port == 1) g_state->inputMaskPort1.store(mask, std::memory_order_relaxed);
-    else if (port == 2) g_state->inputMaskPort2.store(mask, std::memory_order_relaxed);
+    if (!g_state || port < 1 || port > EmulatorState::kMaxPorts) return;
+    g_state->hwMask[port - 1].store(static_cast<uint32_t>(buttons), std::memory_order_relaxed);
 }
 
 /**
- * Read back the current button bitmask for one controller port — the value
- * Platform::input() will see on its next poll. Test/diagnostic seam.
+ * Read back the combined (hardware | software) button bitmask for one port —
+ * the value Platform::input() will see on its next poll. Test/diagnostic seam.
  */
 JNIEXPORT jint JNICALL
 Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetInputState(
     JNIEnv*, jobject, jint port)
 {
-    if (!g_state) return 0;
-    if (port == 1) return static_cast<jint>(g_state->inputMaskPort1.load(std::memory_order_relaxed));
-    if (port == 2) return static_cast<jint>(g_state->inputMaskPort2.load(std::memory_order_relaxed));
-    return 0;
+    if (!g_state || port < 1 || port > EmulatorState::kMaxPorts) return 0;
+    int i = port - 1;
+    return static_cast<jint>(g_state->hwMask[i].load(std::memory_order_relaxed)
+                           | g_state->swMask[i].load(std::memory_order_relaxed));
 }
 
 /**
@@ -939,9 +1045,23 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetInputMapping(
     if (!g_state || !g_state->system) return ret("SYSTEM_NOT_LOADED");
     auto& def = *g_state->system;
 
-    // Port 1 always valid; port 2 only when the system exposes it.
-    int maxPort = def.ports >= 2 ? 2 : 1;
+    int maxPort = def.ports == 0 ? 1 : std::min(def.ports, EmulatorState::kMaxPorts);
     if (port < 1 || port > maxPort) return ret("INVALID_PARAMETERS");
+
+    // Remap names belong to the device connected on this port.
+    std::string devName;
+    {
+        std::lock_guard<std::mutex> lock(g_state->deviceMutex);
+        devName = def.ports == 0 && def.device == nullptr
+            ? std::string()               // built-in controls: use def.buttons below
+            : g_state->connectedDevice[port - 1];
+    }
+    DeviceDescriptor desc;
+    if (def.ports == 0) {
+        desc.buttons = def.buttons;       // built-in-controls system (Game Boy)
+    } else if (devName.empty() || !resolveDevice(def, devName, desc)) {
+        return ret("INVALID_PARAMETERS"); // no controller registered on this port
+    }
 
     jsize count = emulated ? env->GetArrayLength(emulated) : 0;
     if (!source || env->GetArrayLength(source) != count) return ret("INVALID_PARAMETERS");
@@ -958,9 +1078,9 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetInputMapping(
         env->DeleteLocalRef(src);
 
         uint32_t emuBit, srcBit;
-        if (!bitForButtonName(def, emuName, emuBit))
+        if (!bitForButtonName(desc, emuName, emuBit))
             return ret((std::string("UNKNOWN_BUTTON:") + emuName).c_str());
-        if (!bitForButtonName(def, srcName, srcBit))
+        if (!bitForButtonName(desc, srcName, srcBit))
             return ret((std::string("UNKNOWN_BUTTON:") + srcName).c_str());
         resolved[toLower(emuName)] = srcBit;
     }
@@ -990,11 +1110,129 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetButtonBit(
     if (!g_state) return -1;
     auto name = toLower(jstringToString(env, nameStr));
     for (auto& cached : g_state->inputCache) {
-        if (portOfMask(cached.mask) != port) continue;
+        if (cached.port != port) continue;
         if (toLower(std::string((const char*)cached.node->name())) == name)
             return static_cast<jint>(cached.bit);
     }
     return -1;
+}
+
+/**
+ * The pending (unconsumed) accumulated delta on one axis. Test/diagnostic seam;
+ * a poll (see Platform::input) drains it to 0, so read it before ticking.
+ */
+JNIEXPORT jint JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetAxisAccum(
+    JNIEnv* env, jobject, jint port, jstring nameStr)
+{
+    if (!g_state || port < 1 || port > EmulatorState::kMaxPorts) return 0;
+    auto name = jstringToString(env, nameStr);
+    std::lock_guard<std::mutex> lock(g_state->axisMutex);
+    auto& m = g_state->axisAccum[port - 1];
+    auto it = m.find(name);
+    return it == m.end() ? 0 : static_cast<jint>(it->second);
+}
+
+// Resolve the descriptor of the device connected to `port` (or the built-in
+// controls for a ports==0 system). Returns false if nothing is connected.
+static bool connectedDescriptor(int port, DeviceDescriptor& out) {
+    if (!g_state || !g_state->system) return false;
+    auto& def = *g_state->system;
+    if (def.ports == 0) { out.buttons = def.buttons; out.axes.clear(); return true; }
+    std::string name;
+    {
+        std::lock_guard<std::mutex> lock(g_state->deviceMutex);
+        if (port < 1 || port > EmulatorState::kMaxPorts) return false;
+        name = g_state->connectedDevice[port - 1];
+    }
+    if (name.empty()) return false;
+    return resolveDevice(def, name, out);
+}
+
+/**
+ * Register (or swap) the device on a port. Validates against the staged system
+ * synchronously; the actual allocate/connect + cache rebuild happens on the GL
+ * thread (deviceDirty → nativeTick). An empty name disconnects the port. The
+ * registration persists across loadRom. Returns "" or a category-A error.
+ */
+JNIEXPORT jstring JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeConnectDevice(
+    JNIEnv* env, jobject, jstring systemIdStr, jint port, jstring deviceStr)
+{
+    auto ret = [&](const char* s) { return env->NewStringUTF(s); };
+    if (!g_state) return ret("SYSTEM_NOT_LOADED");
+
+    // Validate against the staged system by id (from the registry, static) so we
+    // don't race the asynchronous LoadSystem staging on the render thread —
+    // g_state->system may not be set yet when this bridge call lands.
+    auto* def = SystemRegistry::find(jstringToString(env, systemIdStr));
+    if (!def) return ret("SYSTEM_NOT_LOADED");
+
+    // Built-in-controls systems (Game Boy) have no ports to plug into — the
+    // controls are always present, so a connect is a harmless no-op.
+    if (def->ports == 0) return ret("");
+
+    int maxPort = std::min(def->ports, EmulatorState::kMaxPorts);
+    if (port < 1 || port > maxPort) return ret("INVALID_PARAMETERS");
+
+    auto name = jstringToString(env, deviceStr);
+    DeviceDescriptor desc;
+    if (!name.empty() && !resolveDevice(*def, name, desc)) return ret("UNSUPPORTED_DEVICE");
+
+    {
+        std::lock_guard<std::mutex> lock(g_state->deviceMutex);
+        g_state->connectedDevice[port - 1] = name;
+    }
+    g_state->deviceDirty.store(true, std::memory_order_relaxed);
+    return ret("");
+}
+
+/**
+ * Set or clear one software button on a port, resolved against the connected
+ * device's own button set. Software bits merge with the hardware mask. Returns
+ * "" / "SYSTEM_NOT_LOADED" / "UNKNOWN_BUTTON:<name>".
+ */
+JNIEXPORT jstring JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativePressButton(
+    JNIEnv* env, jobject, jint port, jstring nameStr, jboolean down)
+{
+    auto ret = [&](const char* s) { return env->NewStringUTF(s); };
+    if (!g_state || !g_state->system) return ret("SYSTEM_NOT_LOADED");
+    if (port < 1 || port > EmulatorState::kMaxPorts) return ret("INVALID_PARAMETERS");
+
+    DeviceDescriptor desc;
+    auto name = jstringToString(env, nameStr);
+    uint32_t bit;
+    if (!connectedDescriptor(port, desc) || !bitForButtonName(desc, name, bit))
+        return ret((std::string("UNKNOWN_BUTTON:") + name).c_str());
+
+    if (down) g_state->swMask[port - 1].fetch_or(bit, std::memory_order_relaxed);
+    else      g_state->swMask[port - 1].fetch_and(~bit, std::memory_order_relaxed);
+    return ret("");
+}
+
+/**
+ * Accumulate a relative delta on one axis of the connected device (mouse /
+ * light-gun X/Y). The value is consumed on the next poll (see Platform::input).
+ * Returns "" / "SYSTEM_NOT_LOADED" / "INVALID_PARAMETERS" (unknown axis).
+ */
+JNIEXPORT jstring JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetAxis(
+    JNIEnv* env, jobject, jint port, jstring nameStr, jint value)
+{
+    auto ret = [&](const char* s) { return env->NewStringUTF(s); };
+    if (!g_state || !g_state->system) return ret("SYSTEM_NOT_LOADED");
+    if (port < 1 || port > EmulatorState::kMaxPorts) return ret("INVALID_PARAMETERS");
+
+    DeviceDescriptor desc;
+    auto name = jstringToString(env, nameStr);
+    if (!connectedDescriptor(port, desc) ||
+        std::find(desc.axes.begin(), desc.axes.end(), name) == desc.axes.end())
+        return ret("INVALID_PARAMETERS");
+
+    std::lock_guard<std::mutex> lock(g_state->axisMutex);
+    g_state->axisAccum[port - 1][name] += value;
+    return ret("");
 }
 
 // Phase 7 — pause / resume / stop ------------------------------------------
@@ -1251,12 +1489,64 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetRegion(JNIEnv* env
     return env->NewStringUTF(g_state->romRegion.c_str());
 }
 
+static std::string jsonStringArray(const std::vector<std::string>& items) {
+    std::string s = "[";
+    for (auto& it : items) { if (s.size() > 1) s += ","; s += "\"" + it + "\""; }
+    return s + "]";
+}
+
+// Button names of a descriptor, ordered by bit (stable output).
+static std::vector<std::string> orderedButtons(const DeviceDescriptor& desc) {
+    std::vector<std::pair<uint32_t, std::string>> ordered;
+    for (auto& [name, bit] : desc.buttons) ordered.push_back({bit, name});
+    std::sort(ordered.begin(), ordered.end());
+    std::vector<std::string> names;
+    for (auto& [bit, name] : ordered) names.push_back(name);
+    return names;
+}
+
+// Ports with the currently-connected device, its inputs, and what each port
+// supports. Built from registry + registrations — no booted core required.
+static std::string buildPortsJson() {
+    auto& def = *g_state->system;
+    auto supported = jsonStringArray(supportedDevices(def));
+
+    if (def.ports == 0) {   // built-in controls — always present, no registration
+        DeviceDescriptor desc; desc.buttons = def.buttons;
+        return "[{\"port\":1,\"device\":null,\"buttons\":"
+             + jsonStringArray(orderedButtons(desc))
+             + ",\"axes\":[],\"supported\":" + supported + "}]";
+    }
+
+    std::string json = "[";
+    int maxPort = std::min(def.ports, EmulatorState::kMaxPorts);
+    for (int p = 1; p <= maxPort; p++) {
+        std::string name;
+        {
+            std::lock_guard<std::mutex> lock(g_state->deviceMutex);
+            name = g_state->connectedDevice[p - 1];
+        }
+        std::string deviceJson = "null", buttons = "[]", axes = "[]";
+        DeviceDescriptor desc;
+        if (!name.empty() && resolveDevice(def, name, desc)) {
+            deviceJson = "\"" + name + "\"";
+            buttons = jsonStringArray(orderedButtons(desc));
+            axes = jsonStringArray(desc.axes);
+        }
+        if (json.size() > 1) json += ",";
+        json += "{\"port\":" + std::to_string(p) + ",\"device\":" + deviceJson
+              + ",\"buttons\":" + buttons + ",\"axes\":" + axes
+              + ",\"supported\":" + supported + "}";
+    }
+    return json + "]";
+}
+
 JNIEXPORT jstring JNICALL
 Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetPortsJson(JNIEnv* env, jobject)
 {
-    // Registry data — available from staging on, no booted core required.
+    // Available from staging on, no booted core required.
     if (!g_state || !g_state->system) return env->NewStringUTF("[]");
-    return env->NewStringUTF(g_state->portsJson.c_str());
+    return env->NewStringUTF(buildPortsJson().c_str());
 }
 
 // Phase 14 — audio / video options ---------------------------------------------

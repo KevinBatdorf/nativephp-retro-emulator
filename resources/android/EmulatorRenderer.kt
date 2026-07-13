@@ -779,6 +779,24 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     /** Test seam: the positional bit a core button currently reads (see [AresCore.getButtonBit]). */
     fun getButtonBit(port: Int, name: String): Int = core.getButtonBit(port, name)
 
+    /**
+     * Register/swap the device on a port (see [AresCore.connectDevice]). Passes
+     * the synchronously-known staged system id so validation doesn't race the
+     * async LoadSystem staging. Thread-safe.
+     */
+    fun connectDevice(port: Int, device: String): String =
+        core.connectDevice(stagedSystemId, port, device)
+
+    /** Set/clear a software button on a port (see [AresCore.pressButton]). Thread-safe. */
+    fun pressButton(port: Int, name: String, down: Boolean): String =
+        core.pressButton(port, name, down)
+
+    /** Accumulate a relative axis delta on a port (see [AresCore.setAxis]). Thread-safe. */
+    fun setAxis(port: Int, name: String, value: Int): String = core.setAxis(port, name, value)
+
+    /** Test seam: pending accumulated axis delta (see [AresCore.getAxisAccum]). */
+    fun getAxisAccum(port: Int, name: String): Int = core.getAxisAccum(port, name)
+
     private fun applyRumble(state: Int) {
         val v = vibrator ?: return
         if (state == 0) {

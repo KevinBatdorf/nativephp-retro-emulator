@@ -173,6 +173,18 @@
             "description": "Merge controller input mappings for a port"
         },
         {
+            "name": "Emulator.ConnectDevice",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.ConnectDevice",
+            "ios": "EmulatorFunctions.ConnectDevice",
+            "description": "Register or swap the controller device on a port"
+        },
+        {
+            "name": "Emulator.SetAxis",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.SetAxis",
+            "ios": "EmulatorFunctions.SetAxis",
+            "description": "Accumulate a relative axis delta on a port (mouse/light-gun)"
+        },
+        {
             "name": "Emulator.SetRumble",
             "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.SetRumble",
             "ios": "EmulatorFunctions.SetRumble",

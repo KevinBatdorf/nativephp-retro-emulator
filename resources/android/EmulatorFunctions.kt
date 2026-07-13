@@ -130,6 +130,22 @@ object EmulatorFunctions {
     private fun paramMap(parameters: Map<String, Any>, key: String): Map<String, Any>? =
         BridgeParams.map(parameters, key)
 
+    // Native input calls return "" on success or "CODE"/"CODE:detail" on a
+    // category-A error. Map that to a bridge response; the code stays in a
+    // variable so it doesn't register on the enum drift scan (the codes it
+    // emits appear as literals elsewhere / in ConnectDevice).
+    private fun statusResponse(result: String, success: Map<String, Any>): Map<String, Any> {
+        if (result.isEmpty()) return BridgeResponse.success(success)
+        val code = result.substringBefore(':')
+        val detail = result.substringAfter(':', "")
+        val message = when (code) {
+            "SYSTEM_NOT_LOADED"  -> "no system is loaded"
+            "UNKNOWN_BUTTON"     -> "Unknown button: $detail"
+            else -> "invalid parameters"
+        }
+        return BridgeResponse.error(code, message)
+    }
+
     private fun entry(parameters: Map<String, Any>): Pair<SurfaceEntry?, Map<String, Any>?> {
         val name = surface(parameters)
 
@@ -872,7 +888,27 @@ object EmulatorFunctions {
         }
     }
 
-    /** Set a single button to pressed in the software input state map. */
+    /**
+     * Register (or swap) the device on a port — controllers are explicit, never
+     * auto-allocated. An absent/empty device disconnects the port.
+     */
+    class ConnectDevice(private val activity: FragmentActivity) : BridgeFunction {
+        override fun execute(parameters: Map<String, Any>): Map<String, Any> {
+            val (entry, err) = entry(parameters)
+            if (err != null) return err
+            val port = (parameters["port"] as? Number)?.toInt()
+                ?: return BridgeResponse.error("INVALID_PARAMETERS", "port is required")
+            val device = parameters["device"] as? String ?: ""
+            return when (val result = entry!!.renderer.connectDevice(port, device)) {
+                "" -> BridgeResponse.success(mapOf("status" to "connected", "port" to port, "device" to device))
+                "SYSTEM_NOT_LOADED" -> BridgeResponse.error("SYSTEM_NOT_LOADED", "no system is loaded")
+                "UNSUPPORTED_DEVICE" -> BridgeResponse.error("UNSUPPORTED_DEVICE", "device not supported: $device")
+                else -> BridgeResponse.error("INVALID_PARAMETERS", "invalid port for this system")
+            }
+        }
+    }
+
+    /** Set a single button pressed on a port, resolved against its device. */
     class PressButton(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
             val (entry, err) = entry(parameters)
@@ -880,14 +916,13 @@ object EmulatorFunctions {
             val port   = (parameters["port"]   as? Number)?.toInt() ?: 1
             val button = parameters["button"] as? String
                 ?: return BridgeResponse.error("INVALID_PARAMETERS", "button is required")
-            val bit = EmulatorInput.buttonNameToBit(button)
-                ?: return BridgeResponse.error("UNKNOWN_BUTTON", "Unknown button: $button")
-            entry!!.renderer.input.pressSoftwareButton(port, bit)
-            return BridgeResponse.success(mapOf("status" to "pressed", "button" to button))
+            return statusResponse(
+                entry!!.renderer.pressButton(port, button, true),
+                mapOf("status" to "pressed", "button" to button))
         }
     }
 
-    /** Release a single button in the software input state map. */
+    /** Release a single button on a port. */
     class ReleaseButton(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
             val (entry, err) = entry(parameters)
@@ -895,35 +930,42 @@ object EmulatorFunctions {
             val port   = (parameters["port"]   as? Number)?.toInt() ?: 1
             val button = parameters["button"] as? String
                 ?: return BridgeResponse.error("INVALID_PARAMETERS", "button is required")
-            val bit = EmulatorInput.buttonNameToBit(button)
-                ?: return BridgeResponse.error("UNKNOWN_BUTTON", "Unknown button: $button")
-            entry!!.renderer.input.releaseSoftwareButton(port, bit)
-            return BridgeResponse.success(mapOf("status" to "released", "button" to button))
+            return statusResponse(
+                entry!!.renderer.pressButton(port, button, false),
+                mapOf("status" to "released", "button" to button))
         }
     }
 
-    /** Atomically merge multiple button states into the software input state map. */
+    /** Merge multiple button states on a port. Unknown names are skipped. */
     class SetButtons(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
             val (entry, err) = entry(parameters)
             if (err != null) return err
             val port = (parameters["port"] as? Number)?.toInt() ?: 1
 
-            @Suppress("UNCHECKED_CAST")
             val state = paramMap(parameters, "state")
                 ?.entries?.associate { it.key to (it.value == true) }
                 ?: return BridgeResponse.error("INVALID_PARAMETERS", "state map is required")
 
             for ((button, pressed) in state) {
-                val bit = EmulatorInput.buttonNameToBit(button) ?: continue
-                if (pressed) {
-                    entry!!.renderer.input.pressSoftwareButton(port, bit)
-                } else {
-                    entry!!.renderer.input.releaseSoftwareButton(port, bit)
-                }
+                entry!!.renderer.pressButton(port, button, pressed)
             }
-
             return BridgeResponse.success(mapOf("status" to "ok"))
+        }
+    }
+
+    /** Accumulate a relative axis delta on a port (mouse / light-gun X/Y). */
+    class SetAxis(private val activity: FragmentActivity) : BridgeFunction {
+        override fun execute(parameters: Map<String, Any>): Map<String, Any> {
+            val (entry, err) = entry(parameters)
+            if (err != null) return err
+            val port = (parameters["port"] as? Number)?.toInt() ?: 1
+            val axis = parameters["axis"] as? String
+                ?: return BridgeResponse.error("INVALID_PARAMETERS", "axis is required")
+            val value = (parameters["value"] as? Number)?.toInt() ?: 0
+            return statusResponse(
+                entry!!.renderer.setAxis(port, axis, value),
+                mapOf("status" to "ok", "axis" to axis, "value" to value))
         }
     }
 
@@ -985,15 +1027,21 @@ object EmulatorFunctions {
 
             val json = entry!!.renderer.syncGetPortsJson()
                 ?: return BridgeResponse.error("SYSTEM_NOT_LOADED", "Call LoadSystem before GetPorts")
+            fun strings(obj: JSONObject, key: String) = buildList {
+                val a = obj.optJSONArray(key) ?: JSONArray()
+                for (j in 0 until a.length()) add(a.getString(j))
+            }
             val ports = buildList {
                 val arr = JSONArray(json)
                 for (i in 0 until arr.length()) {
                     val obj = arr.getJSONObject(i)
-                    val buttons = buildList {
-                        val btnArr = obj.getJSONArray("buttons")
-                        for (j in 0 until btnArr.length()) add(btnArr.getString(j))
-                    }
-                    add(mapOf("port" to obj.getInt("port"), "buttons" to buttons))
+                    add(mapOf(
+                        "port" to obj.getInt("port"),
+                        "device" to if (obj.isNull("device")) null else obj.getString("device"),
+                        "buttons" to strings(obj, "buttons"),
+                        "axes" to strings(obj, "axes"),
+                        "supported" to strings(obj, "supported"),
+                    ))
                 }
             }
 
