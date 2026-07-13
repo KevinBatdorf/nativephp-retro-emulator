@@ -255,6 +255,13 @@ class AresCore {
      */
     fun setAxis(port: Int, name: String, value: Int): String = nativeSetAxis(port, name, value)
 
+    /**
+     * Aim a light-gun at an absolute normalized position (0..1). ares' guns are
+     * relative-only; native tracks a shadow cursor and feeds the delta to reach
+     * the target. Requires the connected device to expose X/Y axes.
+     */
+    fun aimAt(port: Int, x: Float, y: Float): String = nativeAimAt(port, x, y)
+
     /** Test seam: pending (unconsumed) accumulated delta on an axis; drained by a poll. */
     fun getAxisAccum(port: Int, name: String): Int = nativeGetAxisAccum(port, name)
 
@@ -408,6 +415,7 @@ class AresCore {
     private external fun nativeConnectDevice(systemId: String, port: Int, device: String): String
     private external fun nativePressButton(port: Int, name: String, down: Boolean): String
     private external fun nativeSetAxis(port: Int, name: String, value: Int): String
+    private external fun nativeAimAt(port: Int, x: Float, y: Float): String
     private external fun nativeGetAxisAccum(port: Int, name: String): Int
 
     private external fun nativePause()

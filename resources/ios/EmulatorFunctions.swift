@@ -572,6 +572,14 @@ enum EmulatorFunctions {
         }
     }
 
+    /// Light-gun aiming is live on Android; on iOS it arrives with the iOS host
+    /// renderer (step 3).
+    class AimAt: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            BridgeResponse.error(code: "NOT_IMPLEMENTED", message: "iOS light-gun aiming arrives with the iOS renderer (step 3)")
+        }
+    }
+
     /// Gate rumble forwarding: while enabled, motor state published by the
     /// emulated hardware (SFC Rumble Gamepad, GB MBC5 rumble carts, N64
     /// Rumble Pak) drives CoreHaptics. The response reports whether this

@@ -969,6 +969,22 @@ object EmulatorFunctions {
         }
     }
 
+    /** Aim a light-gun at a normalized (0..1) screen position. */
+    class AimAt(private val activity: FragmentActivity) : BridgeFunction {
+        override fun execute(parameters: Map<String, Any>): Map<String, Any> {
+            val (entry, err) = entry(parameters)
+            if (err != null) return err
+            val port = (parameters["port"] as? Number)?.toInt() ?: 1
+            val x = (parameters["x"] as? Number)?.toFloat()
+                ?: return BridgeResponse.error("INVALID_PARAMETERS", "x is required")
+            val y = (parameters["y"] as? Number)?.toFloat()
+                ?: return BridgeResponse.error("INVALID_PARAMETERS", "y is required")
+            return statusResponse(
+                entry!!.renderer.aimAt(port, x, y),
+                mapOf("status" to "ok", "x" to x, "y" to y))
+        }
+    }
+
     /**
      * Capture the current frame as a PNG file saved to internal storage.
      * Returns the file path. Blocks until the GL thread delivers the frame (≤5 s).

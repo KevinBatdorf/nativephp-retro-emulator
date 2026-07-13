@@ -58,8 +58,9 @@ class DeviceTest {
             assert(core.loadSystem("sfc"))
             assert(core.loadRom(makeLoRom(), null) == AresCore.LOAD_OK)
 
-            // A device the system doesn't (yet) support.
-            assert(core.connectDevice("sfc", 1, "Super Scope") == "UNSUPPORTED_DEVICE") { "not in table" }
+            // A device the system doesn't support (Twin Tap is deliberately not
+            // in our table).
+            assert(core.connectDevice("sfc", 1, "Twin Tap") == "UNSUPPORTED_DEVICE") { "not in table" }
             assert(core.connectDevice("sfc", 3, "Gamepad") == "INVALID_PARAMETERS") { "bad port" }
 
             // Swap gamepad → mouse on the same port; caches follow.
@@ -70,6 +71,47 @@ class DeviceTest {
             core.tick()
             assert(core.getButtonBit(1, "A") == -1) { "mouse has no A after swap" }
             assert(core.getButtonBit(1, "Left") == (1 shl 0)) { "mouse Left after swap" }
+        } finally {
+            core.destroy()
+        }
+    }
+
+    @Test
+    fun lightgunConnectsAndAims() {
+        val core = AresCore()
+        try {
+            assert(core.init())
+            assert(core.loadSystem("sfc"))
+            assert(core.loadRom(makeLoRom(), null) == AresCore.LOAD_OK)
+
+            // Super Scope on port 2 (ares wires the beam latch there).
+            assert(core.connectDevice("sfc", 2, "Super Scope").isEmpty()) { "connect scope" }
+            core.tick()
+            assert(core.getButtonBit(2, "Trigger") == (1 shl 0)) { "scope Trigger bit" }
+            assert(core.getButtonBit(2, "Pause") == (1 shl 3)) { "scope Pause bit" }
+            assert(core.getButtonBit(2, "A") == -1) { "scope has no A button" }
+
+            // aimAt feeds the delta from the centre shadow cursor (128,120) to the
+            // target; no tick between aims, so the accumulator holds and telescopes.
+            assert(core.aimAt(2, 0.5f, 0.5f).isEmpty()) { "aim centre" }
+            assert(core.getAxisAccum(2, "X") == 0) { "centre → no X delta" }
+            assert(core.getAxisAccum(2, "Y") == 0) { "centre → no Y delta" }
+
+            assert(core.aimAt(2, 1.0f, 1.0f).isEmpty()) { "aim bottom-right" }
+            assert(core.getAxisAccum(2, "X") == 128) { "delta to x=256 from 128" }
+            assert(core.getAxisAccum(2, "Y") == 120) { "delta to y=240 from 120" }
+
+            assert(core.aimAt(2, 0.5f, 0.5f).isEmpty()) { "aim back to centre" }
+            assert(core.getAxisAccum(2, "X") == 0) { "128 + (-128) telescopes to 0" }
+            assert(core.getAxisAccum(2, "Y") == 0) { "120 + (-120) telescopes to 0" }
+
+            // Trigger goes through the button channel.
+            assert(core.pressButton(2, "Trigger", true).isEmpty()) { "pull trigger" }
+            assert(core.getInputState(2) and (1 shl 0) != 0) { "trigger held" }
+
+            // aimAt on a device without X/Y axes (gamepad) is rejected.
+            assert(core.connectDevice("sfc", 1, "Gamepad").isEmpty())
+            assert(core.aimAt(1, 0.5f, 0.5f) == "INVALID_PARAMETERS") { "gamepad has no axes" }
         } finally {
             core.destroy()
         }

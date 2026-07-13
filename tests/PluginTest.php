@@ -75,6 +75,7 @@ describe('Plugin Manifest', function () {
             'Emulator.SetInputMapping',
             'Emulator.ConnectDevice',
             'Emulator.SetAxis',
+            'Emulator.AimAt',
             'Emulator.SetRumble',
             'Emulator.SetShader',
             'Emulator.AddCheat',
@@ -178,7 +179,7 @@ describe('Emulator class', function () {
     });
 
     it('Controller has all input methods', function () {
-        foreach (['press', 'release', 'setButtons', 'setAxis', 'remap'] as $method) {
+        foreach (['press', 'release', 'setButtons', 'setAxis', 'aimAt', 'remap'] as $method) {
             expect(method_exists(\KevinBatdorf\RetroEmulator\Controller::class, $method))
                 ->toBeTrue("Controller::{$method}() is missing");
         }
@@ -743,6 +744,15 @@ describe('Typed layer', function () {
         expect($call['payload']['port'])->toBe(1);
         expect($call['payload']['axis'])->toBe('X');
         expect($call['payload']['value'])->toBe(-12);
+    });
+
+    it('the handle aims a light-gun at a normalized position', function () {
+        Emulator::surface()->getDevice(2)->aimAt(0.25, 0.75);
+
+        $call = collect($GLOBALS['__nativephp_calls'])->firstWhere('function', 'Emulator.AimAt');
+        expect($call['payload']['port'])->toBe(2);
+        expect($call['payload']['x'])->toBe(0.25);
+        expect($call['payload']['y'])->toBe(0.75);
     });
 
     it('the handle remaps buttons on its port', function () {

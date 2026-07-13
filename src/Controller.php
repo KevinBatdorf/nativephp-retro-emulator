@@ -82,6 +82,25 @@ class Controller
     }
 
     /**
+     * Aim a light-gun (Super Scope / Justifier) at an absolute position on the
+     * emulated screen, given as normalized 0..1 coordinates (0,0 = top-left,
+     * 1,1 = bottom-right). The hardware is relative-only, so the plugin tracks a
+     * shadow cursor and feeds the delta to reach the target. For light-gun
+     * devices; a device without X/Y axes throws.
+     */
+    public function aimAt(float $x, float $y): static
+    {
+        $this->call('Emulator.AimAt', [
+            'surface' => $this->surface,
+            'port' => $this->port,
+            'x' => $x,
+            'y' => $y,
+        ]);
+
+        return $this;
+    }
+
+    /**
      * Merge a button remap for this controller: each `emulated => source` pair
      * points an in-game button at a different input (`['a' => 'b', 'b' => 'a']`
      * swaps A and B). Composes on the device defaults; an empty array resets.

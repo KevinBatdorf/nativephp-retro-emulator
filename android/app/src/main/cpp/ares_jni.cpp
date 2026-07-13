@@ -108,8 +108,15 @@ struct EmulatorState {
         std::string name;
     };
     std::vector<CachedAxis> axisCache;
-    std::mutex axisMutex;   // guards axisAccum (bridge writes, GL thread consumes)
+    std::mutex axisMutex;   // guards axisAccum + lightgun cursor
     std::unordered_map<std::string, int32_t> axisAccum[kMaxPorts];
+
+    // Light-gun shadow cursor per port, mirroring ares' internal cursor (starts
+    // centre-screen, same clamp as super-scope.cpp:52-56) so aimAt() can feed the
+    // relative delta to reach an absolute normalized position. Reset on connect.
+    static constexpr int32_t kGunW = 256, kGunH = 240;
+    int32_t lightgunX[kMaxPorts];
+    int32_t lightgunY[kMaxPorts];
 
     // Explicit device registration: the device name the dev connected to each
     // port ("" = nothing plugged in; no input until connectDevice). Persisted
@@ -401,6 +408,9 @@ static const std::unordered_map<std::string,
            std::unordered_map<std::string, DeviceDescriptor>> t = {
         {"sfc", {
             {"Mouse", {{{"Left", 1u << 0}, {"Right", 1u << 1}}, {"X", "Y"}}},
+            {"Super Scope", {{{"Trigger", 1u << 0}, {"Cursor", 1u << 1},
+                              {"Turbo", 1u << 2}, {"Pause", 1u << 3}}, {"X", "Y"}}},
+            {"Justifier", {{{"Trigger", 1u << 0}, {"Start", 1u << 3}}, {"X", "Y"}}},
         }},
     };
     return t;
@@ -1183,6 +1193,14 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeConnectDevice(
         std::lock_guard<std::mutex> lock(g_state->deviceMutex);
         g_state->connectedDevice[port - 1] = name;
     }
+    {
+        // Reset the light-gun shadow cursor to centre, matching ares' fresh
+        // device (super-scope.hpp init). Telescoping deltas keep it in sync even
+        // if aimAt runs before the deferred allocate.
+        std::lock_guard<std::mutex> lock(g_state->axisMutex);
+        g_state->lightgunX[port - 1] = EmulatorState::kGunW / 2;
+        g_state->lightgunY[port - 1] = EmulatorState::kGunH / 2;
+    }
     g_state->deviceDirty.store(true, std::memory_order_relaxed);
     return ret("");
 }
@@ -1232,6 +1250,41 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetAxis(
 
     std::lock_guard<std::mutex> lock(g_state->axisMutex);
     g_state->axisAccum[port - 1][name] += value;
+    return ret("");
+}
+
+/**
+ * Aim a light-gun at an absolute normalized screen position (0..1). ares' guns
+ * are relative-only (they accumulate deltas into an internal cursor), so we track
+ * a shadow cursor mirroring that cursor and feed the delta needed to reach the
+ * target. Requires the connected device to expose X and Y axes. Returns "" /
+ * "SYSTEM_NOT_LOADED" / "INVALID_PARAMETERS" (no pointing device on the port).
+ */
+JNIEXPORT jstring JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeAimAt(
+    JNIEnv* env, jobject, jint port, jfloat nx, jfloat ny)
+{
+    auto ret = [&](const char* s) { return env->NewStringUTF(s); };
+    if (!g_state || !g_state->system) return ret("SYSTEM_NOT_LOADED");
+    if (port < 1 || port > EmulatorState::kMaxPorts) return ret("INVALID_PARAMETERS");
+
+    DeviceDescriptor desc;
+    auto has = [&](const char* a) {
+        return std::find(desc.axes.begin(), desc.axes.end(), a) != desc.axes.end();
+    };
+    if (!connectedDescriptor(port, desc) || !has("X") || !has("Y"))
+        return ret("INVALID_PARAMETERS");
+
+    float cx = nx < 0 ? 0 : (nx > 1 ? 1 : nx);
+    float cy = ny < 0 ? 0 : (ny > 1 ? 1 : ny);
+    int tx = (int)(cx * EmulatorState::kGunW);
+    int ty = (int)(cy * EmulatorState::kGunH);
+
+    std::lock_guard<std::mutex> lock(g_state->axisMutex);
+    g_state->axisAccum[port - 1]["X"] += tx - g_state->lightgunX[port - 1];
+    g_state->axisAccum[port - 1]["Y"] += ty - g_state->lightgunY[port - 1];
+    g_state->lightgunX[port - 1] = tx;   // target is in-bounds (0..W/0..H)
+    g_state->lightgunY[port - 1] = ty;
     return ret("");
 }
 
