@@ -125,6 +125,16 @@ class AresCore {
     ): Int = nativeLoadRom(romBytes, savePrefix, region, preferredRegions)
 
     /**
+     * Stage a Sufami Turbo slot ROM (index 0 = Slot A, 1 = Slot B) to insert at
+     * the next [loadRom], whose base must be the ST-LOROM SuFami BIOS. Empty
+     * bytes clear the slot. Call before [loadRom].
+     */
+    fun stageSlot(index: Int, rom: ByteArray) = nativeStageSlot(index, rom)
+
+    /** Test seam: whether a Sufami Turbo slot cartridge actually connected at load. */
+    fun isSlotConnected(index: Int): Boolean = nativeIsSlotConnected(index)
+
+    /**
      * Write current battery-backed memory to disk under the prefix passed to
      * [loadRom]. GL thread only. Returns false when nothing was persisted.
      */
@@ -392,6 +402,8 @@ class AresCore {
         romBytes: ByteArray, savePrefix: String?,
         region: String, preferredRegions: String,
     ): Int
+    private external fun nativeStageSlot(index: Int, rom: ByteArray)
+    private external fun nativeIsSlotConnected(index: Int): Boolean
     private external fun nativeFlushSaves(): Boolean
     private external fun nativeSetAudio(volume: Float, balance: Float)
     private external fun nativeSetVideo(

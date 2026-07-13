@@ -69,6 +69,18 @@ SfcPakBuilder::CartridgeInfo SfcPakBuilder::detectHeader(const uint8_t* rom, siz
     }
     if (dataSize < 0x8000) return info;
 
+    // Sufami Turbo base cartridge — the BIOS ROM carrying the two slots. mia
+    // keys on the "BANDAI SFC-ADX" signature (super-famicom.cpp:570) and uses the
+    // ST-LOROM board, whose two slot nodes make ares create the Sufami Turbo slot
+    // ports. (Slot .st carts are built by makeSufamiSlotPak, not this path.)
+    if (dataSize >= 14 && std::memcmp(data, "BANDAI SFC-ADX", 14) == 0) {
+        info.board  = "ST-LOROM";
+        info.title  = "Sufami Turbo";
+        info.region = "NTSC";
+        info.sramSize = 0;   // the ST-LOROM board defines any base RAM
+        return info;
+    }
+
     uint32_t loScore = scoreHeader(data, dataSize, 0x7fb0);
     uint32_t hiScore = scoreHeader(data, dataSize, 0xffb0);
 
@@ -146,6 +158,27 @@ std::shared_ptr<vfs::directory> SfcPakBuilder::makeCartridgePak(
 
     if (info.sramSize > 0) {
         pak->append("save.ram", uint64_t(info.sramSize));
+    }
+
+    return pak;
+}
+
+std::shared_ptr<vfs::directory> SfcPakBuilder::makeSufamiSlotPak(
+    const uint8_t* rom, size_t romSize)
+{
+    auto pak = std::make_shared<vfs::directory>();
+
+    if (romSize > 0 && (romSize & 0x7fff) == 512) {   // strip copier header
+        rom += 512;
+        romSize -= 512;
+    }
+
+    pak->append("program.rom", std::span<const u8>(rom, romSize));
+
+    // Cart header: rom[0x37] is RAM size in 2 KiB units (mia SufamiTurbo::analyze).
+    uint32_t ramSize = romSize > 0x37 ? uint32_t(rom[0x37]) * 2048u : 0u;
+    if (ramSize > 0) {
+        pak->append("save.ram", uint64_t(ramSize));
     }
 
     return pak;

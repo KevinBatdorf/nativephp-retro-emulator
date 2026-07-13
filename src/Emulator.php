@@ -125,8 +125,35 @@ class Emulator
      * @param  string|null  $savePath  Battery-save file prefix; null keeps the
      *                                 default per-surface location in app storage.
      */
-    public function loadRom(string $path, ?string $savePath = null): static
+    /**
+     * Boot a ROM. Pass a path for a normal cartridge, or a slotted-media spec for
+     * a base cartridge with inserted slots (SuFami Turbo):
+     *
+     *   $emu->loadRom('/roms/game.sfc');
+     *   $emu->loadRom(['base' => '/roms/sufami.sfc', 'slotA' => '/roms/game.st']);
+     *
+     * The `base` is the cartridge; `slotA`/`slotB` are staged into its slots
+     * before boot so the slot game runs directly (not the base's menu).
+     *
+     * @param  string|array{base: string, slotA?: string, slotB?: string}  $rom
+     */
+    public function loadRom(string|array $rom, ?string $savePath = null): static
     {
+        if (is_array($rom)) {
+            foreach (['slotA' => 0, 'slotB' => 1] as $key => $index) {
+                if (isset($rom[$key])) {
+                    $this->call('Emulator.StageSlot', [
+                        'surface' => $this->surface,
+                        'index' => $index,
+                        'path' => $rom[$key],
+                    ]);
+                }
+            }
+            $path = $rom['base'];
+        } else {
+            $path = $rom;
+        }
+
         $this->call('Emulator.LoadRom', array_filter([
             'surface' => $this->surface,
             'path' => $path,

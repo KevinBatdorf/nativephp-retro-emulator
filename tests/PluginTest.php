@@ -60,6 +60,7 @@ describe('Plugin Manifest', function () {
             'Emulator.StateLoad',
             'Emulator.UndoStateSave',
             'Emulator.UndoStateLoad',
+            'Emulator.StageSlot',
             'Emulator.ReadMemory',
             'Emulator.ReadMemoryAsync',
             'Emulator.WriteMemory',
@@ -787,6 +788,23 @@ describe('Typed layer', function () {
 
         $call = collect($GLOBALS['__nativephp_calls'])->firstWhere('function', 'Emulator.WatchMemory');
         expect($call['payload']['addresses'])->toBe([['address' => 0x7EF340, 'length' => 2]]);
+    });
+
+    it('loadRom stages slots then loads the base for slotted media', function () {
+        Emulator::surface()->loadRom([
+            'base' => '/roms/sufami.sfc',
+            'slotA' => '/roms/game-a.st',
+            'slotB' => '/roms/game-b.st',
+        ]);
+
+        $calls = collect($GLOBALS['__nativephp_calls']);
+        $slots = $calls->where('function', 'Emulator.StageSlot')->values();
+        expect($slots)->toHaveCount(2);
+        expect($slots[0]['payload'])->toBe(['surface' => 'main', 'index' => 0, 'path' => '/roms/game-a.st']);
+        expect($slots[1]['payload'])->toBe(['surface' => 'main', 'index' => 1, 'path' => '/roms/game-b.st']);
+        // The base is loaded last, as the cartridge.
+        $load = $calls->firstWhere('function', 'Emulator.LoadRom');
+        expect($load['payload']['path'])->toBe('/roms/sufami.sfc');
     });
 
     it('loadRom omits savePath unless given', function () {

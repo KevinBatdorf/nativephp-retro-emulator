@@ -375,6 +375,28 @@ object EmulatorFunctions {
         }
     }
 
+    /**
+     * Stage a Sufami Turbo slot ROM (index 0 = Slot A, 1 = Slot B) from a file
+     * path, to be inserted at the next LoadRom (whose base is the SuFami BIOS).
+     */
+    class StageSlot(private val activity: FragmentActivity) : BridgeFunction {
+        override fun execute(parameters: Map<String, Any>): Map<String, Any> {
+            val (entry, err) = entry(parameters)
+            if (err != null) return err
+            val index = (parameters["index"] as? Number)?.toInt() ?: 0
+            val path = parameters["path"] as? String
+                ?: return BridgeResponse.error("INVALID_PARAMETERS", "path is required")
+            val file = File(path)
+            if (!file.exists()) return operationalError(entry!!, "ROM_NOT_FOUND", "slot ROM not found: $path")
+            return try {
+                entry!!.renderer.stageSlot(index, file.readBytes())
+                BridgeResponse.success(mapOf("status" to "staged", "index" to index))
+            } catch (e: Exception) {
+                BridgeResponse.error("READ_FAILED", e.message ?: "Failed to read slot ROM")
+            }
+        }
+    }
+
     /** Pause emulation. */
     class Pause(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {

@@ -53,6 +53,12 @@
             "description": "Start emulation with ROM at given path; call again to swap ROMs"
         },
         {
+            "name": "Emulator.StageSlot",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.StageSlot",
+            "ios": "EmulatorFunctions.StageSlot",
+            "description": "Stage a Sufami Turbo slot ROM for the next slotted LoadRom"
+        },
+        {
             "name": "Emulator.Pause",
             "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.Pause",
             "ios": "EmulatorFunctions.Pause",

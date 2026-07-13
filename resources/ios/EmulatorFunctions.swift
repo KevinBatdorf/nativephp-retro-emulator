@@ -204,6 +204,14 @@ enum EmulatorFunctions {
     /// the staged system's list (desktop's file-dialog filters); a wrong-family
     /// ROM errors, it never auto-switches systems. Fire-and-forget — PHP receives
     /// `{"status":"loading"}`; `EmulatorStarted` fires on the first rendered frame.
+    /// Sufami Turbo slotted media is live on Android; on iOS it arrives with the
+    /// iOS host renderer (step 3).
+    class StageSlot: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            BridgeResponse.error(code: "NOT_IMPLEMENTED", message: "iOS slotted media arrives with the iOS renderer (step 3)")
+        }
+    }
+
     class LoadRom: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }

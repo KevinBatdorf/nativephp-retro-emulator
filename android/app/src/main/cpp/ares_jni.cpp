@@ -18,6 +18,7 @@
 #include <ares/ares.hpp>
 
 #include "system_registry.hpp"
+#include "pak/sfc_pak.hpp"
 #include "save_io.hpp"
 #include "cheat_parse.hpp"
 #include "rate_control.hpp"
@@ -36,6 +37,14 @@ struct EmulatorState {
 
     std::shared_ptr<vfs::directory> systemPak;
     std::shared_ptr<vfs::directory> cartridgePak;
+
+    // Slotted media (SuFami Turbo slots A/B). Slot ROM bytes are staged by the
+    // bridge before loadRom; the pak is built + connected during the boot and
+    // handed to the "Sufami Turbo Cartridge" nodes by Platform::pak (parent port
+    // name disambiguates A from B). GL-thread only, like the other paks.
+    std::vector<uint8_t>            stagedSlot[2];
+    std::shared_ptr<vfs::directory> slotPak[2];
+    bool                            slotConnected[2] = {false, false};  // test seam
 
     u32    frameWidth  = 0;
     u32    frameHeight = 0;
@@ -234,6 +243,14 @@ struct AndroidPlatform : ares::Platform {
         auto name = node->name();
         if (name == g_state->system->systemNode.c_str())    return g_state->systemPak;
         if (name == g_state->system->cartridgeNode.c_str()) return g_state->cartridgePak;
+        // Sufami Turbo slot carts — same node name in both slots, so the parent
+        // port ("Sufami Turbo Slot A" / "…B") picks which staged pak answers.
+        if (name == "Sufami Turbo Cartridge") {
+            auto parent = ares::Node::parent(node);
+            std::string port = parent ? std::string((const char*)parent->name()) : "";
+            if (port == "Sufami Turbo Slot A") return g_state->slotPak[0];
+            if (port == "Sufami Turbo Slot B") return g_state->slotPak[1];
+        }
         return {};
     }
 
@@ -745,6 +762,9 @@ static void unloadCore()
     g_state->romLoaded    = false;
     g_state->systemPak.reset();
     g_state->cartridgePak.reset();
+    g_state->slotPak[0].reset();
+    g_state->slotPak[1].reset();
+    g_state->slotConnected[0] = g_state->slotConnected[1] = false;
     g_state->inputCache.clear();
     g_state->axisCache.clear();
     // connectedDevice[] intentionally survives (registrations persist across a
@@ -766,6 +786,28 @@ static void unloadCore()
     g_state->rewind.history.clear();
     g_state->refreshRateHint.store(0.0, std::memory_order_relaxed);
     g_state->paused.store(false, std::memory_order_relaxed);
+}
+
+/**
+ * Stage a Sufami Turbo slot ROM (index 0 = Slot A, 1 = Slot B) to be inserted at
+ * the next nativeLoadRom, whose base must be an ST-LOROM cart. Empty bytes clear
+ * the slot. Kept separate so loadRom's signature stays single-ROM.
+ */
+JNIEXPORT void JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeStageSlot(
+    JNIEnv* env, jobject, jint index, jbyteArray romBytes)
+{
+    if (!g_state || index < 0 || index > 1) return;
+    g_state->stagedSlot[index] = jbyteArrayToVector(env, romBytes);
+}
+
+/** Test seam: whether a Sufami Turbo slot cartridge actually connected at load. */
+JNIEXPORT jboolean JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeIsSlotConnected(
+    JNIEnv*, jobject, jint index)
+{
+    if (!g_state || index < 0 || index > 1) return JNI_FALSE;
+    return g_state->slotConnected[index] ? JNI_TRUE : JNI_FALSE;
 }
 
 /**
@@ -846,8 +888,29 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadRom(
         unloadCore();
         return -1;
     }
-    cartridgeSlot->allocate();
+    auto baseCartridge = cartridgeSlot->allocate();
     cartridgeSlot->connect();
+
+    // Slotted media: connecting an ST-LOROM base created the Sufami Turbo slot
+    // ports UNDER the base cartridge peripheral (not the root), so find them
+    // there. Build a pak from each staged slot ROM and connect it (Platform::pak
+    // hands it to the slot's cartridge node). Do this before power-on so the game
+    // is present at boot rather than the base's insert-cartridge menu.
+    static const char* kSlotPorts[2] = {"Sufami Turbo Slot A", "Sufami Turbo Slot B"};
+    for (int i = 0; i < 2; i++) {
+        if (g_state->stagedSlot[i].empty()) continue;
+        auto slot = baseCartridge ? baseCartridge->find<ares::Node::Port>(kSlotPorts[i])
+                                   : ares::Node::Port();
+        if (!slot) { LOGE("slot port '%s' not found (base not ST?)", kSlotPorts[i]); continue; }
+        g_state->slotPak[i] = SfcPakBuilder::makeSufamiSlotPak(
+            g_state->stagedSlot[i].data(), g_state->stagedSlot[i].size());
+        slot->allocate();
+        slot->connect();
+        g_state->slotConnected[i] = (bool)slot->connected();
+        LOGI("Sufami Turbo slot %c connected=%d (%zu bytes)",
+             'A' + i, g_state->slotConnected[i] ? 1 : 0, g_state->stagedSlot[i].size());
+        g_state->stagedSlot[i].clear();   // pak copied the bytes
+    }
 
     g_state->root->power(false);
     g_state->romLoaded = true;

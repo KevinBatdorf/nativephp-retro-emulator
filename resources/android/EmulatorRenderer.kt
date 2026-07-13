@@ -800,6 +800,9 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     /** Aim a light-gun at a normalized position (see [AresCore.aimAt]). Thread-safe. */
     fun aimAt(port: Int, x: Float, y: Float): String = core.aimAt(port, x, y)
 
+    /** Stage a Sufami Turbo slot ROM for the next load (see [AresCore.stageSlot]). */
+    fun stageSlot(index: Int, rom: ByteArray) = core.stageSlot(index, rom)
+
     /** Test seam: pending accumulated axis delta (see [AresCore.getAxisAccum]). */
     fun getAxisAccum(port: Int, name: String): Int = core.getAxisAccum(port, name)
 

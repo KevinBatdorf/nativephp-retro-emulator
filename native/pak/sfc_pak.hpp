@@ -33,6 +33,12 @@ struct SfcPakBuilder {
         const CartridgeInfo& info,
         const uint8_t* rom, size_t romSize);
 
+    // Build a Sufami Turbo slot-cartridge pak: program.rom (the full .st) plus a
+    // save.ram sized from the cart header (rom[0x37] = RAM in 2 KiB units). The
+    // "Sufami Turbo Cartridge" node reads these when its slot connects.
+    static std::shared_ptr<vfs::directory> makeSufamiSlotPak(
+        const uint8_t* rom, size_t romSize);
+
 private:
     static uint32_t scoreHeader(const uint8_t* rom, size_t size, uint32_t base);
     static std::string extractTitle(const uint8_t* header);
