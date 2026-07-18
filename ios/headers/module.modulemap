@@ -1,4 +1,5 @@
 module RetroEmulator {
     header "ares_ios_api.h"
+    header "librashader_metal_shim.h"
     export *
 }

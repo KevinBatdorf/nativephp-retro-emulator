@@ -40,6 +40,11 @@ object EmulatorFunctions {
 
     private val surfaces = java.util.concurrent.ConcurrentHashMap<String, SurfaceEntry>()
 
+    // Last slot each surface saved to — undoStateSave reverts that slot's file
+    // (ares state.undoSlot, desktop-ui/program/states.cpp:8). In-memory like
+    // ares; a fresh process forgets it and undo reports nothing_to_undo.
+    private val undoSaveSlot = java.util.concurrent.ConcurrentHashMap<String, String>()
+
     /**
      * Register an [EmulatorRenderer] under [name] so bridge functions can locate it.
      * Called by the NativePHP component system after creating the renderer.
@@ -51,11 +56,32 @@ object EmulatorFunctions {
         Log.d(TAG, "Surface registered: $name")
     }
 
-    /** Remove a surface from the registry (called when the component is torn down). */
+    /**
+     * Remove a surface from the registry — but only if [renderer] still owns the
+     * slot. During a fast remount (navigation / recomposition) the EDGE element
+     * can instantiate a new renderer that re-registers under the same name
+     * BEFORE the old instance's onRelease fires. A blind remove-by-name would
+     * then wipe the live renderer's entry, stranding every bridge call with
+     * SURFACE_NOT_FOUND. Compare identity so a superseded teardown leaves the
+     * live entry in place.
+     */
     @JvmStatic
-    fun unregisterSurface(name: String) {
-        surfaces.remove(name)?.renderer?.eventListener = null
-        Log.d(TAG, "Surface unregistered: $name")
+    fun unregisterSurface(name: String, renderer: EmulatorRenderer) {
+        renderer.eventListener = null
+        var removed = false
+        surfaces.computeIfPresent(name) { _, entry ->
+            if (entry.renderer === renderer) {
+                removed = true
+                null
+            } else {
+                entry
+            }
+        }
+        Log.d(TAG, if (removed) {
+            "Surface unregistered: $name"
+        } else {
+            "Surface unregister skipped — '$name' owned by a newer instance"
+        })
     }
 
     /**
@@ -365,6 +391,13 @@ object EmulatorFunctions {
                     saveDir.mkdirs()
                     File(saveDir, file.nameWithoutExtension).absolutePath
                 }
+                // Undo files belong to the outgoing game (ares clearUndoStates,
+                // load.cpp:170) — a stale cross-game snapshot must not survive.
+                val stateDir = File(activity.filesDir, "states/${surface(parameters)}")
+                File(stateDir, "undo_save.state").delete()
+                File(stateDir, "undo_load.state").delete()
+                undoSaveSlot.remove(surface(parameters))
+
                 entry.renderer.queueRomLoad(romBytes, system, path, savePrefix)
                 Log.d(TAG, "LoadRom: queued $path (${romBytes.size} bytes, saves=$savePrefix)")
                 BridgeResponse.success(mapOf("status" to "loading", "path" to path))
@@ -436,7 +469,15 @@ object EmulatorFunctions {
             val slot = parameters["slot"] ?: 1
             val stateDir = File(activity.filesDir, "states/${surface(parameters)}")
             stateDir.mkdirs()
-            val path = File(stateDir, "$slot.state").absolutePath
+            val slotFile = File(stateDir, "$slot.state")
+            val path = slotFile.absolutePath
+
+            // The slot's previous file moves to the undo file before the new
+            // state lands (ares stateSave, states.cpp:6-9), so undoStateSave
+            // can revert the slot.
+            if (slotFile.exists() && slotFile.renameTo(File(stateDir, "undo_save.state"))) {
+                undoSaveSlot[surface(parameters)] = slot.toString()
+            }
 
             val ok = entry!!.renderer.syncStateSave(path)
             return if (ok) {
@@ -454,10 +495,17 @@ object EmulatorFunctions {
             if (err != null) return err
 
             val slot = parameters["slot"] ?: 1
-            val statePath = File(activity.filesDir, "states/${surface(parameters)}/$slot.state")
+            val stateDir = File(activity.filesDir, "states/${surface(parameters)}")
+            stateDir.mkdirs()
+            val statePath = File(stateDir, "$slot.state")
+
+            // Snapshot the current state to the undo-load file before touching
+            // the slot (ares stateLoad, states.cpp:26-30) — even when the slot
+            // turns out to be empty, matching the reference order.
+            entry!!.renderer.syncStateSave(File(stateDir, "undo_load.state").absolutePath)
 
             if (!statePath.exists()) {
-                return operationalError(entry!!, "SLOT_EMPTY", "No state in slot $slot")
+                return operationalError(entry, "SLOT_EMPTY", "No state in slot $slot")
             }
 
             val ok = entry!!.renderer.syncStateLoad(statePath.absolutePath)
@@ -469,16 +517,34 @@ object EmulatorFunctions {
         }
     }
 
-    /** Undo most recent state save (removes the undo-slot file). */
+    /**
+     * Undo most recent state save: the slot's previous file moves back over
+     * the slot (ares undoStateSave, states.cpp:46-59) — a file-level revert,
+     * the machine keeps running.
+     */
     class UndoStateSave(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
-            val undoFile = File(activity.filesDir, "states/${surface(parameters)}/undo_save.state")
-            val deleted = undoFile.delete()
-            return BridgeResponse.success(mapOf("status" to if (deleted) "undone" else "nothing_to_undo"))
+            val name = surface(parameters)
+            val stateDir = File(activity.filesDir, "states/$name")
+            val undoFile = File(stateDir, "undo_save.state")
+            val slot = undoSaveSlot[name]
+            if (slot == null || !undoFile.exists()) {
+                return BridgeResponse.success(mapOf("status" to "nothing_to_undo"))
+            }
+            if (!undoFile.renameTo(File(stateDir, "$slot.state"))) {
+                val (entry, err) = entry(parameters)
+                if (err != null) return err
+                return operationalError(entry!!, "UNDO_FAILED", "Unable to revert slot $slot to its previous state")
+            }
+            undoSaveSlot.remove(name)
+            return BridgeResponse.success(mapOf("status" to "undone", "slot" to slot))
         }
     }
 
-    /** Undo most recent state load (re-applies from the undo-load backup slot). */
+    /**
+     * Undo most recent state load: re-apply the pre-load snapshot, then drop
+     * it (ares undoStateLoad, states.cpp:61-81).
+     */
     class UndoStateLoad(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
             val undoFile = File(activity.filesDir, "states/${surface(parameters)}/undo_load.state")
@@ -489,6 +555,7 @@ object EmulatorFunctions {
             if (err != null) return err
             val ok = entry!!.renderer.syncStateLoad(undoFile.absolutePath)
             return if (ok) {
+                undoFile.delete()
                 BridgeResponse.success(mapOf("status" to "undone"))
             } else {
                 operationalError(entry, "UNDO_FAILED", "Undo state load failed")

@@ -30,7 +30,7 @@
             "element": "KevinBatdorf\\RetroEmulator\\Elements\\Emulator",
             "blade": "KevinBatdorf\\RetroEmulator\\Components\\Emulator",
             "android_renderer": "com.kevinbatdorf.plugins.retroemulator.EmulatorSurface",
-            "ios_renderer": "EmulatorRenderer"
+            "ios_renderer": "EmulatorSurfaceView"
         }
     ],
     "bridge_functions": [

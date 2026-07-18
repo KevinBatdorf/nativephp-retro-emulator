@@ -138,7 +138,7 @@ describe('Plugin Manifest', function () {
         expect($emulator['element'])->toBe('KevinBatdorf\\RetroEmulator\\Elements\\Emulator');
         expect($emulator['blade'])->toBe('KevinBatdorf\\RetroEmulator\\Components\\Emulator');
         expect($emulator['android_renderer'])->toBe('com.kevinbatdorf.plugins.retroemulator.EmulatorSurface');
-        expect($emulator['ios_renderer'])->toBe('EmulatorRenderer');
+        expect($emulator['ios_renderer'])->toBe('EmulatorSurfaceView');
     });
 });
 
@@ -257,18 +257,24 @@ describe('Error handling', function () {
     it('error codes match the native source', function () {
         $sources = file_get_contents(dirname(__DIR__).'/resources/android/EmulatorFunctions.kt')
             .file_get_contents(dirname(__DIR__).'/resources/android/EmulatorRenderer.kt')
-            .file_get_contents(dirname(__DIR__).'/resources/ios/EmulatorFunctions.swift');
+            .file_get_contents(dirname(__DIR__).'/resources/ios/EmulatorFunctions.swift')
+            .file_get_contents(dirname(__DIR__).'/resources/ios/EmulatorRenderer.swift')
+            .file_get_contents(dirname(__DIR__).'/android/app/src/main/cpp/ares_jni.cpp')
+            .file_get_contents(dirname(__DIR__).'/ios/ares_ios_api.cpp');
 
         // Codes surface as a bridge error (code is arg 1, or iOS's `code:`
-        // label), a direct onError (arg 1), or operationalError(entry, code, …)
-        // (arg 2). The enum is the union across both platforms — NOT_IMPLEMENTED
-        // is iOS-only until the iOS host renderer lands (step 3).
+        // label), a direct onError (arg 1), operationalError(entry, code, …),
+        // or a native status-string return — the C layer's ret(...) /
+        // statusRet(...), where input-validation codes like UNKNOWN_BUTTON
+        // originate on both platforms. The enum is the union across platforms.
         preg_match_all(
-            '/(?:BridgeResponse\.error|\.onError)\s*\(\s*(?:code:\s*)?"([A-Z_]+)"|operationalError\([^,]+,\s*"([A-Z_]+)"/s',
+            '/(?:BridgeResponse\.error|\.onError)\s*\(\s*(?:code:\s*)?"([A-Z_]+)"'
+            .'|operationalError\([^,]+,\s*(?:code:\s*)?"([A-Z_]+)"'
+            .'|(?:statusRet|\bret)\s*\(\s*\(?\s*(?:std::string\s*\(\s*)?"([A-Z_]+)[":]/s',
             $sources,
             $m,
         );
-        $native = array_values(array_unique(array_filter(array_merge($m[1], $m[2]))));
+        $native = array_values(array_unique(array_filter(array_merge($m[1], $m[2], $m[3]))));
         $enum = array_map(fn ($case) => $case->value, EmulatorErrorCode::cases());
 
         sort($native);

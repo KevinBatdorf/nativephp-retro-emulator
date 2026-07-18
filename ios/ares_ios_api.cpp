@@ -3,6 +3,7 @@
 #include <ares/ares.hpp>
 
 #include "system_registry.hpp"
+#include "pak/sfc_pak.hpp"
 #include "save_io.hpp"
 #include "cheat_parse.hpp"
 #include "rate_control.hpp"
@@ -10,6 +11,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <cstdio>
 #include <cstring>
 #include <map>
@@ -27,6 +29,14 @@ struct AresContext {
 
     std::shared_ptr<vfs::directory> systemPak;
     std::shared_ptr<vfs::directory> cartridgePak;
+
+    // Slotted media (SuFami Turbo slots A/B, BS-X BS Memory). Slot ROM bytes are
+    // staged by the bridge before loadRom; the pak is built + connected during
+    // the boot and handed to the slot cartridge nodes by Platform::pak (parent
+    // port name disambiguates A from B). Emulation thread only, like the paks.
+    std::vector<uint8_t>            stagedSlot[2];
+    std::shared_ptr<vfs::directory> slotPak[2];
+    bool                            slotConnected[2] = {false, false};  // test seam
 
     ares::Node::System root;
     bool systemLoaded = false;
@@ -60,16 +70,62 @@ struct AresContext {
     std::vector<ares::Node::Audio::Stream> audioStreams;
     static constexpr size_t kAudioCap = 12000u;
 
-    // Input — written from any thread, read from the emulation thread.
-    std::atomic<uint32_t> inputMaskPort1 {0};
-    std::atomic<uint32_t> inputMaskPort2 {0};
+    // Input — two per-port button masks OR'd together at poll time:
+    //   hwMask — hardware controller bits, written by EmulatorInput.
+    //   swMask — software bits, written natively by ares_press_button with the
+    //            connected device's own bit for the named button.
+    // Ports are 1-based; index [0]=port1 … up to kMaxPorts (multitap territory).
+    static constexpr int kMaxPorts = 5;
+    std::atomic<uint32_t> hwMask[kMaxPorts] {};
+    std::atomic<uint32_t> swMask[kMaxPorts] {};
 
+    // Cached mapping from an ares button node → (1-based port, bit). Built on
+    // the emulation thread when a device is (re)connected. `bit` is the slot the
+    // node reads; `defaultBit` is its unremapped value, kept so a remap
+    // recomputes against defaults. Mutated + read on the emulation thread only.
     struct CachedButton {
         ares::Node::Input::Button node;
-        std::atomic<uint32_t>*   mask;
-        uint32_t                 bit;
+        int      port;
+        uint32_t bit;
+        uint32_t defaultBit;
     };
     std::vector<CachedButton> inputCache;
+
+    // Cached axis nodes (mouse / light-gun X/Y). Each frame the core polls an
+    // axis; we hand it the accumulated relative delta for (port, name) and reset
+    // it to zero (accumulate-and-consume — matches ares' relative-motion model).
+    struct CachedAxis {
+        ares::Node::Input::Axis node;
+        int         port;
+        std::string name;
+    };
+    std::vector<CachedAxis> axisCache;
+    std::mutex axisMutex;   // guards axisAccum + lightgun cursor
+    std::unordered_map<std::string, int32_t> axisAccum[kMaxPorts];
+
+    // Light-gun shadow cursor per port, mirroring ares' internal cursor (starts
+    // centre-screen, same clamp as super-scope.cpp:52-56) so aimAt() can feed the
+    // relative delta to reach an absolute normalized position. Reset on connect.
+    static constexpr int32_t kGunW = 256, kGunH = 240;
+    int32_t lightgunX[kMaxPorts];
+    int32_t lightgunY[kMaxPorts];
+
+    // Explicit device registration by PHYSICAL port (index 0 = port 1, only the
+    // system's real ports). "" = nothing plugged in. Persisted across boots.
+    // A Super Multitap here fans out to several LOGICAL ports; the logical→device
+    // mapping is derived on demand (see connectedDescriptor). Guarded by
+    // deviceMutex.
+    std::string       connectedDevice[kMaxPorts];
+    std::mutex        deviceMutex;
+    std::atomic<bool> deviceDirty {false};
+
+    // Per-port controller remap: lowercased core-button name → the bit that
+    // button should read. Written by the bridge thread under inputRemapMutex;
+    // consumed on the emulation thread when inputRemapDirty is set (top of
+    // ares_tick) or right after a device (re)connect.
+    std::unordered_map<int, std::unordered_map<std::string, uint32_t>> inputRemap;
+    std::mutex        inputRemapMutex;
+    std::atomic<bool> inputRemapDirty {false};
 
     std::atomic<bool> paused {false};
 
@@ -80,7 +136,6 @@ struct AresContext {
 
     // ROM metadata (set once during ares_load_rom, read-only afterward).
     std::string romRegion;
-    std::string portsJson;
 
     // Battery-save location ("<prefix>.save.ram", …); empty disables persistence.
     std::string savePrefix;
@@ -161,6 +216,15 @@ struct IosPlatform : ares::Platform {
         auto name = node->name();
         if (name == g_ctx->system->systemNode.c_str())    return g_ctx->systemPak;
         if (name == g_ctx->system->cartridgeNode.c_str()) return g_ctx->cartridgePak;
+        // Sufami Turbo slot carts — same node name in both slots, so the parent
+        // port ("Sufami Turbo Slot A" / "…B") picks which staged pak answers.
+        if (name == "Sufami Turbo Cartridge") {
+            auto parent = ares::Node::parent(node);
+            std::string port = parent ? std::string((const char*)parent->name()) : "";
+            if (port == "Sufami Turbo Slot A") return g_ctx->slotPak[0];
+            if (port == "Sufami Turbo Slot B") return g_ctx->slotPak[1];
+        }
+        if (name == "BS Memory Cartridge") return g_ctx->slotPak[0];
         return {};
     }
 
@@ -235,11 +299,26 @@ struct IosPlatform : ares::Platform {
         if (auto btn = node->cast<ares::Node::Input::Button>()) {
             for (auto& cached : g_ctx->inputCache) {
                 if (cached.node == btn) {
-                    btn->setValue(
-                        cached.mask->load(std::memory_order_relaxed) & cached.bit);
+                    int i = cached.port - 1;
+                    uint32_t mask = g_ctx->hwMask[i].load(std::memory_order_relaxed)
+                                  | g_ctx->swMask[i].load(std::memory_order_relaxed);
+                    btn->setValue(mask & cached.bit);
                     return;
                 }
             }
+            return;
+        }
+        if (auto axis = node->cast<ares::Node::Input::Axis>()) {
+            for (auto& cached : g_ctx->axisCache) {
+                if (cached.node == axis) {
+                    std::lock_guard<std::mutex> lock(g_ctx->axisMutex);
+                    auto& acc = g_ctx->axisAccum[cached.port - 1][cached.name];
+                    axis->setValue(acc);
+                    acc = 0;   // consume: a relative delta applies once per poll
+                    return;
+                }
+            }
+            axis->setValue(0);
             return;
         }
         if (auto rumble = node->cast<ares::Node::Input::Rumble>()) {
@@ -262,17 +341,189 @@ struct IosPlatform : ares::Platform {
 
 static IosPlatform* g_platform = nullptr;
 
-// Cache button nodes under `parent` (a controller port or, for systems with
-// built-in controls, the root node) into the given port bitmask.
-static void cacheButtons(ares::Node::Object parent,
-                         const SystemRegistry::SystemDef& def,
-                         std::atomic<uint32_t>& mask) {
+static std::string toLower(std::string s) {
+    for (auto& c : s) c = (char)std::tolower((unsigned char)c);
+    return s;
+}
+
+// A connectable device's inputs: button node name → bit, plus axis node names.
+struct DeviceDescriptor {
+    std::unordered_map<std::string, uint32_t> buttons;
+    std::vector<std::string> axes;
+};
+
+// Non-default-gamepad devices per system. The default gamepad (def.device) is
+// described by def.buttons in the registry; everything else lives here so the
+// registry (and its button drift test) stays gamepad-only. Mirrors the Android
+// table in ares_jni.cpp.
+static const std::unordered_map<std::string,
+       std::unordered_map<std::string, DeviceDescriptor>>& deviceTable() {
+    static const std::unordered_map<std::string,
+           std::unordered_map<std::string, DeviceDescriptor>> t = {
+        {"sfc", {
+            {"Mouse", {{{"Left", 1u << 0}, {"Right", 1u << 1}}, {"X", "Y"}}},
+            {"Super Scope", {{{"Trigger", 1u << 0}, {"Cursor", 1u << 1},
+                              {"Turbo", 1u << 2}, {"Pause", 1u << 3}}, {"X", "Y"}}},
+            {"Justifier", {{{"Trigger", 1u << 0}, {"Start", 1u << 3}}, {"X", "Y"}}},
+            // Container device — no inputs of its own; fans out to 4 gamepad
+            // sub-ports (handled specially in applyConnectedDevices).
+            {"Super Multitap", {{}, {}}},
+        }},
+    };
+    return t;
+}
+
+// Resolve a device name to its descriptor for a system, or false if unsupported.
+static bool resolveDevice(const SystemRegistry::SystemDef& def,
+                          const std::string& name, DeviceDescriptor& out) {
+    if (def.device && name == def.device) {          // the system's default pad
+        out.buttons = def.buttons;
+        out.axes.clear();
+        return true;
+    }
+    auto sit = deviceTable().find(def.id);
+    if (sit != deviceTable().end()) {
+        auto dit = sit->second.find(name);
+        if (dit != sit->second.end()) { out = dit->second; return true; }
+    }
+    return false;
+}
+
+// Device names this system accepts: the default gamepad + any table extras.
+static std::vector<std::string> supportedDevices(const SystemRegistry::SystemDef& def) {
+    std::vector<std::string> v;
+    if (def.device) v.emplace_back(def.device);
+    auto sit = deviceTable().find(def.id);
+    if (sit != deviceTable().end())
+        for (auto& [n, _] : sit->second) v.push_back(n);
+    return v;
+}
+
+static const char* kMultitap = "Super Multitap";
+static bool isMultitap(const std::string& name) { return name == kMultitap; }
+// Logical ports a physical port consumes: a multitap fans out to 4, else 1.
+static int portBlock(const std::string& name) { return isMultitap(name) ? 4 : 1; }
+
+// Cache a device's button + axis nodes under `parent` for `port` (1-based).
+static void cacheDevice(ares::Node::Object parent,
+                        const DeviceDescriptor& desc, int port) {
     for (auto& btn : parent->find<ares::Node::Input::Button>()) {
-        auto it = def.buttons.find(std::string((const char*)btn->name()));
-        if (it != def.buttons.end()) {
-            g_ctx->inputCache.push_back({btn, &mask, it->second});
+        auto it = desc.buttons.find(std::string((const char*)btn->name()));
+        if (it != desc.buttons.end())
+            g_ctx->inputCache.push_back({btn, port, it->second, it->second});
+    }
+    for (auto& ax : parent->find<ares::Node::Input::Axis>()) {
+        auto name = std::string((const char*)ax->name());
+        if (std::find(desc.axes.begin(), desc.axes.end(), name) != desc.axes.end())
+            g_ctx->axisCache.push_back({ax, port, name});
+    }
+}
+
+// Bit for a button name in a descriptor, case-insensitively; false if absent.
+static bool bitForButtonName(const DeviceDescriptor& desc,
+                             const std::string& name, uint32_t& out) {
+    auto lname = toLower(name);
+    for (auto& [key, bit] : desc.buttons)
+        if (toLower(key) == lname) { out = bit; return true; }
+    return false;
+}
+
+// Recompute every cached button's read-bit from its default, overridden by the
+// stored per-port remap. Emulation thread only (cached.bit is not atomic).
+static void applyInputRemap() {
+    if (!g_ctx) return;
+    std::lock_guard<std::mutex> lock(g_ctx->inputRemapMutex);
+    for (auto& cached : g_ctx->inputCache) {
+        cached.bit = cached.defaultBit;
+        auto pit = g_ctx->inputRemap.find(cached.port);
+        if (pit == g_ctx->inputRemap.end()) continue;
+        auto it = pit->second.find(toLower(std::string((const char*)cached.node->name())));
+        if (it != pit->second.end()) cached.bit = it->second;
+    }
+}
+
+// Rebuild the input/axis caches to match connectedDevice[] on the live core.
+// Emulation thread only. Systems with built-in controls (ports == 0, e.g.
+// Game Boy) always cache their controls on the system node. Otherwise every
+// registered device is (re)allocated on its hot-swappable port; empty ports
+// get nothing.
+static void applyConnectedDevices() {
+    if (!g_ctx || !g_ctx->system || !g_ctx->root) return;
+    auto& def = *g_ctx->system;
+    g_ctx->inputCache.clear();
+    g_ctx->axisCache.clear();
+
+    if (def.ports == 0) {   // built-in controls (Game Boy) — always on logical 1
+        DeviceDescriptor desc; desc.buttons = def.buttons;
+        cacheDevice(g_ctx->root, desc, 1);
+        applyInputRemap();
+        return;
+    }
+
+    // Walk physical ports, expanding a multitap into 4 gamepad sub-ports, and
+    // assign consecutive LOGICAL port numbers (a multitap on port 2 → 2,3,4,5).
+    int logical = 1;
+    for (int p = 1; p <= def.ports && logical <= AresContext::kMaxPorts; p++) {
+        std::string name;
+        {
+            std::lock_guard<std::mutex> lock(g_ctx->deviceMutex);
+            name = g_ctx->connectedDevice[p - 1];
+        }
+        auto portName = std::string("Controller Port ") + std::to_string(p);
+        auto port = g_ctx->root->find<ares::Node::Port>(portName.c_str());
+
+        if (name.empty()) { if (port) port->disconnect(); logical += 1; continue; }
+        if (!port) { logical += portBlock(name); continue; }
+
+        if (isMultitap(name)) {
+            port->allocate(kMultitap);
+            port->connect();
+            auto tap = port->connected();   // the Super Multitap peripheral
+            DeviceDescriptor gp; gp.buttons = def.buttons;   // each sub-port is a gamepad
+            for (int i = 1; i <= 4 && logical <= AresContext::kMaxPorts; i++, logical++) {
+                auto sub = tap ? tap->find<ares::Node::Port>(
+                    (std::string("Controller Port ") + std::to_string(i)).c_str()) : nullptr;
+                if (!sub) continue;
+                sub->allocate("Gamepad");
+                sub->connect();
+                cacheDevice(sub, gp, logical);
+            }
+        } else {
+            DeviceDescriptor desc;
+            if (resolveDevice(def, name, desc)) {
+                port->allocate(name.c_str());
+                port->connect();
+                cacheDevice(port, desc, logical);
+            }
+            logical += 1;
         }
     }
+    applyInputRemap();
+}
+
+// Resolve the descriptor of the device at a LOGICAL port (a multitap sub-port
+// reads "Gamepad"), or the built-in controls for a ports==0 system. Computed
+// on-demand from the synchronously-set connectedDevice[] so it never races the
+// deferred allocate. Returns false if nothing is connected there.
+static bool connectedDescriptor(int port, DeviceDescriptor& out) {
+    if (!g_ctx || !g_ctx->system) return false;
+    auto& def = *g_ctx->system;
+    if (def.ports == 0) { out.buttons = def.buttons; out.axes.clear(); return true; }
+    std::string name;
+    {
+        std::lock_guard<std::mutex> lock(g_ctx->deviceMutex);
+        int logical = 1;
+        for (int p = 1; p <= def.ports && logical <= AresContext::kMaxPorts; p++) {
+            auto& dev = g_ctx->connectedDevice[p - 1];
+            int block = portBlock(dev);
+            for (int i = 0; i < block && logical <= AresContext::kMaxPorts; i++, logical++) {
+                if (logical == port) { name = isMultitap(dev) ? std::string("Gamepad") : dev; }
+            }
+            if (!name.empty()) break;
+        }
+    }
+    if (name.empty()) return false;
+    return resolveDevice(def, name, out);
 }
 
 // ---------------------------------------------------------------------------
@@ -307,6 +558,20 @@ void ares_destroy(AresContext* ctx) {
     delete g_ctx;      g_ctx      = nullptr;
 }
 
+void ares_reset(AresContext* ctx) {
+    if (!ctx || ctx != g_ctx) return;
+    if (ctx->root) {
+        ctx->root->unload();
+        ctx->root.reset();
+    }
+    SystemRegistry::clearStaleEntryPoints();
+    // Factory state in place — Android's Stop cycles destroy()+init(), which
+    // resets every preference atomic; destruct + placement-new matches that
+    // while keeping the pointer the host (audio/input) stored valid.
+    ctx->~AresContext();
+    new (ctx) AresContext{};
+}
+
 const char* ares_supported_systems(void) {
     static std::string ids = [] {
         std::string s;
@@ -336,8 +601,7 @@ bool ares_load_system(AresContext* ctx, const char* system_id) {
 
     // Stage only — re-staging over a running core is legal; the running game
     // continues until the next ares_load_rom boots the new declaration.
-    ctx->system    = def;
-    ctx->portsJson = SystemRegistry::staticPortsJson(*def);
+    ctx->system = def;
     return true;
 }
 
@@ -362,7 +626,16 @@ static void unloadCore(AresContext* ctx)
     ctx->romLoaded    = false;
     ctx->systemPak.reset();
     ctx->cartridgePak.reset();
+    ctx->slotPak[0].reset();
+    ctx->slotPak[1].reset();
+    ctx->slotConnected[0] = ctx->slotConnected[1] = false;
     ctx->inputCache.clear();
+    ctx->axisCache.clear();
+    // connectedDevice[] intentionally survives (registrations persist across a
+    // reboot); the swMask does not — a device teardown drops held buttons.
+    for (int i = 0; i < AresContext::kMaxPorts; i++) {
+        ctx->swMask[i].store(0, std::memory_order_relaxed);
+    }
     ctx->audioStreams.clear();
     {
         std::lock_guard<std::mutex> lock(ctx->audioMutex);
@@ -410,24 +683,14 @@ int ares_load_rom(AresContext* ctx, const uint8_t* rom, size_t rom_size,
         return -1;
     }
 
-    // Wire controllers and build the button cache. Ports JSON stays the
-    // registry's static form — same names, same order as the node walk.
-    std::atomic<uint32_t>* masks[2] = {
-        &ctx->inputMaskPort1, &ctx->inputMaskPort2,
-    };
-    if (def->ports == 0) {
-        // Built-in controls (e.g. Game Boy) — buttons live on the system node.
-        cacheButtons(ctx->root, *def, ctx->inputMaskPort1);
-    } else {
-        for (int i = 0; i < def->ports && i < 2; i++) {
-            auto portName = std::string("Controller Port ") + std::to_string(i + 1);
-            auto port = ctx->root->find<ares::Node::Port>(portName.c_str());
-            if (!port) continue;
-            port->allocate(def->device);
-            port->connect();
-            cacheButtons(port, *def, *masks[i]);
-        }
-    }
+    // Controllers are registered explicitly (ares_connect_device), not
+    // auto-allocated: re-connect whatever the dev registered before this boot
+    // (persists across loadRom) and build its caches. A system with no
+    // registrations boots with no input; built-in-controls systems (ports == 0)
+    // always cache their node.
+    applyConnectedDevices();
+    ctx->inputRemapDirty.store(false, std::memory_order_relaxed);
+    ctx->deviceDirty.store(false, std::memory_order_relaxed);
 
     // Desktop applies its overscan setting to every screen on load
     // (emulator.cpp:137 → setOverscan scan, emulator.cpp:242-246). Cores
@@ -448,8 +711,41 @@ int ares_load_rom(AresContext* ctx, const uint8_t* rom, size_t rom_size,
         unloadCore(ctx);
         return -1;
     }
-    cartridgeSlot->allocate();
+    auto baseCartridge = cartridgeSlot->allocate();
     cartridgeSlot->connect();
+
+    // Slotted media: connecting an ST-LOROM base created the Sufami Turbo slot
+    // ports UNDER the base cartridge peripheral (not the root), so find them
+    // there. Build a pak from each staged slot ROM and connect it (Platform::pak
+    // hands it to the slot's cartridge node). Do this before power-on so the game
+    // is present at boot rather than the base's insert-cartridge menu.
+    // Two shapes: SuFami Turbo (two slots) or BS-X (one BS Memory slot). Pick by
+    // which port the base created; stagedSlot[0] feeds the single BS slot.
+    bool isBsx = baseCartridge && (bool)baseCartridge->find<ares::Node::Port>("BS Memory Slot");
+    struct SlotDef { const char* port; bool flash; };
+    SlotDef slots[2];
+    int slotCount;
+    if (isBsx) {
+        slots[0] = {"BS Memory Slot", true};
+        slotCount = 1;
+    } else {
+        slots[0] = {"Sufami Turbo Slot A", false};
+        slots[1] = {"Sufami Turbo Slot B", false};
+        slotCount = 2;
+    }
+    for (int i = 0; i < slotCount; i++) {
+        if (ctx->stagedSlot[i].empty()) continue;
+        auto slot = baseCartridge ? baseCartridge->find<ares::Node::Port>(slots[i].port)
+                                   : ares::Node::Port();
+        if (!slot) { fprintf(stderr, "slot port '%s' not found\n", slots[i].port); continue; }
+        ctx->slotPak[i] = slots[i].flash
+            ? SfcPakBuilder::makeBsMemoryPak(ctx->stagedSlot[i].data(), ctx->stagedSlot[i].size())
+            : SfcPakBuilder::makeSufamiSlotPak(ctx->stagedSlot[i].data(), ctx->stagedSlot[i].size());
+        slot->allocate();
+        slot->connect();
+        ctx->slotConnected[i] = (bool)slot->connected();
+        ctx->stagedSlot[i].clear();   // pak copied the bytes
+    }
 
     ctx->root->power(false);
     ctx->romLoaded = true;
@@ -579,6 +875,18 @@ static void rewindRun(AresContext* ctx) {
 
 bool ares_tick(AresContext* ctx) {
     if (!ctx || !ctx->romLoaded) return false;
+
+    // Consume pending controller changes on the emulation thread (the bridge
+    // thread only stored them + flagged). A device (re)connect rebuilds the
+    // caches (which re-applies the remap); a lone remap just recomputes bits.
+    // Runs even while paused; the read side (Platform::input) is this thread.
+    if (ctx->deviceDirty.exchange(false, std::memory_order_relaxed)) {
+        applyConnectedDevices();
+        ctx->inputRemapDirty.store(false, std::memory_order_relaxed);
+    } else if (ctx->inputRemapDirty.exchange(false, std::memory_order_relaxed)) {
+        applyInputRemap();
+    }
+
     if (ctx->paused.load(std::memory_order_relaxed)) return false;
 
     // DRC gates off during fast-forward, porting desktop's FastForwardOn ->
@@ -659,17 +967,211 @@ uint32_t ares_get_rumble_state(AresContext* ctx) {
 }
 
 void ares_set_input(AresContext* ctx, int port, uint32_t bits) {
-    if (!ctx) return;
-    auto mask = static_cast<uint32_t>(bits);
-    if (port == 1) ctx->inputMaskPort1.store(mask, std::memory_order_relaxed);
-    else if (port == 2) ctx->inputMaskPort2.store(mask, std::memory_order_relaxed);
+    if (!ctx || port < 1 || port > AresContext::kMaxPorts) return;
+    ctx->hwMask[port - 1].store(bits, std::memory_order_relaxed);
 }
 
 uint32_t ares_get_input(AresContext* ctx, int port) {
-    if (!ctx) return 0;
-    if (port == 1) return ctx->inputMaskPort1.load(std::memory_order_relaxed);
-    if (port == 2) return ctx->inputMaskPort2.load(std::memory_order_relaxed);
-    return 0;
+    if (!ctx || port < 1 || port > AresContext::kMaxPorts) return 0;
+    int i = port - 1;
+    return ctx->hwMask[i].load(std::memory_order_relaxed)
+         | ctx->swMask[i].load(std::memory_order_relaxed);
+}
+
+void ares_stage_slot(AresContext* ctx, int index, const uint8_t* rom, size_t rom_size) {
+    if (!ctx || index < 0 || index > 1) return;
+    if (!rom || rom_size == 0) {
+        ctx->stagedSlot[index].clear();
+        return;
+    }
+    ctx->stagedSlot[index].assign(rom, rom + rom_size);
+}
+
+bool ares_is_slot_connected(AresContext* ctx, int index) {
+    if (!ctx || index < 0 || index > 1) return false;
+    return ctx->slotConnected[index];
+}
+
+// Status-string returns share one thread-local buffer (copied by the caller
+// before the next call on the same thread, per the header contract).
+static const char* statusRet(const std::string& s) {
+    static thread_local std::string buf;
+    buf = s;
+    return buf.c_str();
+}
+
+const char* ares_connect_device(AresContext* ctx, const char* system_id,
+                                int port, const char* device) {
+    if (!ctx) return statusRet("SYSTEM_NOT_LOADED");
+
+    // Validate against the staged system by id (from the registry, static) so
+    // we never race an in-flight staging — mirrors the Android JNI.
+    auto* def = SystemRegistry::find(system_id ? system_id : "");
+    if (!def) return statusRet("SYSTEM_NOT_LOADED");
+
+    // Built-in-controls systems (Game Boy) have no ports to plug into — the
+    // controls are always present, so a connect is a harmless no-op.
+    if (def->ports == 0) return statusRet("");
+
+    int maxPort = std::min(def->ports, AresContext::kMaxPorts);
+    if (port < 1 || port > maxPort) return statusRet("INVALID_PARAMETERS");
+
+    std::string name = device ? device : "";
+    DeviceDescriptor desc;
+    if (!name.empty() && !resolveDevice(*def, name, desc)) return statusRet("UNSUPPORTED_DEVICE");
+
+    {
+        std::lock_guard<std::mutex> lock(ctx->deviceMutex);
+        ctx->connectedDevice[port - 1] = name;
+    }
+    {
+        // Reset the light-gun shadow cursor to centre, matching ares' fresh
+        // device (super-scope.hpp init). Telescoping deltas keep it in sync even
+        // if aimAt runs before the deferred allocate.
+        std::lock_guard<std::mutex> lock(ctx->axisMutex);
+        ctx->lightgunX[port - 1] = AresContext::kGunW / 2;
+        ctx->lightgunY[port - 1] = AresContext::kGunH / 2;
+    }
+    ctx->deviceDirty.store(true, std::memory_order_relaxed);
+    return statusRet("");
+}
+
+int ares_device_ports(AresContext* ctx, const char* system_id,
+                      int physical, int* out, int capacity) {
+    if (!ctx || !out || capacity <= 0) return 0;
+    auto* def = SystemRegistry::find(system_id ? system_id : "");
+    int count = 0;
+    if (def) {
+        int logical = 1;
+        for (int p = 1; p <= def->ports && logical <= AresContext::kMaxPorts; p++) {
+            std::string name;
+            {
+                std::lock_guard<std::mutex> lock(ctx->deviceMutex);
+                name = ctx->connectedDevice[p - 1];
+            }
+            int block = portBlock(name);
+            for (int i = 0; i < block && logical <= AresContext::kMaxPorts; i++, logical++) {
+                if (p == physical && count < capacity) out[count++] = logical;
+            }
+        }
+    }
+    return count;
+}
+
+const char* ares_press_button(AresContext* ctx, int port,
+                              const char* name, bool down) {
+    if (!ctx || !ctx->system) return statusRet("SYSTEM_NOT_LOADED");
+    if (port < 1 || port > AresContext::kMaxPorts) return statusRet("INVALID_PARAMETERS");
+
+    DeviceDescriptor desc;
+    std::string btnName = name ? name : "";
+    uint32_t bit;
+    if (!connectedDescriptor(port, desc) || !bitForButtonName(desc, btnName, bit))
+        return statusRet(std::string("UNKNOWN_BUTTON:") + btnName);
+
+    if (down) ctx->swMask[port - 1].fetch_or(bit, std::memory_order_relaxed);
+    else      ctx->swMask[port - 1].fetch_and(~bit, std::memory_order_relaxed);
+    return statusRet("");
+}
+
+const char* ares_set_axis(AresContext* ctx, int port, const char* name, int value) {
+    if (!ctx || !ctx->system) return statusRet("SYSTEM_NOT_LOADED");
+    if (port < 1 || port > AresContext::kMaxPorts) return statusRet("INVALID_PARAMETERS");
+
+    DeviceDescriptor desc;
+    std::string axisName = name ? name : "";
+    if (!connectedDescriptor(port, desc) ||
+        std::find(desc.axes.begin(), desc.axes.end(), axisName) == desc.axes.end())
+        return statusRet("INVALID_PARAMETERS");
+
+    std::lock_guard<std::mutex> lock(ctx->axisMutex);
+    ctx->axisAccum[port - 1][axisName] += value;
+    return statusRet("");
+}
+
+const char* ares_aim_at(AresContext* ctx, int port, float nx, float ny) {
+    if (!ctx || !ctx->system) return statusRet("SYSTEM_NOT_LOADED");
+    if (port < 1 || port > AresContext::kMaxPorts) return statusRet("INVALID_PARAMETERS");
+
+    DeviceDescriptor desc;
+    auto has = [&](const char* a) {
+        return std::find(desc.axes.begin(), desc.axes.end(), a) != desc.axes.end();
+    };
+    if (!connectedDescriptor(port, desc) || !has("X") || !has("Y"))
+        return statusRet("INVALID_PARAMETERS");
+
+    float cx = nx < 0 ? 0 : (nx > 1 ? 1 : nx);
+    float cy = ny < 0 ? 0 : (ny > 1 ? 1 : ny);
+    int tx = (int)(cx * AresContext::kGunW);
+    int ty = (int)(cy * AresContext::kGunH);
+
+    std::lock_guard<std::mutex> lock(ctx->axisMutex);
+    ctx->axisAccum[port - 1]["X"] += tx - ctx->lightgunX[port - 1];
+    ctx->axisAccum[port - 1]["Y"] += ty - ctx->lightgunY[port - 1];
+    ctx->lightgunX[port - 1] = tx;   // target is in-bounds (0..W/0..H)
+    ctx->lightgunY[port - 1] = ty;
+    return statusRet("");
+}
+
+const char* ares_set_input_mapping(AresContext* ctx, int port,
+                                   const char* const* emulated,
+                                   const char* const* source, int count) {
+    if (!ctx || !ctx->system) return statusRet("SYSTEM_NOT_LOADED");
+    auto& def = *ctx->system;
+    (void)def;
+
+    if (port < 1 || port > AresContext::kMaxPorts) return statusRet("INVALID_PARAMETERS");
+    if (count > 0 && (!emulated || !source)) return statusRet("INVALID_PARAMETERS");
+
+    // Remap names belong to the device at this logical port (multitap-aware).
+    DeviceDescriptor desc;
+    if (!connectedDescriptor(port, desc))
+        return statusRet("INVALID_PARAMETERS"); // no controller registered on this port
+
+    // Resolve+validate the whole batch before mutating any state, so a bad entry
+    // leaves the existing remap untouched.
+    std::unordered_map<std::string, uint32_t> resolved;
+    for (int i = 0; i < count; i++) {
+        std::string emuName = emulated[i] ? emulated[i] : "";
+        std::string srcName = source[i] ? source[i] : "";
+        uint32_t emuBit, srcBit;
+        if (!bitForButtonName(desc, emuName, emuBit))
+            return statusRet(std::string("UNKNOWN_BUTTON:") + emuName);
+        if (!bitForButtonName(desc, srcName, srcBit))
+            return statusRet(std::string("UNKNOWN_BUTTON:") + srcName);
+        resolved[toLower(emuName)] = srcBit;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(ctx->inputRemapMutex);
+        if (count == 0) {
+            ctx->inputRemap.erase(port);
+        } else {
+            auto& portMap = ctx->inputRemap[port];
+            for (auto& [name, bit] : resolved) portMap[name] = bit;
+        }
+    }
+    ctx->inputRemapDirty.store(true, std::memory_order_relaxed);
+    return statusRet("");
+}
+
+int ares_get_button_bit(AresContext* ctx, int port, const char* name) {
+    if (!ctx || !name) return -1;
+    auto lname = toLower(name);
+    for (auto& cached : ctx->inputCache) {
+        if (cached.port != port) continue;
+        if (toLower(std::string((const char*)cached.node->name())) == lname)
+            return (int)cached.bit;
+    }
+    return -1;
+}
+
+int ares_get_axis_accum(AresContext* ctx, int port, const char* name) {
+    if (!ctx || !name || port < 1 || port > AresContext::kMaxPorts) return 0;
+    std::lock_guard<std::mutex> lock(ctx->axisMutex);
+    auto& m = ctx->axisAccum[port - 1];
+    auto it = m.find(name);
+    return it == m.end() ? 0 : (int)it->second;
 }
 
 bool ares_get_frame(AresContext* ctx,
@@ -772,10 +1274,73 @@ const char* ares_get_region(AresContext* ctx) {
     return ctx->romRegion.c_str();
 }
 
+static std::string jsonStringArray(const std::vector<std::string>& items) {
+    std::string s = "[";
+    for (auto& it : items) { if (s.size() > 1) s += ","; s += "\"" + it + "\""; }
+    return s + "]";
+}
+
+// Button names of a descriptor, ordered by bit (stable output).
+static std::vector<std::string> orderedButtons(const DeviceDescriptor& desc) {
+    std::vector<std::pair<uint32_t, std::string>> ordered;
+    for (auto& [name, bit] : desc.buttons) ordered.push_back({bit, name});
+    std::sort(ordered.begin(), ordered.end());
+    std::vector<std::string> names;
+    for (auto& [bit, name] : ordered) names.push_back(name);
+    return names;
+}
+
+// Ports with the currently-connected device, its inputs, and what each port
+// supports. Built from registry + registrations — no booted core required.
+static std::string buildPortsJson(AresContext* ctx) {
+    auto& def = *ctx->system;
+    auto supported = jsonStringArray(supportedDevices(def));
+
+    if (def.ports == 0) {   // built-in controls — always present, no registration
+        DeviceDescriptor desc; desc.buttons = def.buttons;
+        return "[{\"port\":1,\"device\":null,\"buttons\":"
+             + jsonStringArray(orderedButtons(desc))
+             + ",\"axes\":[],\"supported\":" + supported + "}]";
+    }
+
+    std::string json = "[";
+    auto emit = [&](int lport, const std::string& devName, const DeviceDescriptor* d) {
+        if (json.size() > 1) json += ",";
+        json += "{\"port\":" + std::to_string(lport)
+              + ",\"device\":" + (devName.empty() ? "null" : "\"" + devName + "\"")
+              + ",\"buttons\":" + (d ? jsonStringArray(orderedButtons(*d)) : "[]")
+              + ",\"axes\":" + (d ? jsonStringArray(d->axes) : "[]")
+              + ",\"supported\":" + supported + "}";
+    };
+
+    int logical = 1;
+    for (int p = 1; p <= def.ports && logical <= AresContext::kMaxPorts; p++) {
+        std::string name;
+        {
+            std::lock_guard<std::mutex> lock(ctx->deviceMutex);
+            name = ctx->connectedDevice[p - 1];
+        }
+        if (isMultitap(name)) {   // fans out to 4 gamepad logical ports
+            DeviceDescriptor gp; gp.buttons = def.buttons;
+            for (int i = 0; i < 4 && logical <= AresContext::kMaxPorts; i++, logical++)
+                emit(logical, "Gamepad", &gp);
+        } else {
+            DeviceDescriptor desc;
+            bool ok = !name.empty() && resolveDevice(def, name, desc);
+            emit(logical, ok ? name : std::string(), ok ? &desc : nullptr);
+            logical++;
+        }
+    }
+    return json + "]";
+}
+
 const char* ares_get_ports_json(AresContext* ctx) {
-    // Registry data — available from staging on, no booted core required.
+    // Registry data + registrations — available from staging on, no booted
+    // core required. Thread-local storage, same contract as the other strings.
     if (!ctx || !ctx->system) return "[]";
-    return ctx->portsJson.c_str();
+    static thread_local std::string json;
+    json = buildPortsJson(ctx);
+    return json.c_str();
 }
 
 } // extern "C"

@@ -240,6 +240,14 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     @Volatile private var currentSurface: Surface? = null
     @Volatile private var threadPaused = false
 
+    // Shader staging: a declarative boot fans SetShader out before the render
+    // thread has bound the first Vulkan surface (g_vk doesn't exist yet), so
+    // an immediate native call can only fail. syncSetShader stages the path
+    // instead and the render thread applies it right after the bind.
+    @Volatile private var vkBound = false
+    @Volatile private var wantedShaderPath: String? = null
+    @Volatile private var shaderPending = false
+
     /** GLSurfaceView-style post: run [r] on the render thread (serviced each loop). */
     fun queueEvent(r: Runnable) {
         events.add(r)
@@ -274,6 +282,21 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
                         if (boundSurface != null) core.surfaceDestroyed()
                         boundSurface = want
                         if (want != null) core.surfaceCreated(want)
+                        vkBound = want != null
+                    }
+
+                    // Apply a shader staged before the first bind (see the
+                    // field comment). Failures surface on the event channel —
+                    // there is no bridge call left to answer.
+                    if (vkBound && shaderPending) {
+                        shaderPending = false
+                        val path = wantedShaderPath
+                        if (!core.setShader(path) && path != null) {
+                            eventListener?.onError(
+                                "SHADER_FAILED",
+                                "Failed to load shader preset '$path'",
+                            )
+                        }
                     }
 
                     // Idle when there is nothing to draw, but keep draining
@@ -843,6 +866,14 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
      * timeout.
      */
     fun syncSetShader(path: String?): Boolean? {
+        wantedShaderPath = path
+        if (!vkBound) {
+            // No Vulkan surface yet — stage it; the render thread applies on
+            // bind and reports SHADER_FAILED itself if the preset won't load.
+            shaderPending = true
+            return true
+        }
+        shaderPending = false
         val latch = CountDownLatch(1)
         var result = false
         queueEvent {

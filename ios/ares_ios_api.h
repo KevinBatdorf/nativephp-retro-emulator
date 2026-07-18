@@ -17,6 +17,12 @@ typedef struct AresContext AresContext;
 AresContext* ares_create(void);
 void         ares_destroy(AresContext* ctx);
 
+// Tear down any running core and reset the context to factory state — the
+// Stop semantics (Android cycles destroy()+init(); this keeps the pointer
+// stable for the host's stored references).  Flush saves first if wanted.
+// Emulation thread only.
+void ares_reset(AresContext* ctx);
+
 // System / ROM loading --------------------------------------------------------
 
 // STAGE a system declaration by ares id ("fc", "sfc", "gb", "md") — no core
@@ -51,6 +57,15 @@ int ares_load_rom(AresContext* ctx, const uint8_t* rom, size_t rom_size,
                   const char* save_prefix,
                   const char* region_override, const char* preferred_regions);
 
+// Stage a slotted-media ROM (SuFami Turbo: index 0 = Slot A, 1 = Slot B;
+// BS-X: index 0 = the BS Memory slot) to be inserted at the next
+// ares_load_rom, whose base ROM must be the slot-carrying cartridge.
+// NULL/0 bytes clear the slot.  Emulation thread only.
+void ares_stage_slot(AresContext* ctx, int index, const uint8_t* rom, size_t rom_size);
+
+// Test seam: whether a staged slot cartridge actually connected at load.
+bool ares_is_slot_connected(AresContext* ctx, int index);
+
 // Write current battery-backed memory to disk under the prefix passed to
 // ares_load_rom.  Must run on the emulation thread.  Returns false when
 // nothing was persisted.
@@ -61,12 +76,62 @@ bool ares_flush_saves(AresContext* ctx);
 // Tick one video frame.  Returns false when no ROM is loaded or when paused.
 bool ares_tick(AresContext* ctx);
 
-// Write the button bitmask for port 1 or 2 (bits match iOS EmulatorInput).
+// Write the HARDWARE button bitmask for a logical port (1-based, up to 5 —
+// multitap territory).  OR'd with the software mask at poll time; bits match
+// iOS EmulatorInput / the positional gamepad.
 void ares_set_input(AresContext* ctx, int port, uint32_t bits);
 
-// Read back the bitmask the core will see on its next input poll.
-// Test/diagnostic seam; returns 0 for an unknown port or null context.
+// Read back the combined (hardware | software) bitmask the core will see on
+// its next input poll.  Test/diagnostic seam; 0 for unknown port/context.
 uint32_t ares_get_input(AresContext* ctx, int port);
+
+// Input — device-handle model.  Controllers are registered explicitly, never
+// auto-allocated: a boot with no registrations has no input.  Status-string
+// returns: "" on success, else a category-A code ("SYSTEM_NOT_LOADED",
+// "INVALID_PARAMETERS", "UNSUPPORTED_DEVICE", "UNKNOWN_BUTTON:<name>").
+// Thread-local storage — copy before the next call on the same thread. -------
+
+// Register (or swap) the device on a PHYSICAL port; empty device disconnects.
+// Validated against the system registry by id (not the live core, which may
+// still be staging).  The allocate/connect + cache rebuild is deferred to the
+// emulation thread (consumed at the top of ares_tick).  Registrations persist
+// across ares_load_rom.
+const char* ares_connect_device(AresContext* ctx, const char* system_id,
+                                int port, const char* device);
+
+// The LOGICAL port numbers a physical port's registered device occupies — one
+// for a normal controller, four for a Super Multitap.  Writes up to capacity
+// entries into out; returns the count.
+int ares_device_ports(AresContext* ctx, const char* system_id,
+                      int physical, int* out, int capacity);
+
+// Set or clear one SOFTWARE button on a logical port, resolved against the
+// connected device's own button set.  Merges with the hardware mask.
+const char* ares_press_button(AresContext* ctx, int port,
+                              const char* name, bool down);
+
+// Accumulate a relative delta on one axis of the connected device (mouse /
+// light-gun X/Y).  Consumed on the core's next poll.
+const char* ares_set_axis(AresContext* ctx, int port, const char* name, int value);
+
+// Aim a light-gun at an absolute normalized position (0..1).  ares' guns are
+// relative-only, so a shadow cursor mirrors the gun's internal cursor and the
+// needed delta is fed to reach the target.
+const char* ares_aim_at(AresContext* ctx, int port, float nx, float ny);
+
+// Merge a per-port controller remap: emulated[i] (a core button name) reads
+// the positional slot of source[i].  count == 0 resets the port to defaults.
+// Validated wholesale before mutating; applied on the emulation thread.
+const char* ares_set_input_mapping(AresContext* ctx, int port,
+                                   const char* const* emulated,
+                                   const char* const* source, int count);
+
+// Test seam: the positional bit a core button currently reads (post-remap),
+// or -1 when nothing is cached for (port, name).
+int ares_get_button_bit(AresContext* ctx, int port, const char* name);
+
+// Test seam: the pending (unconsumed) accumulated delta on one axis.
+int ares_get_axis_accum(AresContext* ctx, int port, const char* name);
 
 void ares_pause(AresContext* ctx);
 void ares_resume(AresContext* ctx);

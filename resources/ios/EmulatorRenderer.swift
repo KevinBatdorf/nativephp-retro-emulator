@@ -38,6 +38,11 @@ final class EmulatorRenderer: UIView {
     /// The system id passed to the last `loadSystem` (e.g. "sfc"). Empty until staged.
     private(set) var loadedSystem: String = ""
 
+    /// Android-parity name — the staged system id LoadRom/ConnectDevice
+    /// validate against (staging is synchronous on iOS, so it equals
+    /// `loadedSystem`).
+    var stagedSystemId: String { loadedSystem }
+
     /// Staged region declaration: explicit override ("" = resolve
     /// from the ROM analysis) and preference CSV for multi-region ROMs
     /// ("" = desktop's default "NTSC-U"). Set by LoadSystem, consumed by loadRom.
@@ -153,10 +158,22 @@ final class EmulatorRenderer: UIView {
         eventListener?.onResumed()
     }
 
+    /// Stop emulation and tear down the ares core — Android cycles the
+    /// platform via destroy()+init(); ares_reset does the same in place, so a
+    /// follow-up loadSystem starts from factory state (system switching goes
+    /// through here).
     func stopEmulation() {
+        clearMemoryWatches()
         stopLoop()
-        flushSaves()
         audio.stop()
+        hapticEngine?.stop()
+        lastRumbleState = 0
+        emuLock.lock()
+        _ = ares_flush_saves(ctx)
+        ares_reset(ctx)
+        emuLock.unlock()
+        loadedSystem = ""
+        pendingStarted = false
         currentStatus = "stopped"
         eventListener?.onStopped()
     }
@@ -203,6 +220,13 @@ final class EmulatorRenderer: UIView {
         ares_set_video(
             ctx, videoOptions.luminance, videoOptions.saturation, videoOptions.gamma,
             videoOptions.colorBleed, videoOptions.overscan)
+    }
+
+    /// Apply a librashader `.slangp` preset by path; nil clears (passthrough).
+    /// Returns false when the preset fails to load. Safe from any thread —
+    /// the chain swap is serialised inside the Metal renderer.
+    func syncSetShader(path: String?) -> Bool {
+        metalRenderer.setShader(path)
     }
 
     /// Merge per-system emulation toggles — recognised keys update the
@@ -415,30 +439,77 @@ final class EmulatorRenderer: UIView {
         return String(cString: ares_get_ports_json(ctx))
     }
 
-    // MARK: - Software input
+    // MARK: - Devices + input (device-handle model)
 
-    func pressButton(_ name: String) -> Bool {
-        guard let bit = EmulatorInput.buttonNameToBit(name) else { return false }
-        input.pressSoftwareButton(bit)
-        return true
+    /// Register (or swap) the device on a physical port; empty device
+    /// disconnects. Validated against the staged system by id; the actual
+    /// allocate/connect is deferred to the emulation thread. Returns "" or a
+    /// category-A error code.
+    func connectDevice(port: Int, device: String) -> String {
+        emuLock.lock()
+        defer { emuLock.unlock() }
+        return String(cString: ares_connect_device(ctx, stagedSystemId, Int32(port), device))
     }
 
-    func releaseButton(_ name: String) -> Bool {
-        guard let bit = EmulatorInput.buttonNameToBit(name) else { return false }
-        input.releaseSoftwareButton(bit)
-        return true
-    }
-
-    /// Merge a name→pressed map into the software input state. Unknown names are skipped.
-    func setButtons(_ state: [String: Bool]) {
-        for (name, pressed) in state {
-            guard let bit = EmulatorInput.buttonNameToBit(name) else { continue }
-            if pressed {
-                input.pressSoftwareButton(bit)
-            } else {
-                input.releaseSoftwareButton(bit)
-            }
+    /// The logical ports a physical port's registered device occupies
+    /// (4 for a Super Multitap).
+    func devicePorts(port: Int) -> [Int] {
+        var out = [Int32](repeating: 0, count: 5)
+        emuLock.lock()
+        let count = out.withUnsafeMutableBufferPointer {
+            ares_device_ports(ctx, stagedSystemId, Int32(port), $0.baseAddress, Int32($0.count))
         }
+        emuLock.unlock()
+        return out.prefix(Int(count)).map(Int.init)
+    }
+
+    /// Set or clear one software button on a logical port, resolved against the
+    /// connected device. Returns "" or a category-A error code.
+    func pressButton(port: Int, name: String, down: Bool) -> String {
+        emuLock.lock()
+        defer { emuLock.unlock() }
+        return String(cString: ares_press_button(ctx, Int32(port), name, down))
+    }
+
+    /// Accumulate a relative axis delta (mouse / light-gun X/Y) on a port.
+    func setAxis(port: Int, name: String, value: Int) -> String {
+        emuLock.lock()
+        defer { emuLock.unlock() }
+        return String(cString: ares_set_axis(ctx, Int32(port), name, Int32(value)))
+    }
+
+    /// Aim a light-gun at an absolute normalized (0..1) screen position.
+    func aimAt(port: Int, x: Float, y: Float) -> String {
+        emuLock.lock()
+        defer { emuLock.unlock() }
+        return String(cString: ares_aim_at(ctx, Int32(port), x, y))
+    }
+
+    /// Merge a per-port controller remap; empty arrays reset to defaults.
+    func setInputMapping(port: Int, emulated: [String], source: [String]) -> String {
+        emuLock.lock()
+        defer { emuLock.unlock() }
+        let emuDup = emulated.map { strdup($0) }
+        let srcDup = source.map { strdup($0) }
+        defer {
+            emuDup.forEach { free($0) }
+            srcDup.forEach { free($0) }
+        }
+        var emuC: [UnsafePointer<CChar>?] = emuDup.map { UnsafePointer($0) }
+        var srcC: [UnsafePointer<CChar>?] = srcDup.map { UnsafePointer($0) }
+        let result = ares_set_input_mapping(ctx, Int32(port), &emuC, &srcC, Int32(emulated.count))
+        return String(cString: result!)
+    }
+
+    /// Stage a slotted-media ROM (SuFami Turbo slot A/B, BS-X BS Memory) for
+    /// the next loadRom.
+    func stageSlot(index: Int, rom: Data) {
+        emuLock.lock()
+        rom.withUnsafeBytes {
+            ares_stage_slot(ctx, Int32(index),
+                            $0.bindMemory(to: UInt8.self).baseAddress, $0.count)
+        }
+        emuLock.unlock()
     }
 
     // MARK: - Screenshot
@@ -520,6 +591,14 @@ final class EmulatorRenderer: UIView {
     private var romPath: String = ""
     private var pendingStarted = false
 
+    /// Surface name this renderer is registered under. Set by the EDGE entry
+    /// point (EmulatorSurfaceView) from the node's `name` prop.
+    var surfaceName = "main"
+
+    /// Guard for the declarative element setup — updateUIView re-stages only
+    /// when the (system, config, rom) key actually changes.
+    var declaredBootKey: String?
+
     private var loopThread: Thread?
     private var running = false
 
@@ -533,6 +612,11 @@ final class EmulatorRenderer: UIView {
         metalView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         metalView.colorPixelFormat = .bgra8Unorm
         metalView.clearColor = MTLClearColorMake(0, 0, 0, 1)
+        // ares emits already-gamma'd (sRGB-encoded) pixels. Tag the layer sRGB so
+        // CoreAnimation shows them 1:1 without an extra gamma on P3/EDR displays —
+        // matching the Android Vulkan path's UNORM + sRGB-nonlinear choice. Without
+        // this the picture reads darker/uneven.
+        (metalView.layer as? CAMetalLayer)?.colorspace = CGColorSpace(name: CGColorSpace.sRGB)
         // Renderer drives its own draw calls from the emulation loop.
         metalView.isPaused = true
         metalView.enableSetNeedsDisplay = false
@@ -550,16 +634,15 @@ final class EmulatorRenderer: UIView {
 
         input.startObserving()
 
-        // Self-register under the default surface so bridge calls resolve.
-        // The iOS EDGE renderer entry point (the EmulatorSurface counterpart)
-        // will register under the node's real `name` prop once it exists.
-        EmulatorFunctions.register(name: "main", renderer: self)
+        // Registration under the node's real surface name is done by the EDGE
+        // entry point (EmulatorSurfaceView), the SwiftUI counterpart to
+        // Android's EmulatorSurface.
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
     deinit {
-        EmulatorFunctions.unregister(name: "main")
+        EmulatorFunctions.unregister(name: surfaceName, renderer: self)
         stopLoop()
         input.stopObserving()
         audio.stop()

@@ -20,22 +20,36 @@ final class EmulatorAudio {
         channels: 2,
         interleaved: false)!
 
+    // Rescheduling MUST NOT run inline in the scheduleBuffer completion
+    // handler: that fires on AVFAudio's realtime messenger thread holding
+    // internal locks, and a concurrent player.stop() takes the same locks in
+    // the opposite order — observed as a hard deadlock (bridge thread stuck in
+    // Stop, messenger stuck in scheduleBuffer). Completions hop to this queue
+    // instead, and `running` (queue-confined) gates out anything in flight
+    // once stop() has run.
+    private let queue = DispatchQueue(label: "com.retroemulator.audio")
+    private var running = false
+
     func start() throws {
         engine.attach(player)
         engine.connect(player, to: engine.mainMixerNode, format: format)
         try engine.start()
         player.play()
-        scheduleNext()
+        queue.sync { running = true }
+        queue.async { [weak self] in self?.scheduleNext() }
     }
 
     func stop() {
+        queue.sync { running = false }
         player.stop()
         engine.stop()
     }
 
     // MARK: - Private
 
+    /// Runs on `queue` only.
     private func scheduleNext() {
+        guard running else { return }
         guard let buf = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: bufSize) else { return }
 
         var interleaved = [Float](repeating: 0, count: Int(bufSize) * 2)
@@ -57,7 +71,8 @@ final class EmulatorAudio {
         }
 
         player.scheduleBuffer(buf) { [weak self] in
-            self?.scheduleNext()
+            guard let self else { return }
+            self.queue.async { self.scheduleNext() }
         }
     }
 }

@@ -41,9 +41,10 @@ cmake_build() {
 }
 
 # make_xcframework OUTPUT -library <.a> -headers <dir> [-library ... -headers ...]
-# Assembles the xcframework directory structure manually.
-# xcodebuild -create-xcframework is broken on Xcode 26.5 beta
-# (IDESimulatorFoundation plugin ABI mismatch with DVTDownloads).
+# Assembles an xcframework of STATIC FRAMEWORKS — CocoaPods' vendored_frameworks
+# needs RetroEmulator.framework per slice (a bare .a + Headers doesn't link);
+# the demo consumes this via a local podspec. Assembled manually so the layout
+# is deterministic across Xcode versions.
 make_xcframework() {
     local xcfw="$1"; shift
     rm -rf "$xcfw"
@@ -83,10 +84,51 @@ make_xcframework() {
             slice_id="ios-${sorted_archs}"
         fi
 
-        local slice_dir="$xcfw/$slice_id"
-        mkdir -p "$slice_dir/Headers"
-        cp "$lib_path" "$slice_dir/libretro_emulator_ios.a"
-        cp -r "$hdr_path/." "$slice_dir/Headers/"
+        local fw_dir="$xcfw/$slice_id/RetroEmulator.framework"
+        mkdir -p "$fw_dir/Headers" "$fw_dir/Modules"
+
+        # Merge the librashader Metal staticlib for this slice into the
+        # framework binary — the shim (librashader_metal_shim.mm) calls it and
+        # consumers must not need a second vendored library. Built by
+        # scripts/build_librashader_ios.sh; missing = hard error, a framework
+        # without it dies at runtime on the first SetShader.
+        local lrs_a="$BUILD_ROOT/librashader-ios/$slice_id/liblibrashader.a"
+        if [[ ! -f "$lrs_a" ]]; then
+            echo "error: $lrs_a not found — run scripts/build_librashader_ios.sh first" >&2
+            exit 1
+        fi
+        libtool -static -o "$fw_dir/RetroEmulator" "$lib_path" "$lrs_a"
+
+        cp -r "$hdr_path/." "$fw_dir/Headers/"
+        # The framework module map supersedes the plain one shipped in headers/.
+        rm -f "$fw_dir/Headers/module.modulemap"
+        cat > "$fw_dir/Modules/module.modulemap" <<'EOF'
+framework module RetroEmulator {
+    header "ares_ios_api.h"
+    header "librashader_metal_shim.h"
+    export *
+}
+EOF
+
+        local supported_platform="iPhoneOS"
+        $is_sim && supported_platform="iPhoneSimulator"
+        /usr/bin/python3 - "$fw_dir/Info.plist" "$supported_platform" "$DEPLOYMENT_TARGET" <<'PYEOF'
+import sys, plistlib
+out_path, platform, min_os = sys.argv[1], sys.argv[2], sys.argv[3]
+plist = {
+    "CFBundleExecutable": "RetroEmulator",
+    "CFBundleIdentifier": "com.kevinbatdorf.RetroEmulator",
+    "CFBundleInfoDictionaryVersion": "6.0",
+    "CFBundleName": "RetroEmulator",
+    "CFBundlePackageType": "FMWK",
+    "CFBundleShortVersionString": "0.1.0",
+    "CFBundleSupportedPlatforms": [platform],
+    "CFBundleVersion": "1",
+    "MinimumOSVersion": min_os,
+}
+with open(out_path, "wb") as f:
+    plistlib.dump(plist, f, fmt=plistlib.FMT_XML, sort_keys=True)
+PYEOF
 
         # Build arch JSON array for Python.
         local arch_json="["
@@ -115,9 +157,9 @@ entries  = json.loads(sys.argv[2])
 libs = []
 for e in entries:
     d = {
-        "HeadersPath":          "Headers",
+        "BinaryPath":           "RetroEmulator.framework/RetroEmulator",
         "LibraryIdentifier":    e["slice"],
-        "LibraryPath":          "libretro_emulator_ios.a",
+        "LibraryPath":          "RetroEmulator.framework",
         "SupportedArchitectures": e["archs"],
         "SupportedPlatform":    "ios",
     }
@@ -181,6 +223,6 @@ else
 fi
 
 log "✓ RetroEmulator.xcframework → $XCFW_OUTPUT"
-find "$XCFW_OUTPUT" -name "*.a" | while read f; do
-    log "  $(basename "$(dirname "$f")") — $(du -sh "$f" | cut -f1)"
+find "$XCFW_OUTPUT" -name "RetroEmulator" -type f | while read f; do
+    log "  $(basename "$(dirname "$(dirname "$f")")") — $(du -sh "$f" | cut -f1)"
 done

@@ -299,8 +299,8 @@ final class BootTests: XCTestCase {
         rom[hb + 0x26] = withSram ? 0x02 : 0x00
         // $7FD7 — ROM size byte: $05 = 32 KB.
         rom[hb + 0x27] = 0x05
-        // $7FD8 — RAM size: SfcPakBuilder decodes 1 << (value-1) KB, so $04 = 8 KB.
-        rom[hb + 0x28] = withSram ? 0x04 : 0x00
+        // $7FD8 — RAM size: 1 << value KB (mia's 0x400 << n), so $03 = 8 KB.
+        rom[hb + 0x28] = withSram ? 0x03 : 0x00
         // $7FD9 — Country: USA ($01) = NTSC; Europe ($02) = PAL (the sfc
         // analyzer's region detection reads this byte).
         rom[hb + 0x29] = region == .pal ? 0x02 : 0x01

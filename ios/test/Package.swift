@@ -14,7 +14,12 @@ let package = Package(
             name: "AresCoreTests",
             dependencies: ["RetroEmulator"],
             path: "Tests/AresCoreTests",
-            linkerSettings: [.linkedLibrary("c++")]
+            linkerSettings: [
+                .linkedLibrary("c++"),
+                // The framework binary now carries librashader's Metal runtime.
+                .linkedFramework("Metal"),
+                .linkedFramework("MetalKit"),
+            ]
         ),
     ]
 )

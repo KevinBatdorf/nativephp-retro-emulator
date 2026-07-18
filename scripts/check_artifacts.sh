@@ -14,7 +14,8 @@ decls() {
 SRC="$ROOT/ios/ares_ios_api.h"
 for shipped in \
     "$ROOT/ios/headers/ares_ios_api.h" \
-    "$ROOT"/build/RetroEmulator.xcframework/*/Headers/ares_ios_api.h; do
+    "$ROOT"/build/RetroEmulator.xcframework/*/Headers/ares_ios_api.h \
+    "$ROOT"/build/RetroEmulator.xcframework/*/RetroEmulator.framework/Headers/ares_ios_api.h; do
     [[ -f "$shipped" ]] || continue
     if ! diff <(decls "$SRC") <(decls "$shipped") > /dev/null; then
         echo "✗ shipped header drifted from source: ${shipped#"$ROOT"/}"

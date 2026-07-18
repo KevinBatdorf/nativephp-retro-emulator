@@ -77,8 +77,8 @@ public function onMemoryChanged(string $surface, int $address, int $oldValue, in
 
 ### Platform notes
 
-Everything the API exposes works on Android. `setShader` applies librashader
-`.slangp` presets (a preset that fails to load reports an `EmulatorError`,
-`SHADER_FAILED`); `setInputMapping` merges a per-port controller remap
-(`['a' => 'b', 'b' => 'a']` swaps A and B; unknown buttons throw). On iOS both
-of these await the iOS host renderer and return `NOT_IMPLEMENTED` until then.
+Everything the API exposes works on Android and iOS. `setShader` applies
+librashader `.slangp` presets (a preset that fails to load reports an
+`EmulatorError`, `SHADER_FAILED`); `setInputMapping` merges a per-port
+controller remap (`['a' => 'b', 'b' => 'a']` swaps A and B; unknown buttons
+throw).

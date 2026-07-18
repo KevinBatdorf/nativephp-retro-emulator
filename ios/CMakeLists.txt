@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(retro_emulator_ios VERSION 0.1.0 LANGUAGES C CXX)
+project(retro_emulator_ios VERSION 0.1.0 LANGUAGES C CXX OBJCXX)
 
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -218,6 +218,7 @@ target_compile_definitions(md_core PUBLIC
 # ---------------------------------------------------------------------------
 add_library(retro_emulator_ios STATIC
     "${CMAKE_CURRENT_SOURCE_DIR}/ares_ios_api.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/librashader_metal_shim.mm"
     "${NATIVE_ROOT}/system_registry.cpp"
     "${NATIVE_ROOT}/save_io.cpp"
     "${NATIVE_ROOT}/pak/sfc_pak.cpp"
@@ -240,7 +241,14 @@ target_include_directories(retro_emulator_ios PUBLIC
     "${ARES_ROOT}/ares"
     "${NATIVE_ROOT}"
     "${NATIVE_ROOT}/pak"
+    "${NATIVE_ROOT}/vendor/librashader"
     "${FIRMWARE_DIR}"
+)
+
+# The librashader Metal shim needs ARC for the __bridge casts.
+set_source_files_properties(
+    "${CMAKE_CURRENT_SOURCE_DIR}/librashader_metal_shim.mm"
+    PROPERTIES COMPILE_OPTIONS "-fobjc-arc"
 )
 # Propagate compile-time interface requirements from all dependencies.
 target_link_libraries(retro_emulator_ios

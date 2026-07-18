@@ -23,10 +23,6 @@ enum EmulatorErrorCode: string
     case UnknownButton = 'UNKNOWN_BUTTON';
     case RewindDisabled = 'REWIND_DISABLED';
 
-    // Transitional, iOS-only: setShader and setInputMapping are live on Android
-    // but await the iOS host renderer (step 3). Removed when that lands.
-    case NotImplemented = 'NOT_IMPLEMENTED';
-
     // Operational outcomes — the call was valid but the world said no.
     // Dispatched as an EmulatorError event, never thrown.
     case RomNotFound = 'ROM_NOT_FOUND';

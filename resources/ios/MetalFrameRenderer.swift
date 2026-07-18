@@ -1,5 +1,6 @@
 import Metal
 import MetalKit
+import RetroEmulator
 
 /// Presentation settings mirroring ares desktop's Video settings.
 struct PresentationSettings {
@@ -119,6 +120,14 @@ final class MetalFrameRenderer: NSObject, MTKViewDelegate {
     private var geometry = VideoGeometry()
     private var settings = PresentationSettings()
 
+    // librashader Metal filter chain (see librashader_metal_shim.h). Guarded by
+    // chainLock: SetShader swaps it from a bridge thread while draw() runs the
+    // frame pass on the emulation loop thread.
+    private let chainLock = NSLock()
+    private var shaderChain: OpaquePointer?
+    private var shaderFrameCount: Int = 0
+    private var intermediate: MTLTexture?
+
     /// Thread-safe. Called from the bridge thread when SetVideo changes
     /// presentation settings; applies on the next draw.
     func setPresentation(_ newSettings: PresentationSettings) {
@@ -127,13 +136,63 @@ final class MetalFrameRenderer: NSObject, MTKViewDelegate {
         lock.unlock()
     }
 
+    /// (Re)build the librashader filter chain from a `.slangp` preset; nil
+    /// clears back to passthrough. Returns false when the preset fails to
+    /// load — the previous chain is dropped either way, matching Android.
+    func setShader(_ path: String?) -> Bool {
+        chainLock.lock()
+        defer { chainLock.unlock() }
+        if let old = shaderChain {
+            lrs_mtl_chain_free(old)
+            shaderChain = nil
+        }
+        guard let path else { return true }
+        guard let chain = lrs_mtl_chain_create(
+            path, Unmanaged.passUnretained(commandQueue as AnyObject).toOpaque()) else {
+            return false
+        }
+        shaderChain = chain
+        shaderFrameCount = 0
+        return true
+    }
+
+    // The blit shaders live in Shaders.metal, but NativePHP's iOS plugin
+    // compiler copies only .swift into the host app — never .metal — so it's
+    // not compiled into the default Metal library. Keep the source here and
+    // compile it at runtime; works identically on device and simulator.
+    private static let blitShaderSource = """
+    #include <metal_stdlib>
+    using namespace metal;
+
+    struct VertexOut {
+        float4 position [[position]];
+        float2 uv;
+    };
+
+    vertex VertexOut blit_vert(uint vid [[vertex_id]],
+                               constant float2& posScale [[buffer(0)]]) {
+        constexpr float2 pos[4] = { {-1,-1},{1,-1},{-1,1},{1,1} };
+        constexpr float2 uvs[4] = { {0,1},{1,1},{0,0},{1,0} };
+        VertexOut o;
+        o.position = float4(pos[vid] * posScale, 0, 1);
+        o.uv = uvs[vid];
+        return o;
+    }
+
+    fragment float4 blit_frag(VertexOut in            [[stage_in]],
+                               texture2d<half> tex     [[texture(0)]],
+                               sampler        samp     [[sampler(0)]]) {
+        return float4(tex.sample(samp, in.uv));
+    }
+    """
+
     init?(device: MTLDevice, pixelFormat: MTLPixelFormat) {
         self.device = device
 
         guard let queue = device.makeCommandQueue() else { return nil }
         commandQueue = queue
 
-        guard let lib = device.makeDefaultLibrary(),
+        guard let lib = try? device.makeLibrary(source: Self.blitShaderSource, options: nil),
               let vert = lib.makeFunction(name: "blit_vert"),
               let frag = lib.makeFunction(name: "blit_frag") else { return nil }
 
@@ -191,18 +250,56 @@ final class MetalFrameRenderer: NSObject, MTKViewDelegate {
             settings: pres
         ) else { return }
 
-        guard let cmd = commandQueue.makeCommandBuffer(),
-              let enc = cmd.makeRenderCommandEncoder(descriptor: descriptor) else { return }
+        guard let cmd = commandQueue.makeCommandBuffer() else { return }
+
+        // Shader pass first — librashader requires a command buffer with no
+        // prior encoders. It renders the source into an output-sized
+        // intermediate (the upscale happens inside the chain, like the Android
+        // Vulkan path); the blit below then places that 1:1 into the letterbox.
+        var sourceTex = tex
+        chainLock.lock()
+        if let chain = shaderChain {
+            let outW = max(1, Int(posScale.x * Float(view.drawableSize.width)))
+            let outH = max(1, Int(posScale.y * Float(view.drawableSize.height)))
+            if intermediate == nil || intermediate!.width != outW || intermediate!.height != outH {
+                let desc = MTLTextureDescriptor.texture2DDescriptor(
+                    pixelFormat: view.colorPixelFormat,
+                    width: outW, height: outH, mipmapped: false)
+                desc.usage = [.renderTarget, .shaderRead]
+                desc.storageMode = .private
+                intermediate = device.makeTexture(descriptor: desc)
+            }
+            if let inter = intermediate,
+               lrs_mtl_chain_frame(
+                   chain,
+                   Unmanaged.passUnretained(cmd as AnyObject).toOpaque(),
+                   shaderFrameCount,
+                   Unmanaged.passUnretained(tex as AnyObject).toOpaque(),
+                   Unmanaged.passUnretained(inter as AnyObject).toOpaque(),
+                   0, 0, UInt32(outW), UInt32(outH)) {
+                shaderFrameCount += 1
+                sourceTex = inter
+            }
+            // A failed frame falls back to blitting the raw source, same as
+            // the Android path.
+        }
+        chainLock.unlock()
+
+        guard let enc = cmd.makeRenderCommandEncoder(descriptor: descriptor) else { return }
 
         enc.setRenderPipelineState(pipelineState)
         enc.setVertexBytes(&posScale, length: MemoryLayout<SIMD2<Float>>.size, index: 0)
-        enc.setFragmentTexture(tex, index: 0)
+        enc.setFragmentTexture(sourceTex, index: 0)
         enc.setFragmentSamplerState(sampler, index: 0)
         enc.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
         enc.endEncoding()
 
         cmd.present(drawable)
         cmd.commit()
+    }
+
+    deinit {
+        if let chain = shaderChain { lrs_mtl_chain_free(chain) }
     }
 
     // MARK: - Private

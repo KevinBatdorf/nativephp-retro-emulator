@@ -18,6 +18,12 @@ enum EmulatorFunctions {
     private static let registryLock = NSLock()
     private static var surfaces: [String: EmulatorRenderer] = [:]
 
+    // Last slot each surface saved to — undoStateSave reverts that slot's file
+    // (ares state.undoSlot, desktop-ui/program/states.cpp:8). In-memory like
+    // ares; a fresh process forgets it and undo reports nothing_to_undo.
+    private static let undoLock = NSLock()
+    private static var undoSaveSlot: [String: String] = [:]
+
     /// Register an `EmulatorRenderer` under `name` and install the event forwarder.
     /// Called by the renderer when it is added to the native layout tree.
     static func register(name: String, renderer: EmulatorRenderer) {
@@ -27,12 +33,73 @@ enum EmulatorFunctions {
         registryLock.unlock()
     }
 
-    /// Remove a surface from the registry (called when the component is torn down).
-    static func unregister(name: String) {
+    /// Remove a surface from the registry — but only if `renderer` still owns the
+    /// slot. During a fast remount (navigation / recomposition) the EDGE element
+    /// can instantiate a new renderer that re-registers under the same name
+    /// BEFORE the old instance's dismantle fires. A blind remove-by-name would
+    /// then wipe the live renderer's entry, stranding every bridge call with
+    /// SURFACE_NOT_FOUND. Compare identity so a superseded teardown leaves the
+    /// live entry in place. (Same fix as Android's unregisterSurface.)
+    static func unregister(name: String, renderer: EmulatorRenderer) {
+        renderer.eventListener = nil
         registryLock.lock()
-        let renderer = surfaces.removeValue(forKey: name)
+        let removed = surfaces[name] === renderer
+        if removed { surfaces.removeValue(forKey: name) }
         registryLock.unlock()
-        renderer?.eventListener = nil
+        NSLog(removed
+            ? "[RetroEmulator] Surface unregistered: \(name)"
+            : "[RetroEmulator] Surface unregister skipped — '\(name)' owned by a newer instance")
+    }
+
+    /// Apply a `<native:emulator>` element's declarative setup — the same
+    /// staging → boot path Emulator::loadSystem() / loadRom() drive imperatively,
+    /// routed through the real bridge functions so behavior is identical by
+    /// construction. `configJson` is the merged effective config (global ⊕
+    /// system, inputCapture already hoisted onto the surface) as a JSON object
+    /// string. Runs off the caller's thread: LoadRom reads the ROM file inline
+    /// and the native load blocks on the emulation lock.
+    static func applyDeclarativeSetup(surface: String, system: String, configJson: String, rom: String) {
+        guard !system.isEmpty else { return }
+
+        let thread = Thread {
+            let config = (try? JSONSerialization.jsonObject(with: Data(configJson.utf8)))
+                as? [String: Any] ?? [:]
+
+            // Stage the system with its playback/system config — LoadSystem
+            // reads the staged + core-toggle keys and ignores the presentation
+            // keys, which fan out to their own channels below.
+            _ = try? LoadSystem().execute(parameters: [
+                "surface": surface, "system": system, "config": config])
+
+            registryLock.lock()
+            let staged = surfaces[surface]?.stagedSystemId
+            registryLock.unlock()
+            guard staged == system else {
+                NSLog("[RetroEmulator] Declarative boot: system '%@' did not stage on '%@'", system, surface)
+                return
+            }
+
+            // Fan the presentation/AV knobs out, mirroring loadSystem's fan-out.
+            // SetVideo null-merges so it's safe to call unconditionally; SetAudio
+            // defaults the missing key, so gate it on an actual audio knob.
+            _ = try? SetVideo().execute(parameters: ["surface": surface, "options": config])
+            if config["volume"] != nil || config["balance"] != nil {
+                _ = try? SetAudio().execute(parameters: ["surface": surface, "options": config])
+            }
+            if let rumble = config["rumble"] as? Bool {
+                _ = try? SetRumble().execute(parameters: ["surface": surface, "enabled": rumble])
+            }
+            if let shader = config["shader"] as? String {
+                _ = try? SetShader().execute(parameters: ["surface": surface, "path": shader])
+            }
+
+            // Boot the staged system with the ROM (every load is a fresh boot).
+            if !rom.isEmpty {
+                _ = try? LoadRom().execute(parameters: ["surface": surface, "path": rom])
+            }
+        }
+        thread.name = "emu-declarative-boot-\(surface)"
+        thread.start()
     }
 
     // MARK: - Internal helpers
@@ -42,9 +109,51 @@ enum EmulatorFunctions {
     }
 
     private static func renderer(_ parameters: [String: Any]) -> EmulatorRenderer? {
-        registryLock.lock()
-        defer { registryLock.unlock() }
-        return surfaces[surfaceName(parameters)]
+        let name = surfaceName(parameters)
+        // A screen's mount() runs before SwiftUI has rendered the emulator
+        // node, so the first Boot/LoadSystem arrives just ahead of register.
+        // Briefly await registration instead of failing (Android does the same).
+        let deadline = Date().addingTimeInterval(3.0)
+        while true {
+            registryLock.lock()
+            let found = surfaces[name]
+            registryLock.unlock()
+            if let found { return found }
+            if Date() >= deadline { return nil }
+            Thread.sleep(forTimeInterval: 0.025)
+        }
+    }
+
+    /// Report an operational outcome (category B): a valid call the world said
+    /// no to — a missing ROM, an empty slot, a failed save. These surface as an
+    /// EmulatorError event, never as a bridge error, so the PHP wrapper returns
+    /// fluently and the event carries the detail. The "failed" status keeps the
+    /// response off the wrapper's throw path (which fires on "error").
+    private static func operationalError(
+        _ renderer: EmulatorRenderer, code: String, message: String
+    ) -> [String: Any] {
+        renderer.eventListener?.onError(code: code, message: message)
+        return BridgeResponse.success(data: ["status": "failed", "code": code, "message": message])
+    }
+
+    // Native input calls return "" on success or "CODE"/"CODE:detail" on a
+    // category-A error. Map that to a bridge response; the code stays in a
+    // variable so it doesn't register on the enum drift scan (the codes it
+    // emits appear as literals elsewhere / in ConnectDevice).
+    private static func statusResponse(
+        _ result: String, success: [String: Any]
+    ) -> [String: Any] {
+        if result.isEmpty { return BridgeResponse.success(data: success) }
+        let code = String(result.split(separator: ":", maxSplits: 1)[0])
+        let detail = result.contains(":")
+            ? String(result.split(separator: ":", maxSplits: 1)[1]) : ""
+        let message: String
+        switch code {
+        case "SYSTEM_NOT_LOADED": message = "no system is loaded"
+        case "UNKNOWN_BUTTON":    message = "Unknown button: \(detail)"
+        default:                  message = "invalid parameters"
+        }
+        return BridgeResponse.error(code: code, message: message)
     }
 
     private static func surfaceNotFound(_ parameters: [String: Any]) -> [String: Any] {
@@ -199,16 +308,22 @@ enum EmulatorFunctions {
         }
     }
 
-    /// Boot the staged system with the ROM at `path` — the one boot path, first
-    /// load and every swap alike. The ROM's extension is gated against
-    /// the staged system's list (desktop's file-dialog filters); a wrong-family
-    /// ROM errors, it never auto-switches systems. Fire-and-forget — PHP receives
-    /// `{"status":"loading"}`; `EmulatorStarted` fires on the first rendered frame.
-    /// Sufami Turbo slotted media is live on Android; on iOS it arrives with the
-    /// iOS host renderer (step 3).
+    /// Stage a slotted-media ROM (SuFami Turbo: index 0 = Slot A, 1 = Slot B;
+    /// BS-X: index 0 = the BS Memory slot) from a file path, to be inserted at
+    /// the next LoadRom (whose base is the slot-carrying cartridge).
     class StageSlot: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
-            BridgeResponse.error(code: "NOT_IMPLEMENTED", message: "iOS slotted media arrives with the iOS renderer (step 3)")
+            guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
+            let index = int(parameters["index"]) ?? 0
+            guard let path = parameters["path"] as? String else {
+                return BridgeResponse.error(code: "INVALID_PARAMETERS", message: "path is required")
+            }
+            guard FileManager.default.fileExists(atPath: path),
+                  let rom = try? Data(contentsOf: URL(fileURLWithPath: path)) else {
+                return operationalError(renderer, code: "ROM_NOT_FOUND", message: "slot ROM not found: \(path)")
+            }
+            renderer.stageSlot(index: index, rom: rom)
+            return BridgeResponse.success(data: ["status": "staged", "index": index])
         }
     }
 
@@ -220,17 +335,18 @@ enum EmulatorFunctions {
             }
             guard FileManager.default.fileExists(atPath: path),
                   let romData = try? Data(contentsOf: URL(fileURLWithPath: path)) else {
-                return BridgeResponse.error(code: "ROM_NOT_FOUND", message: "ROM not found: \(path)")
+                return operationalError(renderer, code: "ROM_NOT_FOUND", message: "ROM not found: \(path)")
             }
 
-            let system = renderer.loadedSystem
+            let system = renderer.stagedSystemId
             guard !system.isEmpty else {
                 return BridgeResponse.error(code: "SYSTEM_NOT_LOADED", message: "Call LoadSystem before LoadRom")
             }
             let extensions = renderer.systemExtensions(system)
             let ext = URL(fileURLWithPath: path).pathExtension.lowercased()
             guard extensions.contains(ext) else {
-                return BridgeResponse.error(
+                return operationalError(
+                    renderer,
                     code: "INVALID_ROM",
                     message: "'.\(ext)' is not a \(system) ROM — expected one of: "
                         + extensions.map { ".\($0)" }.joined(separator: ", ")
@@ -250,8 +366,20 @@ enum EmulatorFunctions {
                 savePrefix = saveDir.appendingPathComponent(base).path
             }
 
+            // Undo files belong to the outgoing game (ares clearUndoStates,
+            // load.cpp:170) — a stale cross-game snapshot must not survive.
+            let stateDir = documentsURL("states", surfaceName(parameters))
+            try? FileManager.default.removeItem(at: stateDir.appendingPathComponent("undo_save.state"))
+            try? FileManager.default.removeItem(at: stateDir.appendingPathComponent("undo_load.state"))
+            undoLock.lock()
+            undoSaveSlot[surfaceName(parameters)] = nil
+            undoLock.unlock()
+
             guard renderer.loadRom(romData, path: path, savePrefix: savePrefix) else {
-                return BridgeResponse.error(code: "LOAD_FAILED", message: "ares_load_rom rejected \(path)")
+                // The renderer already dispatched the LOAD_FAILED EmulatorError
+                // (category B) — report the operational outcome without a
+                // bridge error so the fluent wrapper returns cleanly.
+                return BridgeResponse.success(data: ["status": "failed", "code": "LOAD_FAILED"])
             }
             return BridgeResponse.success(data: ["status": "loading", "path": path])
         }
@@ -288,10 +416,24 @@ enum EmulatorFunctions {
             let slot = parameters["slot"] ?? 1
             let dir = documentsURL("states", surfaceName(parameters))
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            let path = dir.appendingPathComponent("\(slot).state").path
+            let slotURL = dir.appendingPathComponent("\(slot).state")
+            let path = slotURL.path
+
+            // The slot's previous file moves to the undo file before the new
+            // state lands (ares stateSave, states.cpp:6-9), so undoStateSave
+            // can revert the slot.
+            let undoURL = dir.appendingPathComponent("undo_save.state")
+            if FileManager.default.fileExists(atPath: path) {
+                try? FileManager.default.removeItem(at: undoURL)
+                if (try? FileManager.default.moveItem(at: slotURL, to: undoURL)) != nil {
+                    undoLock.lock()
+                    undoSaveSlot[surfaceName(parameters)] = "\(slot)"
+                    undoLock.unlock()
+                }
+            }
 
             guard renderer.syncStateSave(path: path) else {
-                return BridgeResponse.error(code: "SAVE_FAILED", message: "State save failed for slot \(slot)")
+                return operationalError(renderer, code: "SAVE_FAILED", message: "State save failed for slot \(slot)")
             }
             return BridgeResponse.success(data: ["status": "saved", "slot": slot, "path": path])
         }
@@ -301,27 +443,54 @@ enum EmulatorFunctions {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
             let slot = parameters["slot"] ?? 1
-            let url = documentsURL("states", surfaceName(parameters), "\(slot).state")
+            let dir = documentsURL("states", surfaceName(parameters))
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let url = dir.appendingPathComponent("\(slot).state")
+
+            // Snapshot the current state to the undo-load file before touching
+            // the slot (ares stateLoad, states.cpp:26-30) — even when the slot
+            // turns out to be empty, matching the reference order.
+            _ = renderer.syncStateSave(path: dir.appendingPathComponent("undo_load.state").path)
+
             guard FileManager.default.fileExists(atPath: url.path) else {
-                return BridgeResponse.error(code: "SLOT_EMPTY", message: "No state in slot \(slot)")
+                return operationalError(renderer, code: "SLOT_EMPTY", message: "No state in slot \(slot)")
             }
             guard renderer.syncStateLoad(path: url.path) else {
-                return BridgeResponse.error(code: "LOAD_FAILED", message: "State load failed for slot \(slot)")
+                return operationalError(renderer, code: "LOAD_FAILED", message: "State load failed for slot \(slot)")
             }
             return BridgeResponse.success(data: ["status": "loaded", "slot": slot])
         }
     }
 
-    /// Undo most recent state save (removes the undo-slot file).
+    /// Undo most recent state save: the slot's previous file moves back over
+    /// the slot (ares undoStateSave, states.cpp:46-59) — a file-level revert,
+    /// the machine keeps running.
     class UndoStateSave: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
-            let url = documentsURL("states", surfaceName(parameters), "undo_save.state")
-            let deleted = (try? FileManager.default.removeItem(at: url)) != nil
-            return BridgeResponse.success(data: ["status": deleted ? "undone" : "nothing_to_undo"])
+            let name = surfaceName(parameters)
+            let dir = documentsURL("states", name)
+            let undoURL = dir.appendingPathComponent("undo_save.state")
+            undoLock.lock()
+            let slot = undoSaveSlot[name]
+            undoLock.unlock()
+            guard let slot, FileManager.default.fileExists(atPath: undoURL.path) else {
+                return BridgeResponse.success(data: ["status": "nothing_to_undo"])
+            }
+            let slotURL = dir.appendingPathComponent("\(slot).state")
+            try? FileManager.default.removeItem(at: slotURL)
+            guard (try? FileManager.default.moveItem(at: undoURL, to: slotURL)) != nil else {
+                guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
+                return operationalError(renderer, code: "UNDO_FAILED", message: "Unable to revert slot \(slot) to its previous state")
+            }
+            undoLock.lock()
+            undoSaveSlot[name] = nil
+            undoLock.unlock()
+            return BridgeResponse.success(data: ["status": "undone", "slot": slot])
         }
     }
 
-    /// Undo most recent state load (re-applies the undo-load backup slot).
+    /// Undo most recent state load: re-apply the pre-load snapshot, then drop
+    /// it (ares undoStateLoad, states.cpp:61-81).
     class UndoStateLoad: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             let url = documentsURL("states", surfaceName(parameters), "undo_load.state")
@@ -330,8 +499,9 @@ enum EmulatorFunctions {
             }
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
             guard renderer.syncStateLoad(path: url.path) else {
-                return BridgeResponse.error(code: "UNDO_FAILED", message: "Undo state load failed")
+                return operationalError(renderer, code: "UNDO_FAILED", message: "Undo state load failed")
             }
+            try? FileManager.default.removeItem(at: url)
             return BridgeResponse.success(data: ["status": "undone"])
         }
     }
@@ -383,6 +553,15 @@ enum EmulatorFunctions {
                 return BridgeResponse.error(code: "INVALID_PARAMETERS", message: "bytes is required")
             }
             let bytes = byteList.compactMap { ($0 as? NSNumber)?.uint8Value }
+            // Validate the target synchronously: a read-probe of the same window
+            // returns nil for an out-of-range address or when no core is
+            // running — exactly the cases a write must reject (WRITE_FAILED).
+            guard renderer.syncReadMemory(address: address, length: max(bytes.count, 1)) != nil else {
+                return BridgeResponse.error(
+                    code: "WRITE_FAILED",
+                    message: "Memory write failed — address 0x\(String(address, radix: 16, uppercase: true)) out of range or emulator not running"
+                )
+            }
             renderer.writeMemory(address: address, bytes: bytes)
             return BridgeResponse.success(data: ["status": "queued", "address": Int(address), "length": bytes.count])
         }
@@ -555,36 +734,108 @@ enum EmulatorFunctions {
         }
     }
 
-    /// Per-port controller remapping is live on Android; on iOS it arrives with
-    /// the iOS host renderer (step 3). Until then hardware mappings are hardwired
-    /// in EmulatorInput.
+    /// Merge a per-port controller remap: each `emulated => source` pair sets the
+    /// in-game button `emulated` to read the positional input of `source`. Names
+    /// are validated natively against the staged system; an empty map resets the
+    /// port to defaults. Validation failures are category-A programmer errors the
+    /// PHP wrapper raises synchronously.
     class SetInputMapping: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
-            BridgeResponse.error(code: "NOT_IMPLEMENTED", message: "iOS input remapping arrives with the iOS renderer (step 3)")
+            guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
+            guard let port = int(parameters["port"]) else {
+                return BridgeResponse.error(code: "INVALID_PARAMETERS", message: "port is required")
+            }
+            // PHP encodes an empty map as a JSON array ([]); accept it as the
+            // reset-to-defaults case rather than a malformed map.
+            let mappings: [String: Any]
+            if let map = parameters["mappings"] as? [String: Any] {
+                mappings = map
+            } else if let list = parameters["mappings"] as? [Any], list.isEmpty {
+                mappings = [:]
+            } else {
+                return BridgeResponse.error(code: "INVALID_PARAMETERS", message: "mappings map is required")
+            }
+
+            let pairs = mappings.map { (key: $0.key, value: "\($0.value)") }
+            let result = renderer.setInputMapping(
+                port: port,
+                emulated: pairs.map(\.key),
+                source: pairs.map(\.value))
+            if result.isEmpty {
+                return BridgeResponse.success(data: ["status": "mapped", "count": pairs.count])
+            }
+            // Native returns "CODE" or "CODE:detail" — re-raise as a bridge error
+            // (code held in a variable so it stays off the enum drift scan).
+            let code = String(result.split(separator: ":", maxSplits: 1)[0])
+            let detail = result.contains(":")
+                ? String(result.split(separator: ":", maxSplits: 1)[1]) : ""
+            let message: String
+            switch code {
+            case "SYSTEM_NOT_LOADED":  message = "no system is loaded"
+            case "INVALID_PARAMETERS": message = "invalid port or mismatched mappings"
+            case "UNKNOWN_BUTTON":     message = "Unknown button: \(detail)"
+            default:                   message = result
+            }
+            return BridgeResponse.error(code: code, message: message)
         }
     }
 
-    /// Device selection (mouse / light-guns / multitap) is live on Android; on
-    /// iOS it arrives with the iOS host renderer (step 3).
+    /// Register (or swap) the device on a port — controllers are explicit, never
+    /// auto-allocated. An absent/empty device disconnects the port.
     class ConnectDevice: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
-            BridgeResponse.error(code: "NOT_IMPLEMENTED", message: "iOS device selection arrives with the iOS renderer (step 3)")
+            guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
+            guard let port = int(parameters["port"]) else {
+                return BridgeResponse.error(code: "INVALID_PARAMETERS", message: "port is required")
+            }
+            let device = parameters["device"] as? String ?? ""
+            switch renderer.connectDevice(port: port, device: device) {
+            case "":
+                return BridgeResponse.success(data: [
+                    "status": "connected", "port": port, "device": device,
+                    // Logical ports this device occupies (4 for a multitap) — one
+                    // Controller handle each on the PHP side.
+                    "ports": renderer.devicePorts(port: port),
+                ])
+            case "SYSTEM_NOT_LOADED":
+                return BridgeResponse.error(code: "SYSTEM_NOT_LOADED", message: "no system is loaded")
+            case "UNSUPPORTED_DEVICE":
+                return BridgeResponse.error(code: "UNSUPPORTED_DEVICE", message: "device not supported: \(device)")
+            default:
+                return BridgeResponse.error(code: "INVALID_PARAMETERS", message: "invalid port for this system")
+            }
         }
     }
 
-    /// Axis input (mouse / light-gun motion) is live on Android; on iOS it
-    /// arrives with the iOS host renderer (step 3).
+    /// Accumulate a relative axis delta on a port (mouse / light-gun X/Y).
     class SetAxis: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
-            BridgeResponse.error(code: "NOT_IMPLEMENTED", message: "iOS axis input arrives with the iOS renderer (step 3)")
+            guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
+            let port = int(parameters["port"]) ?? 1
+            guard let axis = parameters["axis"] as? String else {
+                return BridgeResponse.error(code: "INVALID_PARAMETERS", message: "axis is required")
+            }
+            let value = int(parameters["value"]) ?? 0
+            return statusResponse(
+                renderer.setAxis(port: port, name: axis, value: value),
+                success: ["status": "ok", "axis": axis, "value": value])
         }
     }
 
-    /// Light-gun aiming is live on Android; on iOS it arrives with the iOS host
-    /// renderer (step 3).
+    /// Aim a light-gun at a normalized (0..1) screen position.
     class AimAt: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
-            BridgeResponse.error(code: "NOT_IMPLEMENTED", message: "iOS light-gun aiming arrives with the iOS renderer (step 3)")
+            guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
+            let port = int(parameters["port"]) ?? 1
+            guard let x = (parameters["x"] as? NSNumber)?.floatValue else {
+                return BridgeResponse.error(code: "INVALID_PARAMETERS", message: "x is required")
+            }
+            guard let y = (parameters["y"] as? NSNumber)?.floatValue else {
+                return BridgeResponse.error(code: "INVALID_PARAMETERS", message: "y is required")
+            }
+            return statusResponse(
+                renderer.aimAt(port: port, x: x, y: y),
+                success: ["status": "ok", "x": x, "y": y])
         }
     }
 
@@ -604,17 +855,21 @@ enum EmulatorFunctions {
         }
     }
 
-    /// Shaders (librashader Metal) land with the iOS host renderer (step 3);
-    /// see .claude/findings.md → "Shaders" for the captured seam. Until then
-    /// loading errors NOT_IMPLEMENTED; clearing (nil/"none"/"") succeeds, since
-    /// there is never an active shader to remove.
+    /// Apply a librashader `.slangp` preset by path; null/"none"/"" clears it
+    /// (passthrough). The Metal filter chain is (re)built on the caller's
+    /// thread. A preset that fails to load surfaces as an EmulatorError
+    /// (SHADER_FAILED), so the fluent command still returns cleanly.
     class SetShader: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
-            let path = parameters["path"] as? String
-            if path == nil || path == "none" || path == "" {
-                return BridgeResponse.success(data: ["status": "cleared"])
+            guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
+            let raw = parameters["path"] as? String
+            let path = (raw == nil || raw == "none" || raw!.isEmpty) ? nil : raw
+            guard renderer.syncSetShader(path: path) else {
+                return operationalError(
+                    renderer, code: "SHADER_FAILED",
+                    message: "Failed to load shader preset '\(path ?? "")'")
             }
-            return BridgeResponse.error(code: "NOT_IMPLEMENTED", message: "iOS shaders arrive with the iOS renderer (step 3)")
+            return BridgeResponse.success(data: ["status": path == nil ? "cleared" : "applied"])
         }
     }
 
@@ -630,7 +885,8 @@ enum EmulatorFunctions {
                 return BridgeResponse.error(code: "INVALID_PARAMETERS", message: "code is required")
             }
             guard renderer.addCheat(code: code) else {
-                return BridgeResponse.error(
+                return operationalError(
+                    renderer,
                     code: "INVALID_CHEAT",
                     message: "No valid ADDR:VALUE pairs in '\(code)' — expected hex pairs joined with '+'"
                 )
@@ -660,43 +916,46 @@ enum EmulatorFunctions {
         }
     }
 
-    /// Set a single button pressed in the software input state map.
+    /// Set a single button pressed on a port, resolved against its device.
     class PressButton: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
+            let port = int(parameters["port"]) ?? 1
             guard let button = parameters["button"] as? String else {
                 return BridgeResponse.error(code: "INVALID_PARAMETERS", message: "button is required")
             }
-            guard renderer.pressButton(button) else {
-                return BridgeResponse.error(code: "UNKNOWN_BUTTON", message: "Unknown button: \(button)")
-            }
-            return BridgeResponse.success(data: ["status": "pressed", "button": button])
+            return statusResponse(
+                renderer.pressButton(port: port, name: button, down: true),
+                success: ["status": "pressed", "button": button])
         }
     }
 
-    /// Release a single button in the software input state map.
+    /// Release a single button on a port.
     class ReleaseButton: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
+            let port = int(parameters["port"]) ?? 1
             guard let button = parameters["button"] as? String else {
                 return BridgeResponse.error(code: "INVALID_PARAMETERS", message: "button is required")
             }
-            guard renderer.releaseButton(button) else {
-                return BridgeResponse.error(code: "UNKNOWN_BUTTON", message: "Unknown button: \(button)")
-            }
-            return BridgeResponse.success(data: ["status": "released", "button": button])
+            return statusResponse(
+                renderer.pressButton(port: port, name: button, down: false),
+                success: ["status": "released", "button": button])
         }
     }
 
-    /// Atomically merge multiple button states into the software input state map.
+    /// Merge multiple button states on a port. Unknown names are skipped.
     class SetButtons: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
+            let port = int(parameters["port"]) ?? 1
             guard let state = parameters["state"] as? [String: Any] else {
                 return BridgeResponse.error(code: "INVALID_PARAMETERS", message: "state map is required")
             }
-            let coerced = state.mapValues { ($0 as? NSNumber)?.boolValue ?? ($0 as? Bool ?? false) }
-            renderer.setButtons(coerced)
+            for (button, raw) in state {
+                let pressed = (raw as? NSNumber)?.boolValue ?? (raw as? Bool ?? false)
+                _ = renderer.pressButton(port: port, name: button, down: pressed)
+            }
             return BridgeResponse.success(data: ["status": "ok"])
         }
     }

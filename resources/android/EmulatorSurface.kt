@@ -71,7 +71,7 @@ object EmulatorSurface {
             },
             onRelease = { renderer ->
                 renderer.windowCaptureRestore?.invoke()
-                EmulatorFunctions.unregisterSurface(name)
+                EmulatorFunctions.unregisterSurface(name, renderer)
                 renderer.release()
             },
         )
