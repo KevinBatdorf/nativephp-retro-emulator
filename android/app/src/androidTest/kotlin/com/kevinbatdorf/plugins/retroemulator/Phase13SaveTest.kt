@@ -59,7 +59,7 @@ class Phase13SaveTest {
     /**
      * Minimal valid LoROM with battery RAM — mirrors the iOS BootTests helper.
      * SEI at the reset vector, LoROM header at $7FB0, ROM type $02
-     * (ROM+RAM+battery), RAM size byte $04 (SfcPakBuilder: 1 << (v-1) KB = 8 KB).
+     * (ROM+RAM+battery), RAM size byte $03 (1 << value KB = 8 KB).
      */
     private fun makeSramLoRom(): ByteArray {
         val rom = ByteArray(0x8000)
@@ -74,7 +74,7 @@ class Phase13SaveTest {
         rom[hb + 0x25] = 0x20 // LoROM map mode
         rom[hb + 0x26] = 0x02 // ROM+RAM+battery
         rom[hb + 0x27] = 0x05 // 32 KB
-        rom[hb + 0x28] = 0x04 // 8 KB SRAM
+        rom[hb + 0x28] = 0x03 // 8 KB SRAM (1 << value KB)
         rom[hb + 0x29] = 0x01 // USA → NTSC
 
         rom[0x7FFC] = 0x00

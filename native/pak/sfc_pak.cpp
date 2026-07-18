@@ -113,9 +113,11 @@ SfcPakBuilder::CartridgeInfo SfcPakBuilder::detectHeader(const uint8_t* rom, siz
     info.region = (regionByte == 0x02 || (regionByte >= 0x03 && regionByte <= 0x0c))
                   ? "PAL" : "NTSC";
 
-    // SRAM size (byte 0x28): encoded as 1 << (value - 1) KB, 0 = no SRAM.
+    // SRAM size (byte 0x28): mia's canonical 0x400 << n (super-famicom.cpp:797),
+    // same formula as the BS-X branch above. An undersized existing save file
+    // seeds into the zero-filled pak entry, so growth zero-pads the tail.
     uint8_t sramByte = h[0x28];
-    info.sramSize = sramByte ? (1u << ((sramByte - 1) & 7)) * 1024 : 0;
+    info.sramSize = sramByte ? (1u << (((sramByte - 1) & 7) + 1)) << 10 : 0;
 
     bool hasRam = (info.sramSize > 0);
     if (isHiRom) {
