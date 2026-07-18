@@ -219,7 +219,12 @@ target_compile_definitions(md_core PUBLIC
 add_library(retro_emulator_ios STATIC
     "${CMAKE_CURRENT_SOURCE_DIR}/ares_ios_api.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/librashader_metal_shim.mm"
+    "${CMAKE_CURRENT_SOURCE_DIR}/core_link.cpp"
     "${NATIVE_ROOT}/system_registry.cpp"
+    "${NATIVE_ROOT}/cores/core_sfc.cpp"
+    "${NATIVE_ROOT}/cores/core_fc.cpp"
+    "${NATIVE_ROOT}/cores/core_gb.cpp"
+    "${NATIVE_ROOT}/cores/core_md.cpp"
     "${NATIVE_ROOT}/save_io.cpp"
     "${NATIVE_ROOT}/pak/sfc_pak.cpp"
     "${NATIVE_ROOT}/pak/multi_pak.cpp"

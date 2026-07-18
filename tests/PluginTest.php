@@ -565,7 +565,7 @@ describe('Typed layer', function () {
     });
 
     it('button enums match the native registry', function (string $systemId, string $enumClass) {
-        $registry = file_get_contents(dirname(__DIR__).'/native/system_registry.cpp');
+        $registry = file_get_contents(dirname(__DIR__)."/native/cores/core_{$systemId}.cpp");
 
         preg_match(
             '/\.id\s*=\s*"'.$systemId.'".*?\.buttons\s*=\s*\{(.*?)\n\s*\},/s',

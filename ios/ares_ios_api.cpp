@@ -3,7 +3,7 @@
 #include <ares/ares.hpp>
 
 #include "system_registry.hpp"
-#include "pak/sfc_pak.hpp"
+#include "node_util.hpp"
 #include "save_io.hpp"
 #include "cheat_parse.hpp"
 #include "rate_control.hpp"
@@ -197,16 +197,16 @@ struct IosPlatform : ares::Platform {
 
     auto attach(ares::Node::Object node) -> void override {
         if (!g_ctx) return;
-        if (auto stream = node->cast<ares::Node::Audio::Stream>()) {
+        if (auto stream = NodeUtil::as<ares::Node::Audio::Stream>(node)) {
             stream->setResamplerFrequency(48000.0);
-            g_ctx->audioStreams = g_ctx->root->find<ares::Node::Audio::Stream>();
+            g_ctx->audioStreams = NodeUtil::findAll<ares::Node::Audio::Stream>(g_ctx->root);
         }
     }
 
     auto detach(ares::Node::Object node) -> void override {
         if (!g_ctx) return;
-        if (auto stream = node->cast<ares::Node::Audio::Stream>()) {
-            g_ctx->audioStreams = g_ctx->root->find<ares::Node::Audio::Stream>();
+        if (auto stream = NodeUtil::as<ares::Node::Audio::Stream>(node)) {
+            g_ctx->audioStreams = NodeUtil::findAll<ares::Node::Audio::Stream>(g_ctx->root);
             std::erase(g_ctx->audioStreams, stream);
         }
     }
@@ -296,7 +296,7 @@ struct IosPlatform : ares::Platform {
 
     auto input(ares::Node::Input::Input node) -> void override {
         if (!g_ctx) return;
-        if (auto btn = node->cast<ares::Node::Input::Button>()) {
+        if (auto btn = NodeUtil::as<ares::Node::Input::Button>(node)) {
             for (auto& cached : g_ctx->inputCache) {
                 if (cached.node == btn) {
                     int i = cached.port - 1;
@@ -308,7 +308,7 @@ struct IosPlatform : ares::Platform {
             }
             return;
         }
-        if (auto axis = node->cast<ares::Node::Input::Axis>()) {
+        if (auto axis = NodeUtil::as<ares::Node::Input::Axis>(node)) {
             for (auto& cached : g_ctx->axisCache) {
                 if (cached.node == axis) {
                     std::lock_guard<std::mutex> lock(g_ctx->axisMutex);
@@ -321,7 +321,7 @@ struct IosPlatform : ares::Platform {
             axis->setValue(0);
             return;
         }
-        if (auto rumble = node->cast<ares::Node::Input::Rumble>()) {
+        if (auto rumble = NodeUtil::as<ares::Node::Input::Rumble>(node)) {
             const uint32_t state = g_ctx->rumbleEnabled.load(std::memory_order_relaxed)
                 ? (uint32_t)rumble->strongValue() << 16 | rumble->weakValue()
                 : 0u;
@@ -407,12 +407,12 @@ static int portBlock(const std::string& name) { return isMultitap(name) ? 4 : 1;
 // Cache a device's button + axis nodes under `parent` for `port` (1-based).
 static void cacheDevice(ares::Node::Object parent,
                         const DeviceDescriptor& desc, int port) {
-    for (auto& btn : parent->find<ares::Node::Input::Button>()) {
+    for (auto& btn : NodeUtil::findAll<ares::Node::Input::Button>(parent)) {
         auto it = desc.buttons.find(std::string((const char*)btn->name()));
         if (it != desc.buttons.end())
             g_ctx->inputCache.push_back({btn, port, it->second, it->second});
     }
-    for (auto& ax : parent->find<ares::Node::Input::Axis>()) {
+    for (auto& ax : NodeUtil::findAll<ares::Node::Input::Axis>(parent)) {
         auto name = std::string((const char*)ax->name());
         if (std::find(desc.axes.begin(), desc.axes.end(), name) != desc.axes.end())
             g_ctx->axisCache.push_back({ax, port, name});
@@ -470,7 +470,7 @@ static void applyConnectedDevices() {
             name = g_ctx->connectedDevice[p - 1];
         }
         auto portName = std::string("Controller Port ") + std::to_string(p);
-        auto port = g_ctx->root->find<ares::Node::Port>(portName.c_str());
+        auto port = g_NodeUtil::findByName<ares::Node::Port>(ctx->root, portName.c_str());
 
         if (name.empty()) { if (port) port->disconnect(); logical += 1; continue; }
         if (!port) { logical += portBlock(name); continue; }
@@ -481,8 +481,7 @@ static void applyConnectedDevices() {
             auto tap = port->connected();   // the Super Multitap peripheral
             DeviceDescriptor gp; gp.buttons = def.buttons;   // each sub-port is a gamepad
             for (int i = 1; i <= 4 && logical <= AresContext::kMaxPorts; i++, logical++) {
-                auto sub = tap ? tap->find<ares::Node::Port>(
-                    (std::string("Controller Port ") + std::to_string(i)).c_str()) : nullptr;
+                auto sub = tap ? NodeUtil::findByName<ares::Node::Port>(tap, (std::string("Controller Port ") + std::to_string(i)).c_str()) : nullptr;
                 if (!sub) continue;
                 sub->allocate("Gamepad");
                 sub->connect();
@@ -531,7 +530,12 @@ static bool connectedDescriptor(int port, DeviceDescriptor& out) {
 // ---------------------------------------------------------------------------
 extern "C" {
 
+extern "C" int retro_emulator_static_cores();
+
 AresContext* ares_create(void) {
+    // Forces the statically-linked core objects (and their Registrars) into
+    // the image — see core_link.cpp.
+    (void)retro_emulator_static_cores();
     if (!g_platform) {
         g_ctx      = new AresContext{};
         g_platform = new IosPlatform{};
@@ -695,7 +699,7 @@ int ares_load_rom(AresContext* ctx, const uint8_t* rom, size_t rom_size,
     // Desktop applies its overscan setting to every screen on load
     // (emulator.cpp:137 → setOverscan scan, emulator.cpp:242-246). Cores
     // consult screen->overscan() per frame, so this takes effect immediately.
-    for (auto& screen : ctx->root->find<ares::Node::Video::Screen>()) {
+    for (auto& screen : NodeUtil::findAll<ares::Node::Video::Screen>(ctx->root)) {
         screen->setOverscan(ctx->overscan);
     }
     ctx->systemLoaded = true;
@@ -706,7 +710,7 @@ int ares_load_rom(AresContext* ctx, const uint8_t* rom, size_t rom_size,
     ctx->savePrefix = save_prefix ? save_prefix : "";
     SaveIO::seed(ctx->cartridgePak, ctx->savePrefix);
 
-    auto cartridgeSlot = ctx->root->find<ares::Node::Port>("Cartridge Slot");
+    auto cartridgeSlot = NodeUtil::findByName<ares::Node::Port>(ctx->root, "Cartridge Slot");
     if (!cartridgeSlot) {
         unloadCore(ctx);
         return -1;
@@ -721,7 +725,7 @@ int ares_load_rom(AresContext* ctx, const uint8_t* rom, size_t rom_size,
     // is present at boot rather than the base's insert-cartridge menu.
     // Two shapes: SuFami Turbo (two slots) or BS-X (one BS Memory slot). Pick by
     // which port the base created; stagedSlot[0] feeds the single BS slot.
-    bool isBsx = baseCartridge && (bool)baseCartridge->find<ares::Node::Port>("BS Memory Slot");
+    bool isBsx = baseCartridge && (bool)NodeUtil::findByName<ares::Node::Port>(baseCartridge, "BS Memory Slot");
     struct SlotDef { const char* port; bool flash; };
     SlotDef slots[2];
     int slotCount;
@@ -735,12 +739,12 @@ int ares_load_rom(AresContext* ctx, const uint8_t* rom, size_t rom_size,
     }
     for (int i = 0; i < slotCount; i++) {
         if (ctx->stagedSlot[i].empty()) continue;
-        auto slot = baseCartridge ? baseCartridge->find<ares::Node::Port>(slots[i].port)
+        if (!def->makeSlotPak) { fprintf(stderr, "system '%s' has no slot pak builder\n", def->id.c_str()); continue; }
+        auto slot = baseCartridge ? NodeUtil::findByName<ares::Node::Port>(baseCartridge, slots[i].port)
                                    : ares::Node::Port();
         if (!slot) { fprintf(stderr, "slot port '%s' not found\n", slots[i].port); continue; }
-        ctx->slotPak[i] = slots[i].flash
-            ? SfcPakBuilder::makeBsMemoryPak(ctx->stagedSlot[i].data(), ctx->stagedSlot[i].size())
-            : SfcPakBuilder::makeSufamiSlotPak(ctx->stagedSlot[i].data(), ctx->stagedSlot[i].size());
+        ctx->slotPak[i] = def->makeSlotPak(
+            i, slots[i].flash, ctx->stagedSlot[i].data(), ctx->stagedSlot[i].size());
         slot->allocate();
         slot->connect();
         ctx->slotConnected[i] = (bool)slot->connected();
@@ -799,7 +803,7 @@ void ares_set_video(AresContext* ctx, float luminance, float saturation,
                     float gamma, bool color_bleed, bool overscan) {
     if (!ctx || !ctx->systemLoaded) return;
     ctx->overscan = overscan;
-    for (auto& screen : ctx->root->find<ares::Node::Video::Screen>()) {
+    for (auto& screen : NodeUtil::findAll<ares::Node::Video::Screen>(ctx->root)) {
         screen->setLuminance((f64)luminance);
         screen->setSaturation((f64)saturation);
         screen->setGamma((f64)gamma);

@@ -77,9 +77,27 @@ target_compile_definitions(nall PUBLIC BUILD_RELEASE)
 target_link_libraries(nall PUBLIC log)
 
 # ---------------------------------------------------------------------------
+# ares_iface — ares/nall headers + profile defines, NO objects. Core modules
+# compile against this; the runtime objects live only in libretro_ares.so.
+# ---------------------------------------------------------------------------
+add_library(ares_iface INTERFACE)
+target_include_directories(ares_iface INTERFACE
+    "${ARES_ROOT}"
+    "${ARES_ROOT}/ares"
+    "${ARES_ROOT}/nall"
+    "${ARES_ROOT}/thirdparty"
+)
+target_compile_definitions(ares_iface INTERFACE
+    PROFILE_PERFORMANCE
+    BUILD_RELEASE
+    SLJIT_HAVE_CONFIG_PRE=1
+    SLJIT_HAVE_CONFIG_POST=1
+)
+
+# ---------------------------------------------------------------------------
 # ares core — the emulation framework (node tree, scheduler, platform)
 # ---------------------------------------------------------------------------
-add_library(ares_core STATIC
+add_library(ares_core OBJECT
     "${CMAKE_CURRENT_SOURCE_DIR}/ares_android.cpp"
     "${ARES_ROOT}/ares/ares/memory/fixed-allocator.cpp"
 )
@@ -125,7 +143,7 @@ target_include_directories(sfc_core PUBLIC
     "${ARES_ROOT}/ares"          # for <sfc/sfc.hpp>, <component/processor/…>
 )
 # Inherit ARES_ROOT and nall includes through ares_core's PUBLIC interface.
-target_link_libraries(sfc_core PUBLIC ares_core)
+target_link_libraries(sfc_core PUBLIC ares_iface)
 target_compile_definitions(sfc_core PUBLIC
     PROFILE_PERFORMANCE
     BUILD_RELEASE
@@ -160,7 +178,7 @@ target_include_directories(fc_core PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/stubs"
     "${ARES_ROOT}/ares"
 )
-target_link_libraries(fc_core PUBLIC ares_core ymfm)
+target_link_libraries(fc_core PUBLIC ares_iface ymfm)
 target_compile_definitions(fc_core PUBLIC
     PROFILE_PERFORMANCE
     BUILD_RELEASE
@@ -181,7 +199,7 @@ target_include_directories(gb_core PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/stubs"
     "${ARES_ROOT}/ares"
 )
-target_link_libraries(gb_core PUBLIC ares_core)
+target_link_libraries(gb_core PUBLIC ares_iface)
 target_compile_definitions(gb_core PUBLIC
     PROFILE_PERFORMANCE
     BUILD_RELEASE
@@ -203,19 +221,12 @@ add_library(md_core STATIC
     "${PROC}/z80/z80.cpp"
     "${PROC}/sh2/sh2.cpp"
     "${PROC}/ssp1601/ssp1601.cpp"
-    "${ARES_ROOT}/ares/component/audio/sn76489/sn76489.cpp"
-    "${ARES_ROOT}/ares/component/audio/ym2413/ym2413.cpp"
-    "${ARES_ROOT}/ares/component/audio/ym2149/ym2149.cpp"
-    "${ARES_ROOT}/ares/component/audio/ym2612/ym2612.cpp"
-    "${ARES_ROOT}/ares/component/eeprom/m24c/m24c.cpp"
-    "${ARES_ROOT}/ares/component/flash/sst39sf0x0/sst39sf0x0.cpp"
-    "${ARES_ROOT}/thirdparty/qon/qon.cpp"
 )
 target_include_directories(md_core PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/stubs"
     "${ARES_ROOT}/ares"
 )
-target_link_libraries(md_core PUBLIC ares_core)
+target_link_libraries(md_core PUBLIC ares_iface)
 target_compile_definitions(md_core PUBLIC
     PROFILE_PERFORMANCE
     BUILD_RELEASE
@@ -246,17 +257,67 @@ set_target_properties(librashader PROPERTIES
 )
 
 # ---------------------------------------------------------------------------
-# retro_emulator — JNI shared library + Vulkan renderer + pak builders
+# retro_ares — the shared ares runtime, registry host, and pak/save plumbing.
+# Exactly ONE copy per process: the frontend and every dlopen'd core module
+# bind ares::platform, the node system, and the registry from here, so a core
+# can never fork the runtime state. Cores DT_NEED this library.
+# ---------------------------------------------------------------------------
+add_library(retro_ares SHARED
+    "${ARES_ROOT}/ares/component/eeprom/m24c/m24c.cpp"
+    "${ARES_ROOT}/ares/component/audio/sn76489/sn76489.cpp"
+    "${ARES_ROOT}/ares/component/audio/ym2413/ym2413.cpp"
+    "${ARES_ROOT}/ares/component/audio/ym2149/ym2149.cpp"
+    "${ARES_ROOT}/ares/component/audio/ym2612/ym2612.cpp"
+    "${ARES_ROOT}/thirdparty/qon/qon.cpp"
+    "${ARES_ROOT}/ares/component/flash/sst39sf0x0/sst39sf0x0.cpp"
+    "${NATIVE_ROOT}/system_registry.cpp"
+    "${NATIVE_ROOT}/save_io.cpp"
+    "${NATIVE_ROOT}/pak/multi_pak.cpp"
+    "${NATIVE_ROOT}/pak/mia_mediums.cpp"
+    "${FIRMWARE_DIR}/embedded_firmware.cpp"
+)
+target_include_directories(retro_ares PUBLIC
+    "${ARES_ROOT}"
+    "${ARES_ROOT}/ares"
+    "${NATIVE_ROOT}"
+    "${NATIVE_ROOT}/pak"
+    "${FIRMWARE_DIR}"
+)
+target_link_libraries(retro_ares PUBLIC ares_core nall ares_iface)
+target_link_libraries(retro_ares PRIVATE libco)
+target_link_libraries(retro_ares PRIVATE log)
+
+# ---------------------------------------------------------------------------
+# Per-core modules — each is its own shared library so the copy-assets hook
+# can bundle only the systems a host app declares. dlopen runs the module's
+# SystemRegistry::Registrar, so loading IS registering.
+# ---------------------------------------------------------------------------
+function(retro_core_module SYS)
+    add_library(retro_core_${SYS} SHARED
+        "${NATIVE_ROOT}/cores/core_${SYS}.cpp"
+        ${ARGN}
+    )
+    target_include_directories(retro_core_${SYS} PRIVATE
+        "${NATIVE_ROOT}"
+        "${NATIVE_ROOT}/pak"
+        "${FIRMWARE_DIR}"
+    )
+    target_link_libraries(retro_core_${SYS} PRIVATE ${SYS}_core retro_ares)
+    set_target_properties(retro_core_${SYS} PROPERTIES OUTPUT_NAME "retro_core_${SYS}")
+endfunction()
+
+retro_core_module(sfc "${NATIVE_ROOT}/pak/sfc_pak.cpp")
+retro_core_module(fc)
+retro_core_module(gb)
+retro_core_module(md)
+
+# ---------------------------------------------------------------------------
+# retro_emulator — JNI frontend + Vulkan renderer. Links no core: nativeInit
+# dlopens whichever retro_core_*.so modules the app bundled.
 # ---------------------------------------------------------------------------
 add_library(retro_emulator SHARED
     "${CMAKE_CURRENT_SOURCE_DIR}/ares_jni.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/vulkan_renderer.cpp"
-    "${NATIVE_ROOT}/system_registry.cpp"
-    "${NATIVE_ROOT}/save_io.cpp"
-    "${NATIVE_ROOT}/pak/sfc_pak.cpp"
-    "${NATIVE_ROOT}/pak/multi_pak.cpp"
-    "${NATIVE_ROOT}/pak/mia_mediums.cpp"
-    "${FIRMWARE_DIR}/embedded_firmware.cpp"
 )
 target_include_directories(retro_emulator PRIVATE
     "${ARES_ROOT}"
@@ -267,10 +328,7 @@ target_include_directories(retro_emulator PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}"
 )
 target_link_libraries(retro_emulator PRIVATE
-    sfc_core
-    fc_core
-    gb_core
-    md_core
+    retro_ares
     android
     log
     vulkan

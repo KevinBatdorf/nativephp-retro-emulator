@@ -1,6 +1,7 @@
 #include <jni.h>
 #include <android/log.h>
 #include <android/native_window_jni.h>
+#include <dlfcn.h>
 
 #include "vulkan_renderer.hpp"
 
@@ -18,7 +19,7 @@
 #include <ares/ares.hpp>
 
 #include "system_registry.hpp"
-#include "pak/sfc_pak.hpp"
+#include "node_util.hpp"
 #include "save_io.hpp"
 #include "cheat_parse.hpp"
 #include "rate_control.hpp"
@@ -220,19 +221,19 @@ struct AndroidPlatform : ares::Platform {
 
     auto attach(ares::Node::Object node) -> void override {
         if (!g_state) return;
-        if (auto stream = node->cast<ares::Node::Audio::Stream>()) {
+        if (auto stream = NodeUtil::as<ares::Node::Audio::Stream>(node)) {
             stream->setResamplerFrequency(48000.0);
             g_state->audioStreams =
-                g_state->root->find<ares::Node::Audio::Stream>();
+                NodeUtil::findAll<ares::Node::Audio::Stream>(g_state->root);
             LOGI("audio stream attached — %zu total", g_state->audioStreams.size());
         }
     }
 
     auto detach(ares::Node::Object node) -> void override {
         if (!g_state) return;
-        if (auto stream = node->cast<ares::Node::Audio::Stream>()) {
+        if (auto stream = NodeUtil::as<ares::Node::Audio::Stream>(node)) {
             g_state->audioStreams =
-                g_state->root->find<ares::Node::Audio::Stream>();
+                NodeUtil::findAll<ares::Node::Audio::Stream>(g_state->root);
             std::erase(g_state->audioStreams, stream);
             LOGI("audio stream detached — %zu remaining", g_state->audioStreams.size());
         }
@@ -336,7 +337,7 @@ struct AndroidPlatform : ares::Platform {
 
     auto input(ares::Node::Input::Input node) -> void override {
         if (!g_state) return;
-        if (auto btn = node->cast<ares::Node::Input::Button>()) {
+        if (auto btn = NodeUtil::as<ares::Node::Input::Button>(node)) {
             for (auto& cached : g_state->inputCache) {
                 if (cached.node == btn) {
                     int i = cached.port - 1;
@@ -348,7 +349,7 @@ struct AndroidPlatform : ares::Platform {
             }
             return;
         }
-        if (auto axis = node->cast<ares::Node::Input::Axis>()) {
+        if (auto axis = NodeUtil::as<ares::Node::Input::Axis>(node)) {
             for (auto& cached : g_state->axisCache) {
                 if (cached.node == axis) {
                     std::lock_guard<std::mutex> lock(g_state->axisMutex);
@@ -361,7 +362,7 @@ struct AndroidPlatform : ares::Platform {
             axis->setValue(0);
             return;
         }
-        if (auto rumble = node->cast<ares::Node::Input::Rumble>()) {
+        if (auto rumble = NodeUtil::as<ares::Node::Input::Rumble>(node)) {
             const u32 state = g_state->rumbleEnabled.load(std::memory_order_relaxed)
                 ? (u32)rumble->strongValue() << 16 | rumble->weakValue()
                 : 0u;
@@ -472,12 +473,12 @@ static int portBlock(const std::string& name) { return isMultitap(name) ? 4 : 1;
 // Cache a device's button + axis nodes under `parent` for `port` (1-based).
 static void cacheDevice(ares::Node::Object parent,
                         const DeviceDescriptor& desc, int port) {
-    for (auto& btn : parent->find<ares::Node::Input::Button>()) {
+    for (auto& btn : NodeUtil::findAll<ares::Node::Input::Button>(parent)) {
         auto it = desc.buttons.find(std::string((const char*)btn->name()));
         if (it != desc.buttons.end())
             g_state->inputCache.push_back({btn, port, it->second, it->second});
     }
-    for (auto& ax : parent->find<ares::Node::Input::Axis>()) {
+    for (auto& ax : NodeUtil::findAll<ares::Node::Input::Axis>(parent)) {
         auto name = std::string((const char*)ax->name());
         if (std::find(desc.axes.begin(), desc.axes.end(), name) != desc.axes.end())
             g_state->axisCache.push_back({ax, port, name});
@@ -534,7 +535,7 @@ static void applyConnectedDevices() {
             name = g_state->connectedDevice[p - 1];
         }
         auto portName = std::string("Controller Port ") + std::to_string(p);
-        auto port = g_state->root->find<ares::Node::Port>(portName.c_str());
+        auto port = NodeUtil::findByName<ares::Node::Port>(g_state->root, portName.c_str());
 
         if (name.empty()) { if (port) port->disconnect(); logical += 1; continue; }
         if (!port) { logical += portBlock(name); continue; }
@@ -545,8 +546,7 @@ static void applyConnectedDevices() {
             auto tap = port->connected();   // the Super Multitap peripheral
             DeviceDescriptor gp; gp.buttons = def.buttons;   // each sub-port is a gamepad
             for (int i = 1; i <= 4 && logical <= EmulatorState::kMaxPorts; i++, logical++) {
-                auto sub = tap ? tap->find<ares::Node::Port>(
-                    (std::string("Controller Port ") + std::to_string(i)).c_str()) : nullptr;
+                auto sub = tap ? NodeUtil::findByName<ares::Node::Port>(tap, (std::string("Controller Port ") + std::to_string(i)).c_str()) : nullptr;
                 if (!sub) continue;
                 sub->allocate("Gamepad");
                 sub->connect();
@@ -572,10 +572,38 @@ extern "C" {
 
 // Phase 3 — init/destroy/version -------------------------------------------
 
+/**
+ * dlopen every bundled core module. Each module's SystemRegistry::Registrar
+ * runs inside dlopen, so the registry ends up holding exactly the systems the
+ * host app shipped — the copy-assets hook decides that set, not this code.
+ * Absent modules are simply skipped; ids the registry never sees stay
+ * UNSUPPORTED_SYSTEM at the bridge.
+ */
+static void loadCoreModules()
+{
+    static bool attempted = false;
+    if (attempted) return;
+    attempted = true;
+
+    static const char* kCoreIds[] = {
+        "a26", "cv", "fc", "gb", "gba", "md", "ms", "msx", "myvision",
+        "ng", "ngp", "pce", "ps1", "saturn", "sfc", "sg", "spec", "ws",
+    };
+    for (auto* id : kCoreIds) {
+        char name[64];
+        std::snprintf(name, sizeof(name), "libretro_core_%s.so", id);
+        if (dlopen(name, RTLD_NOW | RTLD_LOCAL)) {
+            LOGI("core module loaded: %s", name);
+        }
+    }
+    LOGI("registry: %zu system(s) compiled in", SystemRegistry::all().size());
+}
+
 JNIEXPORT jboolean JNICALL
 Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeInit(
     JNIEnv*, jobject)
 {
+    loadCoreModules();
     if (!g_platform) {
         g_state    = new EmulatorState{};
         g_platform = new AndroidPlatform{};
@@ -871,7 +899,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadRom(
     // Desktop applies its overscan setting to every screen on load
     // (emulator.cpp:137 → setOverscan scan, emulator.cpp:242-246). Cores
     // consult screen->overscan() per frame, so this takes effect immediately.
-    for (auto& screen : g_state->root->find<ares::Node::Video::Screen>()) {
+    for (auto& screen : NodeUtil::findAll<ares::Node::Video::Screen>(g_state->root)) {
         screen->setOverscan(g_state->overscan);
     }
     g_state->systemLoaded = true;
@@ -883,7 +911,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadRom(
     SaveIO::seed(g_state->cartridgePak, g_state->savePrefix);
 
     auto cartridgeSlot =
-        g_state->root->find<ares::Node::Port>("Cartridge Slot");
+        NodeUtil::findByName<ares::Node::Port>(g_state->root, "Cartridge Slot");
     if (!cartridgeSlot) {
         LOGE("nativeLoadRom: no Cartridge Slot port found");
         unloadCore();
@@ -899,7 +927,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadRom(
     // is present at boot rather than the base's insert-cartridge menu.
     // Two shapes: SuFami Turbo (two slots) or BS-X (one BS Memory slot). Pick by
     // which port the base created; stagedSlot[0] feeds the single BS slot.
-    bool isBsx = baseCartridge && (bool)baseCartridge->find<ares::Node::Port>("BS Memory Slot");
+    bool isBsx = baseCartridge && (bool)NodeUtil::findByName<ares::Node::Port>(baseCartridge, "BS Memory Slot");
     struct SlotDef { const char* port; bool flash; };
     SlotDef slots[2];
     int slotCount;
@@ -913,12 +941,12 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadRom(
     }
     for (int i = 0; i < slotCount; i++) {
         if (g_state->stagedSlot[i].empty()) continue;
-        auto slot = baseCartridge ? baseCartridge->find<ares::Node::Port>(slots[i].port)
+        if (!def->makeSlotPak) { LOGE("system '%s' has no slot pak builder", def->id.c_str()); continue; }
+        auto slot = baseCartridge ? NodeUtil::findByName<ares::Node::Port>(baseCartridge, slots[i].port)
                                    : ares::Node::Port();
         if (!slot) { LOGE("slot port '%s' not found", slots[i].port); continue; }
-        g_state->slotPak[i] = slots[i].flash
-            ? SfcPakBuilder::makeBsMemoryPak(g_state->stagedSlot[i].data(), g_state->stagedSlot[i].size())
-            : SfcPakBuilder::makeSufamiSlotPak(g_state->stagedSlot[i].data(), g_state->stagedSlot[i].size());
+        g_state->slotPak[i] = def->makeSlotPak(
+            i, slots[i].flash, g_state->stagedSlot[i].data(), g_state->stagedSlot[i].size());
         slot->allocate();
         slot->connect();
         g_state->slotConnected[i] = (bool)slot->connected();
@@ -1778,7 +1806,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetVideo(
 {
     if (!g_state || !g_state->systemLoaded) return;
     g_state->overscan = overscan;
-    for (auto& screen : g_state->root->find<ares::Node::Video::Screen>()) {
+    for (auto& screen : NodeUtil::findAll<ares::Node::Video::Screen>(g_state->root)) {
         screen->setLuminance((f64)luminance);
         screen->setSaturation((f64)saturation);
         screen->setGamma((f64)gamma);

@@ -63,6 +63,25 @@ struct SystemDef {
     void (*memWrite)(uint32_t offset, uint8_t value);
     std::shared_ptr<vfs::directory> (*makeSystemPak)(const SystemDef& def);
     CartridgePak (*makeCartridgePak)(const uint8_t* rom, size_t romSize);
+
+    // Slotted-media pak builder (SuFami slots A/B, BS Memory); the platform
+    // layers call through this so slot machinery lives with its core.
+    // nullptr = the system has no slotted media.
+    std::shared_ptr<vfs::directory> (*makeSlotPak)(int index, bool flash,
+                                                   const uint8_t* rom, size_t romSize);
+
+    // Purge this core's Thread::EntryPoints() static — Thread is a distinct
+    // type per core namespace, so only the core can reach it (see
+    // clearStaleEntryPoints).
+    void (*clearEntryPoints)();
+};
+
+// Registers a compiled core at static-init time: dlopen (Android's modular
+// build) or image load (iOS's static build) runs the constructor, so bundling
+// a core IS registering it. all() orders by id, so registration order —
+// which varies across TUs and load order — never leaks into behavior.
+struct Registrar {
+    explicit Registrar(const SystemDef* def);
 };
 
 // Compose the System::load() name for a region ("" or region-free system

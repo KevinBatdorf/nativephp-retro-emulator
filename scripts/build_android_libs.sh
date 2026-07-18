@@ -16,7 +16,12 @@ cd "$REPO_ROOT/android"
 
 for abi in arm64-v8a x86_64; do
     mkdir -p "$OUT/$abi"
+    # The modular set: frontend + shared ares runtime + one module per core.
+    # The copy-assets hook filters the core modules by the host's
+    # config/retro-emulator.php selection.
     cp "$STRIPPED/$abi/libretro_emulator.so" "$OUT/$abi/"
+    cp "$STRIPPED/$abi/libretro_ares.so" "$OUT/$abi/"
+    cp "$STRIPPED/$abi"/libretro_core_*.so "$OUT/$abi/"
     # libc++_shared is deliberately NOT shipped — the NativePHP host app's own
     # native build already packages it; a second copy fails APK packaging.
 done
