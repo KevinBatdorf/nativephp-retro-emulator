@@ -1028,7 +1028,7 @@ enum EmulatorFunctions {
                 system("ws",  "WonderSwan",                biosRequired: false, stable: true),
                 system("ps1", "PlayStation",               biosRequired: true,  stable: false),
                 system("ng",  "Neo Geo AES / MVS",         biosRequired: true,  stable: false),
-                system("a26", "Atari 2600",                biosRequired: false, stable: false),
+                system("a26", "Atari 2600",                biosRequired: false, stable: true),
                 system("msx", "MSX / MSX2",                biosRequired: true,  stable: false),
             ]
             return BridgeResponse.success(data: ["systems": systems])

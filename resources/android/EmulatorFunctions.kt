@@ -1181,7 +1181,7 @@ object EmulatorFunctions {
                 system("ws",  "WonderSwan",                   biosRequired = false, stable = true,  compiled),
                 system("ps1", "PlayStation",                  biosRequired = true,  stable = false, compiled),
                 system("ng",  "Neo Geo AES / MVS",            biosRequired = true,  stable = false, compiled),
-                system("a26", "Atari 2600",                   biosRequired = false, stable = false, compiled),
+                system("a26", "Atari 2600",                   biosRequired = false, stable = true,  compiled),
                 system("msx", "MSX / MSX2",                   biosRequired = true,  stable = false, compiled),
             )
             return BridgeResponse.success(mapOf("systems" to systems))
