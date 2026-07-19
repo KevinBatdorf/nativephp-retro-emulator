@@ -51,6 +51,17 @@ inline auto findAll(const ares::Node::Object& root) -> std::vector<T> {
     return out;
 }
 
+// Mirrors Port::connected(): the port's first peripheral child. connected()
+// inlines a dynamic_cast-based find<>, which fails across modules like the
+// rest — use this from the frontend instead.
+inline auto connected(const ares::Node::Port& port) -> ares::Node::Peripheral {
+    if(!port) return {};
+    for(auto& child : detail::Access::nodes(port)) {
+        if(auto peripheral = as<ares::Node::Peripheral>(child)) return peripheral;
+    }
+    return {};
+}
+
 // Mirrors Object::find<T>(name): first node of the class with that name.
 template<typename T>
 inline auto findByName(const ares::Node::Object& root, const std::string& name) -> T {

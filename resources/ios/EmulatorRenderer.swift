@@ -574,6 +574,7 @@ final class EmulatorRenderer: UIView {
         "colorEmulation": false,
         "deepBlackBoost": false,
         "interframeBlending": false,
+        "showIcons": false,
     ]
 
     private var presentation = PresentationSettings()

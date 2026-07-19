@@ -25,7 +25,10 @@ SIM_SDK="$(xcrun --sdk iphonesimulator --show-sdk-path)"
 
 log() { echo "▸ $*" >&2; }
 
-# cmake_build LABEL [cmake-args...]  — prints path to the built .a on stdout.
+# cmake_build LABEL [cmake-args...]  — sets BUILT_LIB to the built .a.
+# Runs at top level (not in a $() subshell): command substitutions don't
+# inherit errexit on macOS's bash 3.2, so a compile failure inside $() would
+# silently package stale slices.
 cmake_build() {
     local label="$1"; shift
     local build_dir="$BUILD_ROOT/$label"
@@ -37,7 +40,7 @@ cmake_build() {
         "$@" >&2
     log "Building $label …"
     cmake --build "$build_dir" --parallel "$(sysctl -n hw.logicalcpu)" >&2
-    echo "$build_dir/libretro_emulator_ios.a"
+    BUILT_LIB="$build_dir/libretro_emulator_ios.a"
 }
 
 # make_xcframework OUTPUT -library <.a> -headers <dir> [-library ... -headers ...]
@@ -185,17 +188,19 @@ rm -rf "$XCFW_OUTPUT"
 # ---------------------------------------------------------------------------
 # Simulator — arm64 + x86_64 (fat binary via lipo)
 # ---------------------------------------------------------------------------
-SIM_ARM64_LIB="$(cmake_build sim-arm64 \
+cmake_build sim-arm64 \
     -DCMAKE_SYSTEM_NAME=iOS \
     -DCMAKE_OSX_DEPLOYMENT_TARGET="$DEPLOYMENT_TARGET" \
     -DCMAKE_OSX_ARCHITECTURES=arm64 \
-    -DCMAKE_OSX_SYSROOT="$SIM_SDK")"
+    -DCMAKE_OSX_SYSROOT="$SIM_SDK"
+SIM_ARM64_LIB="$BUILT_LIB"
 
-SIM_X86_LIB="$(cmake_build sim-x86_64 \
+cmake_build sim-x86_64 \
     -DCMAKE_SYSTEM_NAME=iOS \
     -DCMAKE_OSX_DEPLOYMENT_TARGET="$DEPLOYMENT_TARGET" \
     -DCMAKE_OSX_ARCHITECTURES=x86_64 \
-    -DCMAKE_OSX_SYSROOT="$SIM_SDK")"
+    -DCMAKE_OSX_SYSROOT="$SIM_SDK"
+SIM_X86_LIB="$BUILT_LIB"
 
 SIM_FAT="$BUILD_ROOT/sim-fat/libretro_emulator_ios.a"
 mkdir -p "$(dirname "$SIM_FAT")"
@@ -210,11 +215,12 @@ else
     # -------------------------------------------------------------------------
     # Device — arm64
     # -------------------------------------------------------------------------
-    DEVICE_LIB="$(cmake_build device \
+    cmake_build device \
         -DCMAKE_SYSTEM_NAME=iOS \
         -DCMAKE_OSX_DEPLOYMENT_TARGET="$DEPLOYMENT_TARGET" \
         -DCMAKE_OSX_ARCHITECTURES=arm64 \
-        -DCMAKE_OSX_SYSROOT="$DEVICE_SDK")"
+        -DCMAKE_OSX_SYSROOT="$DEVICE_SDK"
+    DEVICE_LIB="$BUILT_LIB"
 
     log "Assembling xcframework (device + simulator) …"
     make_xcframework "$XCFW_OUTPUT" \

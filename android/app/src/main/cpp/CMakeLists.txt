@@ -10,6 +10,17 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Suppress C++ module scanning (not supported by NDK's CMake integration)
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
+# Android libc++ defaults to pointer-identity typeid comparison (unique RTTI,
+# implementation 1). Objects cross our DSO boundary constantly (paks and node
+# attributes built in libretro_ares.so, consumed in dlopen'd cores), and each
+# DSO carries its own weak typeinfo copies — pointer identity then breaks
+# nall::any::is<T>() (every pak/node attribute reads back empty; the sfc base
+# lost its ST-LOROM board and grew no slot ports). Implementation 2 compares
+# typeinfo by name instead. Applies to every C++ TU in this project so ODR
+# holds; libc++abi's __dynamic_cast is prebuilt and unaffected — that side is
+# handled by native/cross_dso_vfs.hpp.
+add_compile_definitions($<$<COMPILE_LANGUAGE:CXX>:_LIBCPP_TYPEINFO_COMPARISON_IMPLEMENTATION=2>)
+
 # ares submodule root — relative to this CMakeLists.txt
 get_filename_component(ARES_ROOT
     "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../ares"
@@ -92,6 +103,12 @@ target_compile_definitions(ares_iface INTERFACE
     BUILD_RELEASE
     SLJIT_HAVE_CONFIG_PRE=1
     SLJIT_HAVE_CONFIG_POST=1
+)
+# Every C++ TU imports the pak-reading vfs template from libretro_ares.so
+# instead of instantiating its own — see native/cross_dso_vfs.hpp for why
+# (cross-DSO dynamic_cast makes boards read empty ROMs otherwise).
+target_compile_options(ares_iface INTERFACE
+    "$<$<COMPILE_LANGUAGE:CXX>:SHELL:-include ${NATIVE_ROOT}/cross_dso_vfs.hpp>"
 )
 
 # ---------------------------------------------------------------------------
@@ -218,7 +235,6 @@ target_compile_definitions(gb_core PUBLIC
 add_library(md_core STATIC
     "${ARES_ROOT}/ares/md/md.cpp"
     "${PROC}/m68000/m68000.cpp"
-    "${PROC}/z80/z80.cpp"
     "${PROC}/sh2/sh2.cpp"
     "${PROC}/ssp1601/ssp1601.cpp"
 )
@@ -256,6 +272,61 @@ set_target_properties(librashader PROPERTIES
     IMPORTED_NO_SONAME TRUE
 )
 
+
+# ---------------------------------------------------------------------------
+# sg_core — Sega SG-1000 (unity build via sg.cpp; the Z80 lives in retro_ares)
+#   tms9918 — VDP
+#   i8255   — PPI (SC-3000 keyboard)
+# ---------------------------------------------------------------------------
+add_library(sg_core STATIC
+    "${ARES_ROOT}/ares/sg/sg.cpp"
+    "${ARES_ROOT}/ares/component/video/tms9918/tms9918.cpp"
+    "${ARES_ROOT}/ares/component/io/i8255/i8255.cpp"
+)
+target_include_directories(sg_core PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/stubs"
+    "${ARES_ROOT}/ares"
+)
+target_link_libraries(sg_core PUBLIC ares_iface)
+target_compile_definitions(sg_core PUBLIC CORE_SG)
+
+# ---------------------------------------------------------------------------
+# pce_core — NEC PC Engine (unity build via pce.cpp)
+#   huc6280 — main CPU
+#   msm5205 — CD-ROM ADPCM
+#   vdp + vdp-performance stay separate TUs even in upstream's unity build
+# ---------------------------------------------------------------------------
+add_library(pce_core STATIC
+    "${ARES_ROOT}/ares/pce/pce.cpp"
+    "${ARES_ROOT}/ares/pce/vdp/vdp.cpp"
+    "${ARES_ROOT}/ares/pce/vdp-performance/vdp.cpp"
+    "${PROC}/huc6280/huc6280.cpp"
+    "${ARES_ROOT}/ares/component/audio/msm5205/msm5205.cpp"
+)
+target_include_directories(pce_core PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/stubs"
+    "${ARES_ROOT}/ares"
+)
+target_link_libraries(pce_core PUBLIC ares_iface)
+target_compile_definitions(pce_core PUBLIC CORE_PCE)
+
+# ---------------------------------------------------------------------------
+# ws_core — Bandai WonderSwan (unity build via ws.cpp)
+#   v30mz   — main CPU
+#   m93lcx6 — save EEPROM (own copy, like gb_core's — cores never share it)
+# ---------------------------------------------------------------------------
+add_library(ws_core STATIC
+    "${ARES_ROOT}/ares/ws/ws.cpp"
+    "${PROC}/v30mz/v30mz.cpp"
+    "${ARES_ROOT}/ares/component/eeprom/m93lcx6/m93lcx6.cpp"
+)
+target_include_directories(ws_core PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/stubs"
+    "${ARES_ROOT}/ares"
+)
+target_link_libraries(ws_core PUBLIC ares_iface)
+target_compile_definitions(ws_core PUBLIC CORE_WS)
+
 # ---------------------------------------------------------------------------
 # retro_ares — the shared ares runtime, registry host, and pak/save plumbing.
 # Exactly ONE copy per process: the frontend and every dlopen'd core module
@@ -263,6 +334,7 @@ set_target_properties(librashader PROPERTIES
 # can never fork the runtime state. Cores DT_NEED this library.
 # ---------------------------------------------------------------------------
 add_library(retro_ares SHARED
+    "${ARES_ROOT}/ares/component/processor/z80/z80.cpp"
     "${ARES_ROOT}/ares/component/eeprom/m24c/m24c.cpp"
     "${ARES_ROOT}/ares/component/audio/sn76489/sn76489.cpp"
     "${ARES_ROOT}/ares/component/audio/ym2413/ym2413.cpp"
@@ -273,6 +345,7 @@ add_library(retro_ares SHARED
     "${NATIVE_ROOT}/system_registry.cpp"
     "${NATIVE_ROOT}/save_io.cpp"
     "${NATIVE_ROOT}/pak/multi_pak.cpp"
+    "${NATIVE_ROOT}/pak/sfc_pak.cpp"
     "${NATIVE_ROOT}/pak/mia_mediums.cpp"
     "${FIRMWARE_DIR}/embedded_firmware.cpp"
 )
@@ -306,10 +379,15 @@ function(retro_core_module SYS)
     set_target_properties(retro_core_${SYS} PROPERTIES OUTPUT_NAME "retro_core_${SYS}")
 endfunction()
 
-retro_core_module(sfc "${NATIVE_ROOT}/pak/sfc_pak.cpp")
+# sfc_pak.cpp lives in retro_ares with the other pak builders so every pak's
+# vfs objects share one home DSO (see native/cross_dso_vfs.hpp).
+retro_core_module(sfc)
 retro_core_module(fc)
 retro_core_module(gb)
 retro_core_module(md)
+retro_core_module(sg)
+retro_core_module(pce)
+retro_core_module(ws)
 
 # ---------------------------------------------------------------------------
 # retro_emulator — JNI frontend + Vulkan renderer. Links no core: nativeInit

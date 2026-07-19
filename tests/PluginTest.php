@@ -4,14 +4,21 @@ use KevinBatdorf\RetroEmulator\AspectCorrection;
 use KevinBatdorf\RetroEmulator\Buttons\FcButton;
 use KevinBatdorf\RetroEmulator\Buttons\GbButton;
 use KevinBatdorf\RetroEmulator\Buttons\MdButton;
+use KevinBatdorf\RetroEmulator\Buttons\PceButton;
 use KevinBatdorf\RetroEmulator\Buttons\SfcButton;
+use KevinBatdorf\RetroEmulator\Buttons\SgButton;
+use KevinBatdorf\RetroEmulator\Buttons\WsButton;
 use KevinBatdorf\RetroEmulator\Components\Emulator as EmulatorComponent;
 use KevinBatdorf\RetroEmulator\Config\Config;
 use KevinBatdorf\RetroEmulator\Config\GbConfig;
 use KevinBatdorf\RetroEmulator\Config\MdConfig;
+use KevinBatdorf\RetroEmulator\Config\PceConfig;
 use KevinBatdorf\RetroEmulator\Config\RegionalSystemConfig;
-use KevinBatdorf\RetroEmulator\Device;
 use KevinBatdorf\RetroEmulator\Config\SfcConfig;
+use KevinBatdorf\RetroEmulator\Config\SgConfig;
+use KevinBatdorf\RetroEmulator\Config\WsConfig;
+use KevinBatdorf\RetroEmulator\Controller;
+use KevinBatdorf\RetroEmulator\Device;
 use KevinBatdorf\RetroEmulator\Elements\Emulator as EmulatorElement;
 use KevinBatdorf\RetroEmulator\Emulator;
 use KevinBatdorf\RetroEmulator\EmulatorErrorCode;
@@ -181,7 +188,7 @@ describe('Emulator class', function () {
 
     it('Controller has all input methods', function () {
         foreach (['press', 'release', 'setButtons', 'setAxis', 'aimAt', 'remap'] as $method) {
-            expect(method_exists(\KevinBatdorf\RetroEmulator\Controller::class, $method))
+            expect(method_exists(Controller::class, $method))
                 ->toBeTrue("Controller::{$method}() is missing");
         }
     });
@@ -288,7 +295,7 @@ describe('Error handling', function () {
 
         try {
             Emulator::surface('main')->readMemory(0xFFFFFF);
-            throw new \Exception('expected EmulatorException, none thrown');
+            throw new Exception('expected EmulatorException, none thrown');
         } catch (EmulatorException $e) {
             expect($e->errorCode)->toBe(EmulatorErrorCode::ReadFailed);
             expect($e->getMessage())->toBe('out of range');
@@ -586,6 +593,9 @@ describe('Typed layer', function () {
         ['fc', FcButton::class],
         ['gb', GbButton::class],
         ['md', MdButton::class],
+        ['sg', SgButton::class],
+        ['pce', PceButton::class],
+        ['ws', WsButton::class],
     ]);
 
     it('system enum matches the ids GetSystems reports', function () {
@@ -643,6 +653,22 @@ describe('Typed layer', function () {
             'colorEmulation' => true,
             'interframeBlending' => true,
         ]);
+    });
+
+    it('WsConfig carries the WonderSwan display toggles', function () {
+        $config = new WsConfig(colorEmulation: true, interframeBlending: true, showIcons: true);
+
+        expect($config->toArray())->toBe([
+            'colorEmulation' => true,
+            'interframeBlending' => true,
+            'showIcons' => true,
+        ]);
+    });
+
+    it('the regional SgConfig and PceConfig expose region knobs', function () {
+        expect(is_subclass_of(SgConfig::class, RegionalSystemConfig::class))->toBeTrue()
+            ->and(is_subclass_of(PceConfig::class, RegionalSystemConfig::class))->toBeTrue()
+            ->and(is_subclass_of(WsConfig::class, RegionalSystemConfig::class))->toBeFalse();
     });
 
     it('the global Config serializes shared knobs as wire values', function () {
@@ -722,7 +748,7 @@ describe('Typed layer', function () {
     it('connectDevice registers a device and returns a Controller for the port', function () {
         $controller = Emulator::surface()->connectDevice(2, Device::Mouse);
 
-        expect($controller)->toBeInstanceOf(\KevinBatdorf\RetroEmulator\Controller::class);
+        expect($controller)->toBeInstanceOf(Controller::class);
         expect($controller->port)->toBe(2);
         $call = collect($GLOBALS['__nativephp_calls'])->firstWhere('function', 'Emulator.ConnectDevice');
         expect($call['payload']['port'])->toBe(2);
@@ -737,7 +763,7 @@ describe('Typed layer', function () {
 
         expect($players)->toBeArray()->toHaveCount(4);
         expect(array_map(fn ($c) => $c->port, $players))->toBe([2, 3, 4, 5]);
-        expect($players[2])->toBeInstanceOf(\KevinBatdorf\RetroEmulator\Controller::class);
+        expect($players[2])->toBeInstanceOf(Controller::class);
     });
 
     it('the handle presses a button on its port', function () {

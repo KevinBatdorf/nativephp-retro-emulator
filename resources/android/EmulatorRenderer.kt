@@ -222,6 +222,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
         "colorEmulation" to false,
         "deepBlackBoost" to false,
         "interframeBlending" to false,
+        "showIcons" to false,
     )
 
     private fun applyCoreOptions() = coreOptions.forEach { (key, value) ->

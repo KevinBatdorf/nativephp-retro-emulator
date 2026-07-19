@@ -72,8 +72,10 @@ private:
     static constexpr int kFramesInFlight = 2;
     // Source image is fixed at the GL renderer's texture size (fits any SFC
     // canvas incl. overscan/interlace); frames upload into the top-left sub-rect.
-    static constexpr uint32_t kSrcW = 1024;
-    static constexpr uint32_t kSrcH = 512;
+    // Must cover the widest frame any core delivers — the PC Engine's
+    // accurate VDP hands over up to 1365-wide time-based scanline buffers.
+    static constexpr uint32_t kSrcW = 1536;
+    static constexpr uint32_t kSrcH = 1024;
     static constexpr VkFormat kSrcFormat = VK_FORMAT_B8G8R8A8_UNORM;
 
     bool createSwapchain(uint32_t width, uint32_t height);

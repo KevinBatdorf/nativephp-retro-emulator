@@ -10,6 +10,9 @@ namespace MiaAnalyzers {
   auto analyzeFamicom(std::vector<u8>& rom) -> string;
   auto analyzeGameBoy(std::vector<u8>& rom) -> string;
   auto analyzeMegaDrive(std::vector<u8>& rom) -> string;
+  auto analyzeSG1000(std::vector<u8>& rom) -> string;
+  auto analyzePCEngine(std::vector<u8>& rom) -> string;
+  auto analyzeWonderSwan(std::vector<u8>& rom) -> string;
 }
 
 namespace MultiPak {
@@ -147,6 +150,58 @@ static auto assembleMegaDrive(Markup::Node document, string& manifest,
     return pak;
 }
 
+// --- SG-1000 / PC Engine / WonderSwan — simple linear cartridges, mirroring
+// --- their mia/medium load() bodies ------------------------------------------
+static auto assembleSG1000(Markup::Node document, string& manifest,
+                           std::vector<u8>& rom) -> std::shared_ptr<vfs::directory> {
+    auto pak = std::make_shared<vfs::directory>();
+    pak->setAttribute("board",  document["game/board"].string());
+    pak->setAttribute("title",  document["game/title"].string());
+    pak->setAttribute("region", document["game/region"].string());
+    pak->setAttribute("expansionRam",
+        document["game/board/memory(type=RAM,content=Expansion)/size"].integer());
+    pak->append("manifest.bml", manifest);
+    pak->append("program.rom",  rom);
+    if(auto node = document["game/board/memory(type=RAM,content=Save)"]) {
+        appendMemory(pak, node);
+    }
+    return pak;
+}
+
+static auto assemblePCEngine(Markup::Node document, string& manifest,
+                             std::vector<u8>& rom) -> std::shared_ptr<vfs::directory> {
+    auto pak = std::make_shared<vfs::directory>();
+    pak->setAttribute("title",  document["game/title"].string());
+    pak->setAttribute("region", document["game/region"].string());
+    pak->setAttribute("board",  document["game/board"].string());
+    pak->append("manifest.bml", manifest);
+    pak->append("program.rom",  rom);
+    if(auto node = document["game/board/memory(type=RAM,content=Save)"])    appendMemory(pak, node);
+    if(auto node = document["game/board/memory(type=RAM,content=Dynamic)"]) appendMemory(pak, node);
+    if(auto node = document["game/board/memory(type=RAM,content=Work)"])    appendMemory(pak, node);
+    return pak;
+}
+
+static auto assembleWonderSwan(Markup::Node document, string& manifest,
+                               std::vector<u8>& rom) -> std::shared_ptr<vfs::directory> {
+    auto pak = std::make_shared<vfs::directory>();
+    pak->setAttribute("title",       document["game/title"].string());
+    pak->setAttribute("orientation", document["game/orientation"].string());
+    pak->setAttribute("board",       document["game/board"].string());
+    pak->setAttribute("width",
+        document["game/board/memory(content=Program)/width"].string());
+    pak->append("manifest.bml", manifest);
+    if(document["game/board/memory(type=Flash,content=Program)"]) {
+        pak->append("program.flash", rom);
+    } else {
+        pak->append("program.rom", rom);
+    }
+    if(auto node = document["game/board/memory(type=RAM,content=Save)"])    appendMemory(pak, node);
+    if(auto node = document["game/board/memory(type=EEPROM,content=Save)"]) appendMemory(pak, node);
+    if(auto node = document["game/board/memory(type=RTC,content=Time)"])    appendMemory(pak, node);
+    return pak;
+}
+
 auto makeSystemPak(const std::string& systemId) -> std::shared_ptr<vfs::directory> {
     auto pak = std::make_shared<vfs::directory>();
     if(systemId == "gb") {
@@ -155,8 +210,18 @@ auto makeSystemPak(const std::string& systemId) -> std::shared_ptr<vfs::director
     } else if(systemId == "md") {
         pak->append("tmss.rom", std::span<const u8>(
             EmbeddedFirmware::MdTmss, EmbeddedFirmware::MdTmssSize));
+    } else if(systemId == "pce") {
+        // 2 KiB battery-backed BRAM (mia/system/pc-engine.cpp) — games format
+        // it themselves on first use.
+        pak->append("backup.ram", (u64)2048);
+    } else if(systemId == "ws") {
+        // Boot ROM ships in the ares tree (freely licensed); the 128-byte
+        // internal EEPROM holds the console's user profile.
+        pak->append("boot.rom", std::span<const u8>(
+            EmbeddedFirmware::WsBoot, EmbeddedFirmware::WsBootSize));
+        pak->append("save.eeprom", (u64)128);
     }
-    // fc: no system files required.
+    // fc, sg: no system files required.
     return pak;
 }
 
@@ -170,9 +235,12 @@ auto makeCartridgePak(const std::string& systemId,
     std::vector<u8> data(rom, rom + romSize);
 
     string manifest;
-    if(systemId == "fc")      manifest = MiaAnalyzers::analyzeFamicom(data);
-    else if(systemId == "gb") manifest = MiaAnalyzers::analyzeGameBoy(data);
-    else if(systemId == "md") manifest = MiaAnalyzers::analyzeMegaDrive(data);
+    if(systemId == "fc")       manifest = MiaAnalyzers::analyzeFamicom(data);
+    else if(systemId == "gb")  manifest = MiaAnalyzers::analyzeGameBoy(data);
+    else if(systemId == "md")  manifest = MiaAnalyzers::analyzeMegaDrive(data);
+    else if(systemId == "sg")  manifest = MiaAnalyzers::analyzeSG1000(data);
+    else if(systemId == "pce") manifest = MiaAnalyzers::analyzePCEngine(data);
+    else if(systemId == "ws")  manifest = MiaAnalyzers::analyzeWonderSwan(data);
     else {
         result.error = "unknown system: " + systemId;
         return result;
@@ -184,9 +252,12 @@ auto makeCartridgePak(const std::string& systemId,
         return result;
     }
 
-    if(systemId == "fc")      result.pak = assembleFamicom(document, manifest, data);
-    else if(systemId == "gb") result.pak = assembleGameBoy(document, manifest, data);
-    else if(systemId == "md") result.pak = assembleMegaDrive(document, manifest, data);
+    if(systemId == "fc")       result.pak = assembleFamicom(document, manifest, data);
+    else if(systemId == "gb")  result.pak = assembleGameBoy(document, manifest, data);
+    else if(systemId == "md")  result.pak = assembleMegaDrive(document, manifest, data);
+    else if(systemId == "sg")  result.pak = assembleSG1000(document, manifest, data);
+    else if(systemId == "pce") result.pak = assemblePCEngine(document, manifest, data);
+    else if(systemId == "ws")  result.pak = assembleWonderSwan(document, manifest, data);
 
     result.title  = std::string(document["game/title"].string().data());
     result.region = std::string(document["game/region"].string().data());
@@ -194,3 +265,9 @@ auto makeCartridgePak(const std::string& systemId,
 }
 
 } // namespace MultiPak
+
+// The one instantiation every DSO imports — see native/cross_dso_vfs.hpp.
+template std::shared_ptr<nall::vfs::file>
+nall::vfs::directory::read<nall::vfs::file>(const nall::string&);
+template std::shared_ptr<nall::vfs::file>
+nall::vfs::directory::write<nall::vfs::file>(const nall::string&);

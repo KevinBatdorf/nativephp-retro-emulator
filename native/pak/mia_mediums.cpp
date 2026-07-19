@@ -25,6 +25,9 @@ auto Medium::manifestDatabase(string) -> string { return {}; }
 #include <mia/medium/famicom.cpp>
 #include <mia/medium/game-boy.cpp>
 #include <mia/medium/mega-drive.cpp>
+#include <mia/medium/sg-1000.cpp>
+#include <mia/medium/pc-engine.cpp>
+#include <mia/medium/wonderswan.cpp>
 
 } // namespace mia
 
@@ -44,6 +47,21 @@ auto analyzeGameBoy(std::vector<u8>& rom) -> string {
 
 auto analyzeMegaDrive(std::vector<u8>& rom) -> string {
     mia::MegaDrive medium;
+    return medium.analyze(rom);
+}
+
+auto analyzeSG1000(std::vector<u8>& rom) -> string {
+    mia::SG1000 medium;
+    return medium.analyze(rom);
+}
+
+auto analyzePCEngine(std::vector<u8>& rom) -> string {
+    mia::PCEngine medium;
+    return medium.analyze(rom);
+}
+
+auto analyzeWonderSwan(std::vector<u8>& rom) -> string {
+    mia::WonderSwan medium;
     return medium.analyze(rom);
 }
 

@@ -31,7 +31,7 @@ object EmulatorFunctions {
     // Per-system emulation toggles carried on loadSystem() config and
     // setSystemOptions(). Native maps each to its ares node and no-ops where the
     // core doesn't declare it (see native/core_options.hpp).
-    private val CORE_TOGGLE_KEYS = listOf("colorEmulation", "deepBlackBoost", "interframeBlending")
+    private val CORE_TOGGLE_KEYS = listOf("colorEmulation", "deepBlackBoost", "interframeBlending", "showIcons")
 
     private data class SurfaceEntry(
         val renderer: EmulatorRenderer,

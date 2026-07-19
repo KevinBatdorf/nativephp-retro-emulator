@@ -216,6 +216,49 @@ target_compile_definitions(md_core PUBLIC
 # All object libraries are collected here so the xcframework slice is
 # self-contained: the host app only needs to link -lretro_emulator_ios.
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# sg_core / pce_core / ws_core — wave-1 cartridge systems
+# (single static image: sg's z80/sn76489 come from md_core's objects,
+#  ws's m93lcx6 from gb_core's — only components no sibling compiles go here)
+# ---------------------------------------------------------------------------
+add_library(sg_core OBJECT
+    "${ARES_ROOT}/ares/sg/sg.cpp"
+    "${ARES_ROOT}/ares/component/video/tms9918/tms9918.cpp"
+    "${ARES_ROOT}/ares/component/io/i8255/i8255.cpp"
+)
+target_include_directories(sg_core PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/stubs"
+    "${ARES_ROOT}/ares"
+)
+target_link_libraries(sg_core PUBLIC ares_core)
+target_compile_definitions(sg_core PUBLIC PROFILE_PERFORMANCE BUILD_RELEASE CORE_SG)
+
+# vdp + vdp-performance stay separate TUs even in upstream's unity build.
+add_library(pce_core OBJECT
+    "${ARES_ROOT}/ares/pce/pce.cpp"
+    "${ARES_ROOT}/ares/pce/vdp/vdp.cpp"
+    "${ARES_ROOT}/ares/pce/vdp-performance/vdp.cpp"
+    "${PROC}/huc6280/huc6280.cpp"
+    "${ARES_ROOT}/ares/component/audio/msm5205/msm5205.cpp"
+)
+target_include_directories(pce_core PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/stubs"
+    "${ARES_ROOT}/ares"
+)
+target_link_libraries(pce_core PUBLIC ares_core)
+target_compile_definitions(pce_core PUBLIC PROFILE_PERFORMANCE BUILD_RELEASE CORE_PCE)
+
+add_library(ws_core OBJECT
+    "${ARES_ROOT}/ares/ws/ws.cpp"
+    "${PROC}/v30mz/v30mz.cpp"
+)
+target_include_directories(ws_core PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/stubs"
+    "${ARES_ROOT}/ares"
+)
+target_link_libraries(ws_core PUBLIC ares_core)
+target_compile_definitions(ws_core PUBLIC PROFILE_PERFORMANCE BUILD_RELEASE CORE_WS)
+
 add_library(retro_emulator_ios STATIC
     "${CMAKE_CURRENT_SOURCE_DIR}/ares_ios_api.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/librashader_metal_shim.mm"
@@ -225,6 +268,9 @@ add_library(retro_emulator_ios STATIC
     "${NATIVE_ROOT}/cores/core_fc.cpp"
     "${NATIVE_ROOT}/cores/core_gb.cpp"
     "${NATIVE_ROOT}/cores/core_md.cpp"
+    "${NATIVE_ROOT}/cores/core_sg.cpp"
+    "${NATIVE_ROOT}/cores/core_pce.cpp"
+    "${NATIVE_ROOT}/cores/core_ws.cpp"
     "${NATIVE_ROOT}/save_io.cpp"
     "${NATIVE_ROOT}/pak/sfc_pak.cpp"
     "${NATIVE_ROOT}/pak/multi_pak.cpp"
@@ -238,6 +284,9 @@ add_library(retro_emulator_ios STATIC
     $<TARGET_OBJECTS:fc_core>
     $<TARGET_OBJECTS:gb_core>
     $<TARGET_OBJECTS:md_core>
+    $<TARGET_OBJECTS:sg_core>
+    $<TARGET_OBJECTS:pce_core>
+    $<TARGET_OBJECTS:ws_core>
     $<TARGET_OBJECTS:ymfm>
 )
 target_include_directories(retro_emulator_ios PUBLIC

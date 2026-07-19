@@ -49,17 +49,19 @@ sed -i '' \
 # runtimes don't export — the app then dies at dyld with "Symbol missing".
 export IPHONEOS_DEPLOYMENT_TARGET=16.0
 
+# Sets BUILT_A instead of echoing: $() subshells don't inherit errexit on
+# macOS's bash 3.2, so a cargo failure inside one would go unnoticed.
 build_target() {
     local target="$1"
     ( cd "$SRC_DIR" && cargo build --release -p librashader-capi \
         --no-default-features --features runtime-metal --features stable \
         --target "$target" )
-    echo "$SRC_DIR/target/$target/release/liblibrashader_capi.a"
+    BUILT_A="$SRC_DIR/target/$target/release/liblibrashader_capi.a"
 }
 
-DEVICE_A="$(build_target aarch64-apple-ios)"
-SIM_ARM_A="$(build_target aarch64-apple-ios-sim)"
-SIM_X86_A="$(build_target x86_64-apple-ios)"
+build_target aarch64-apple-ios;     DEVICE_A="$BUILT_A"
+build_target aarch64-apple-ios-sim; SIM_ARM_A="$BUILT_A"
+build_target x86_64-apple-ios;      SIM_X86_A="$BUILT_A"
 
 mkdir -p "$OUT/ios-arm64" "$OUT/ios-arm64_x86_64-simulator"
 cp "$DEVICE_A" "$OUT/ios-arm64/liblibrashader.a"

@@ -182,7 +182,7 @@ enum EmulatorFunctions {
     // Per-system emulation toggles carried on loadSystem() config and
     // setSystemOptions(). Native maps each to its ares node and no-ops where
     // the core doesn't declare it (see native/core_options.hpp).
-    private static let coreToggleKeys = ["colorEmulation", "deepBlackBoost", "interframeBlending"]
+    private static let coreToggleKeys = ["colorEmulation", "deepBlackBoost", "interframeBlending", "showIcons"]
 
     private static func coreToggles(from options: [String: Any]) -> [String: Bool] {
         var result: [String: Bool] = [:]

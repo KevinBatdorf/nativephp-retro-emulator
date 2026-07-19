@@ -241,8 +241,10 @@ struct AndroidPlatform : ares::Platform {
 
     auto pak(ares::Node::Object node) -> std::shared_ptr<vfs::directory> override {
         if (!g_state || !g_state->system) return {};
+        // The system node IS the root — match by pointer, since some cores
+        // rename it per model (PC Engine boots as "TurboGrafx 16" on NTSC-U).
+        if (node == g_state->root) return g_state->systemPak;
         auto name = node->name();
-        if (name == g_state->system->systemNode.c_str())    return g_state->systemPak;
         if (name == g_state->system->cartridgeNode.c_str()) return g_state->cartridgePak;
         // Sufami Turbo slot carts — same node name in both slots, so the parent
         // port ("Sufami Turbo Slot A" / "…B") picks which staged pak answers.
@@ -253,6 +255,10 @@ struct AndroidPlatform : ares::Platform {
             if (port == "Sufami Turbo Slot B") return g_state->slotPak[1];
         }
         if (name == "BS Memory Cartridge") return g_state->slotPak[0];
+        // Model-renamed cartridges ("TurboGrafx 16 Cartridge") — every core
+        // names its main cartridge "<system> Cartridge", and the slot names
+        // above are matched first.
+        if (nall::string{name}.endsWith(" Cartridge")) return g_state->cartridgePak;
         return {};
     }
 
@@ -431,9 +437,17 @@ static const std::unordered_map<std::string,
             {"Super Scope", {{{"Trigger", 1u << 0}, {"Cursor", 1u << 1},
                               {"Turbo", 1u << 2}, {"Pause", 1u << 3}}, {"X", "Y"}}},
             {"Justifier", {{{"Trigger", 1u << 0}, {"Start", 1u << 3}}, {"X", "Y"}}},
-            // Container device — no inputs of its own; fans out to 4 gamepad
+            // Container device — no inputs of its own; fans out to gamepad
             // sub-ports (handled specially in applyConnectedDevices).
             {"Super Multitap", {{}, {}}},
+        }},
+        {"pce", {
+            // 6-button pad (avenuepad.cpp); shared names keep the gamepad's bits.
+            {"Avenue Pad 6", {{{"II", 1u << 0}, {"Select", 1u << 2}, {"Run", 1u << 3},
+                               {"Up", 1u << 4}, {"Down", 1u << 5}, {"Left", 1u << 6},
+                               {"Right", 1u << 7}, {"I", 1u << 8}, {"III", 1u << 9},
+                               {"IV", 1u << 10}, {"V", 1u << 11}, {"VI", 1u << 12}}, {}}},
+            {"Multitap", {{}, {}}},
         }},
     };
     return t;
@@ -465,10 +479,26 @@ static std::vector<std::string> supportedDevices(const SystemRegistry::SystemDef
     return v;
 }
 
-static const char* kMultitap = "Super Multitap";
-static bool isMultitap(const std::string& name) { return name == kMultitap; }
-// Logical ports a physical port consumes: a multitap fans out to 4, else 1.
-static int portBlock(const std::string& name) { return isMultitap(name) ? 4 : 1; }
+// Multitap container devices — ares peripheral name + logical fan-out width.
+struct MultitapInfo { const char* name; int block; };
+static const MultitapInfo* multitapInfo(const std::string& systemId) {
+    static const std::unordered_map<std::string, MultitapInfo> t = {
+        {"sfc", {"Super Multitap", 4}},
+        {"pce", {"Multitap", 5}},
+    };
+    auto it = t.find(systemId);
+    return it == t.end() ? nullptr : &it->second;
+}
+static bool isMultitap(const std::string& name) {
+    if (!g_state || !g_state->system) return false;
+    auto* m = multitapInfo(g_state->system->id);
+    return m && name == m->name;
+}
+// Logical ports a physical port consumes: the multitap's width, else 1.
+static int portBlock(const std::string& name) {
+    if (!isMultitap(name)) return 1;
+    return multitapInfo(g_state->system->id)->block;
+}
 
 // Cache a device's button + axis nodes under `parent` for `port` (1-based).
 static void cacheDevice(ares::Node::Object parent,
@@ -536,16 +566,21 @@ static void applyConnectedDevices() {
         }
         auto portName = std::string("Controller Port ") + std::to_string(p);
         auto port = NodeUtil::findByName<ares::Node::Port>(g_state->root, portName.c_str());
+        // Single-port cores name theirs plain "Controller Port" (PC Engine).
+        if (!port && def.ports == 1) {
+            port = NodeUtil::findByName<ares::Node::Port>(g_state->root, "Controller Port");
+        }
 
         if (name.empty()) { if (port) port->disconnect(); logical += 1; continue; }
         if (!port) { logical += portBlock(name); continue; }
 
         if (isMultitap(name)) {
-            port->allocate(kMultitap);
+            port->allocate(name.c_str());
             port->connect();
-            auto tap = port->connected();   // the Super Multitap peripheral
+            auto tap = NodeUtil::connected(port);   // the multitap peripheral
+            int block = portBlock(name);
             DeviceDescriptor gp; gp.buttons = def.buttons;   // each sub-port is a gamepad
-            for (int i = 1; i <= 4 && logical <= EmulatorState::kMaxPorts; i++, logical++) {
+            for (int i = 1; i <= block && logical <= EmulatorState::kMaxPorts; i++, logical++) {
                 auto sub = tap ? NodeUtil::findByName<ares::Node::Port>(tap, (std::string("Controller Port ") + std::to_string(i)).c_str()) : nullptr;
                 if (!sub) continue;
                 sub->allocate("Gamepad");
@@ -949,7 +984,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadRom(
             i, slots[i].flash, g_state->stagedSlot[i].data(), g_state->stagedSlot[i].size());
         slot->allocate();
         slot->connect();
-        g_state->slotConnected[i] = (bool)slot->connected();
+        g_state->slotConnected[i] = (bool)NodeUtil::connected(slot);
         LOGI("slot '%s' connected=%d (%zu bytes)",
              slots[i].port, g_state->slotConnected[i] ? 1 : 0, g_state->stagedSlot[i].size());
         g_state->stagedSlot[i].clear();   // pak copied the bytes
@@ -1756,9 +1791,10 @@ static std::string buildPortsJson() {
             std::lock_guard<std::mutex> lock(g_state->deviceMutex);
             name = g_state->connectedDevice[p - 1];
         }
-        if (isMultitap(name)) {   // fans out to 4 gamepad logical ports
+        if (isMultitap(name)) {   // fans out to gamepad logical ports
             DeviceDescriptor gp; gp.buttons = def.buttons;
-            for (int i = 0; i < 4 && logical <= EmulatorState::kMaxPorts; i++, logical++)
+            int block = portBlock(name);
+            for (int i = 0; i < block && logical <= EmulatorState::kMaxPorts; i++, logical++)
                 emit(logical, "Gamepad", &gp);
         } else {
             DeviceDescriptor desc;

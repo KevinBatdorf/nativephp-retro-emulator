@@ -11,10 +11,13 @@ import java.io.File
  * without a bound texture), ticks 120 frames, and answers a work-RAM read.
  *
  * Test ROMs come from scripts/fetch_test_roms.sh and must be pushed first:
- *   adb push tests/roms/nestest.nes    /data/local/tmp/test-fc.rom
- *   adb push tests/roms/helloworld.sfc /data/local/tmp/test-sfc.rom
- *   adb push tests/roms/dmg-acid2.gb   /data/local/tmp/test-gb.rom
- *   adb push tests/roms/helloworld.md  /data/local/tmp/test-md.rom
+ *   adb push tests/roms/nestest.nes        /data/local/tmp/test-fc.rom
+ *   adb push tests/roms/helloworld.sfc     /data/local/tmp/test-sfc.rom
+ *   adb push tests/roms/dmg-acid2.gb       /data/local/tmp/test-gb.rom
+ *   adb push tests/roms/helloworld.md      /data/local/tmp/test-md.rom
+ *   adb push tests/roms/cherilperils.sg    /data/local/tmp/test-sg.rom
+ *   adb push tests/roms/helloworld.pce     /data/local/tmp/test-pce.rom
+ *   adb push tests/roms/spritepriority.ws  /data/local/tmp/test-ws.rom
  *
  * All ares calls stay on the test thread — libco requires the same thread
  * from loadSystem() onward.
@@ -27,13 +30,26 @@ class Phase11MultiSystemTest {
         val romPath: String,
         // A work-RAM bus address inside the system's readMemory window.
         val probeAddress: Int,
+        // True when the test ROM is known to write this window early: catches
+        // "booted but executing garbage" (an empty cartridge read leaves RAM
+        // untouched — how the cross-DSO vfs bug hid behind green boots).
+        val expectRamActivity: Boolean,
     )
 
     private val cases = listOf(
-        SystemCase("fc",  "/data/local/tmp/test-fc.rom",  0x0000),
-        SystemCase("sfc", "/data/local/tmp/test-sfc.rom", 0x7E0000),
-        SystemCase("gb",  "/data/local/tmp/test-gb.rom",  0xC000),
-        SystemCase("md",  "/data/local/tmp/test-md.rom",  0xFF0000),
+        SystemCase("fc",  "/data/local/tmp/test-fc.rom",  0x0000,   true),
+        // helloworld.sfc renders without touching low WRAM, dmg-acid2 works
+        // out of VRAM/HRAM, helloworld.md may skip the probe window — no
+        // activity guarantee for those three (sfc has the conformance suite).
+        SystemCase("sfc", "/data/local/tmp/test-sfc.rom", 0x7E0000, false),
+        SystemCase("gb",  "/data/local/tmp/test-gb.rom",  0xC000,   false),
+        SystemCase("md",  "/data/local/tmp/test-md.rom",  0xFF0000, false),
+        SystemCase("sg",  "/data/local/tmp/test-sg.rom",  0xC000,   true),
+        // helloworld.pce runs stackless out of registers — no RAM guarantee
+        // (0x2100 is the HuC6280 stack page; a real game would write it).
+        SystemCase("pce", "/data/local/tmp/test-pce.rom", 0x2100,   false),
+        // The WS boot splash outlasts 120 frames before the game touches iram.
+        SystemCase("ws",  "/data/local/tmp/test-ws.rom",  0x0000,   false),
     )
 
     @Test
@@ -54,9 +70,14 @@ class Phase11MultiSystemTest {
 
                 repeat(120) { core.tick() }
 
-                val bytes = core.readMemory(case.probeAddress, 16)
-                assert(bytes != null && bytes.size == 16) {
+                val bytes = core.readMemory(case.probeAddress, 64)
+                assert(bytes != null && bytes.size == 64) {
                     "${case.id}: readMemory(0x${case.probeAddress.toString(16)}) failed"
+                }
+                if (case.expectRamActivity) {
+                    assert(bytes!!.any { it != 0.toByte() }) {
+                        "${case.id}: work RAM untouched after 120 frames — ROM not executing"
+                    }
                 }
 
                 val ports = core.getPortsJson()

@@ -1,5 +1,5 @@
 // Minimal shim of mia's infrastructure so mia's medium analyzers
-// (mia/medium/{famicom,game-boy,mega-drive}.cpp) compile unmodified.
+// (the mia/medium/*.cpp files included by mia_mediums.cpp) compile unmodified.
 //
 // We reuse mia's analyze*() functions verbatim — they turn raw ROM bytes into
 // a BML manifest (mapper/board detection, region, save-RAM layout). That logic
@@ -15,6 +15,10 @@
 #include <nall/vfs.hpp>
 
 using namespace nall;
+
+// Real mia gets n1..n64/i*/u* via <ares/ares.hpp>; some mediums (sg-1000)
+// use them, so pull in just the alias header.
+#include <ares/ares/types.hpp>
 
 // Free operator+= for nall::string, exactly as mia/mia.cpp defines it — the
 // mediums' `s += {...}` manifest building resolves through nall::string's

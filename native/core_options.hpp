@@ -4,6 +4,8 @@
 
 #include <ares/ares.hpp>
 
+#include "node_util.hpp"
+
 // Per-core boolean settings applier, shared by the Android and iOS bridges.
 //
 // ares exposes some emulation toggles (Color Emulation, Deep Black Boost,
@@ -18,6 +20,7 @@ inline const char* nodeName(const std::string& key) {
     if (key == "colorEmulation")     return "Color Emulation";
     if (key == "deepBlackBoost")     return "Deep Black Boost";
     if (key == "interframeBlending") return "Interframe Blending";
+    if (key == "showIcons")          return "Show Icons";
     return nullptr;
 }
 
@@ -25,12 +28,13 @@ inline const char* nodeName(const std::string& key) {
 // scan for the named node and set it. Returns false when the key is unknown or
 // the loaded core doesn't declare the node — so callers can apply every toggle
 // unconditionally and unsupported ones silently no-op. Must run on the thread
-// that owns the core (the GL/emu thread).
+// that owns the core (the GL/emu thread). NodeUtil instead of Object::scan —
+// the node lives in a dlopen'd core module (see node_util.hpp).
 inline bool applyBoolean(ares::Node::System root, const std::string& key, bool value) {
     if (!root) return false;
     const char* name = nodeName(key);
     if (!name) return false;
-    if (auto node = root->scan<ares::Node::Setting::Boolean>(name)) {
+    if (auto node = NodeUtil::findByName<ares::Node::Setting::Boolean>(root, name)) {
         node->setValue(value);  // setValue() skips modify() when unchanged;
         node->modify(value);    // call modify() too or the first set never lands.
         return true;
@@ -44,7 +48,7 @@ inline int readBoolean(ares::Node::System root, const std::string& key) {
     if (!root) return -1;
     const char* name = nodeName(key);
     if (!name) return -1;
-    if (auto node = root->scan<ares::Node::Setting::Boolean>(name)) {
+    if (auto node = NodeUtil::findByName<ares::Node::Setting::Boolean>(root, name)) {
         return node->value() ? 1 : 0;
     }
     return -1;
