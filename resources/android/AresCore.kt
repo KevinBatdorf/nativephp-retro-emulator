@@ -89,8 +89,7 @@ class AresCore {
      *
      * @param systemId One of [supportedSystems] (e.g. "sfc", "fc", "gb", "md").
      * @param biosPath Dev-supplied firmware image for biosRequired systems
-     *                 (and optional ones like the Master System BIOS); null
-     *                 for systems whose firmware is embedded or unneeded.
+     *                 (gba, ps1); null when firmware is embedded or unneeded.
      */
     fun loadSystem(systemId: String, biosPath: String? = null): Boolean =
         nativeLoadSystem(systemId, biosPath ?: "")

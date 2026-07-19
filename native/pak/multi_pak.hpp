@@ -25,12 +25,9 @@ struct CartridgeResult {
     explicit operator bool() const { return (bool)pak; }
 };
 
-// Build the system pak for "fc", "gb", or "md" from embedded firmware.
-// fc: empty pak — the Famicom needs no system files.
-// gb: boot.rom (DMG boot ROM).
-// md: tmss.rom (TMSS boot ROM; only read when the TMSS setting is enabled).
-// bios: dev-supplied firmware image (empty = none) — the Master System
-// appends it as bios.rom; embedded-firmware systems ignore it.
+// Build the system pak from embedded firmware: fc none, gb/gbc boot.rom,
+// md tmss.rom. bios is the dev-supplied firmware (empty = none) — gba and ps1
+// append it as bios.rom; the embedded-firmware systems ignore it.
 auto makeSystemPak(const std::string& systemId,
                    const std::vector<u8>& bios = {}) -> std::shared_ptr<nall::vfs::directory>;
 

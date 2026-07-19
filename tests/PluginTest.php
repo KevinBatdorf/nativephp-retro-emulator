@@ -570,9 +570,8 @@ describe('Typed layer', function () {
     });
 
     it('button enums match the native registry', function (string $systemId, string $enumClass) {
-        // Most ids map to core_<id>.cpp, but model variants share a core file
-        // (wsc lives in core_ws.cpp, gbc in core_gb.cpp) — resolve by which
-        // core actually declares `.id = "<id>"`.
+        // Most ids map to core_<id>.cpp, but gbc rides core_gb.cpp — find the
+        // core file that actually declares `.id = "<id>"`.
         $registry = '';
         foreach (glob(dirname(__DIR__).'/native/cores/core_*.cpp') as $file) {
             $contents = file_get_contents($file);
@@ -589,15 +588,7 @@ describe('Typed layer', function () {
         );
         expect($m)->not->toBe([], "no .buttons block found for '{$systemId}'");
 
-        // Console-level buttons (Master System Pause) are part of the same
-        // pressable surface, declared in a sibling .systemButtons block.
-        preg_match(
-            '/\.id\s*=\s*"'.$systemId.'".*?\.systemButtons\s*=\s*\{(.*?)\n\s*\},/s',
-            $registry,
-            $sys,
-        );
-
-        preg_match_all('/\{"([^"]+)",/', $m[1].($sys[1] ?? ''), $names);
+        preg_match_all('/\{"([^"]+)",/', $m[1], $names);
         $native = $names[1];
         $enum = array_map(fn ($case) => $case->value, $enumClass::cases());
 

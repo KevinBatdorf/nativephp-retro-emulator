@@ -29,12 +29,6 @@ import kotlin.math.abs
  *
  * All ares calls stay on the test thread — libco requires the same thread
  * from the boot onward.
- *
- * History: this class's pre-4b loadSystem-without-power lifecycle was the
- * regression trigger for the stale-EntryPoints workaround
- * (SystemRegistry::clearStaleEntryPoints, see system_registry.hpp). Staging
- * creates no core threads, so that lifecycle no longer exists from the
- * public API — the workaround still guards the teardown paths.
  */
 @RunWith(AndroidJUnit4::class)
 class RefreshRateHintTest {

@@ -73,9 +73,8 @@ final class EmulatorRenderer: UIView {
     /// arrives with a ROM, so the region variant is always resolved ROM-first.
     /// Re-staging over a running core is legal; the running game continues
     /// until the next `loadRom`. System firmware is embedded in the native
-    /// library — no assets are required, except biosRequired systems (and
-    /// optional-BIOS ones like the Master System), which take a dev-supplied
-    /// firmware image via `biosPath`.
+    /// library — no assets are required, except biosRequired systems (gba,
+    /// ps1), which take a dev-supplied firmware image via `biosPath`.
     func loadSystem(_ system: String, biosPath: String? = nil) -> Bool {
         emuLock.lock()
         let ok = ares_load_system(ctx, system, biosPath ?? "")

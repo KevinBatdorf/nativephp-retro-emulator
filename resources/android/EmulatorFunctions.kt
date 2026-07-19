@@ -1188,23 +1188,14 @@ object EmulatorFunctions {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
             val compiled = AresCore().supportedSystems().split(",").toSet()
             val systems = listOf(
-                system("fc",  "NES / Famicom",               biosRequired = false, stable = true,  compiled),
-                system("sfc", "SNES / Super Famicom",         biosRequired = false, stable = true,  compiled),
-                system("n64", "Nintendo 64",                  biosRequired = false, stable = true,  compiled),
-                system("gb",  "Game Boy",                     biosRequired = false, stable = true,  compiled),
-                system("gbc", "Game Boy Color",               biosRequired = false, stable = true,  compiled),
-                system("gba", "Game Boy Advance",             biosRequired = true,  stable = true,  compiled),
-                system("sg",  "Sega SG-1000",                 biosRequired = false, stable = true,  compiled),
-                system("ms",  "Sega Master System",           biosRequired = false, stable = true,  compiled),
-                system("md",  "Sega Mega Drive / Genesis",    biosRequired = false, stable = true,  compiled),
-                system("pce", "PC Engine / TurboGrafx-16",    biosRequired = false, stable = true,  compiled),
-                system("ngp", "Neo Geo Pocket",               biosRequired = true,  stable = true,  compiled),
-                system("ws",  "WonderSwan",                   biosRequired = false, stable = true,  compiled),
-                system("wsc", "WonderSwan Color",             biosRequired = false, stable = true,  compiled),
-                system("ps1", "PlayStation",                  biosRequired = true,  stable = false, compiled),
-                system("ng",  "Neo Geo AES / MVS",            biosRequired = true,  stable = false, compiled),
-                system("a26", "Atari 2600",                   biosRequired = false, stable = true,  compiled),
-                system("msx", "MSX / MSX2",                   biosRequired = true,  stable = false, compiled),
+                system("fc",  "NES / Famicom",            biosRequired = false, stable = true,  compiled),
+                system("sfc", "SNES / Super Famicom",     biosRequired = false, stable = true,  compiled),
+                system("gb",  "Game Boy",                 biosRequired = false, stable = true,  compiled),
+                system("gbc", "Game Boy Color",           biosRequired = false, stable = true,  compiled),
+                system("gba", "Game Boy Advance",         biosRequired = true,  stable = true,  compiled),
+                system("md",  "Sega Mega Drive / Genesis", biosRequired = false, stable = true,  compiled),
+                system("ps1", "PlayStation",              biosRequired = true,  stable = false, compiled),
+                system("n64", "Nintendo 64",              biosRequired = false, stable = true,  compiled),
             )
             return BridgeResponse.success(mapOf("systems" to systems))
         }

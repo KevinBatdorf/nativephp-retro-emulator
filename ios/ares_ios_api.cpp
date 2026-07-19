@@ -226,8 +226,7 @@ struct IosPlatform : ares::Platform {
 
     auto pak(ares::Node::Object node) -> std::shared_ptr<vfs::directory> override {
         if (!g_ctx || !g_ctx->system) return {};
-        // The system node IS the root — match by pointer, since some cores
-        // rename it per model (PC Engine boots as "TurboGrafx 16" on NTSC-U).
+        // The root IS the system node — match by identity, not by name.
         if (node == g_ctx->root) return g_ctx->systemPak;
         auto name = node->name();
         if (name == g_ctx->system->cartridgeNode.c_str()) return g_ctx->cartridgePak;
@@ -245,10 +244,6 @@ struct IosPlatform : ares::Platform {
             if (name == g_ctx->system->extraPaks[i].node.c_str())
                 return g_ctx->extraPaks[i];
         }
-        // Model-renamed cartridges ("TurboGrafx 16 Cartridge") — every core
-        // names its main cartridge "<system> Cartridge", and the slot names
-        // above are matched first.
-        if (nall::string{name}.endsWith(" Cartridge")) return g_ctx->cartridgePak;
         return {};
     }
 
@@ -521,10 +516,6 @@ static void applyConnectedDevices() {
         }
         auto portName = std::string("Controller Port ") + std::to_string(p);
         auto port = NodeUtil::findByName<ares::Node::Port>(g_ctx->root, portName.c_str());
-        // Single-port cores name theirs plain "Controller Port" (PC Engine).
-        if (!port && def.ports == 1) {
-            port = NodeUtil::findByName<ares::Node::Port>(g_ctx->root, "Controller Port");
-        }
 
         if (name.empty()) { if (port) port->disconnect(); logical += 1; continue; }
         if (!port) { logical += portBlock(name); continue; }
@@ -553,14 +544,6 @@ static void applyConnectedDevices() {
         }
     }
 
-    // Console-level buttons (Master System Pause) live on the root's
-    // "Controls" node — cache them onto logical port 1 next to its gamepad.
-    if (!def.systemButtons.empty()) {
-        if (auto controls = NodeUtil::findByName<ares::Node::Object>(g_ctx->root, "Controls")) {
-            DeviceDescriptor sys; sys.buttons = def.systemButtons;
-            cacheDevice(controls, sys, 1);
-        }
-    }
     applyInputRemap();
 }
 
@@ -851,15 +834,6 @@ static int bootWithPak(AresContext* ctx, SystemRegistry::CartridgePak built,
         slot->connect();
         ctx->slotConnected[i] = (bool)NodeUtil::connected(slot);
         ctx->stagedSlot[i].clear();   // pak copied the bytes
-    }
-
-    // Ports desktop connects unconditionally after the cartridge (the Master
-    // System's FM Sound Unit, the MSX's keyboard); games probe for them.
-    for (auto& [portName, deviceName] : def->extraPorts) {
-        if (auto extra = NodeUtil::findByName<ares::Node::Port>(ctx->root, portName.c_str())) {
-            extra->allocate(deviceName.c_str());
-            extra->connect();
-        }
     }
 
     // Extra paks (the PS1 Memory Card): fresh writable entry per boot,

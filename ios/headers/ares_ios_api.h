@@ -32,8 +32,8 @@ void ares_reset(AresContext* ctx);
 // firmware (SFC ipl.rom + boards.bml, GB boot ROM, MD TMSS) is embedded in
 // the library — no assets required.  Returns false for ids not compiled into
 // this build.
-// bios_path: dev-supplied firmware for biosRequired systems (and optional
-// ones like the Master System BIOS); NULL/empty when embedded or unneeded.
+// bios_path: dev-supplied firmware for biosRequired systems (gba, ps1);
+// NULL/empty when the system's firmware is embedded or unneeded.
 bool ares_load_system(AresContext* ctx, const char* system_id, const char* bios_path);
 
 // Comma-separated ids of the systems compiled into this build, e.g.

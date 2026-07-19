@@ -41,8 +41,7 @@ private const val RUMBLE_ONESHOT_MS = 10_000L
  * A [SurfaceView] that drives the ares emulator and presents each frame through
  * the native Vulkan renderer (librashader-capable). A dedicated render thread
  * owns the one thread every ares call runs on, so libco coroutine contexts stay
- * consistent for the whole session — the same contract GLSurfaceView's GL thread
- * used to provide.
+ * consistent for the whole session.
  *
  * Usage:
  * 1. Construct and set as the Activity's content view (or wrap in AndroidView).

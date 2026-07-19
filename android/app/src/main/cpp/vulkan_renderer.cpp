@@ -368,9 +368,8 @@ void VulkanRenderer::clearSurface() {
 void VulkanRenderer::stageFrame(const uint32_t* pixels, uint32_t w, uint32_t h) {
     if (!stagingMapped_ || !pixels) return;
     if (w > kSrcW || h > kSrcH) {
-        // Never clamp-and-copy: rows would land at the wrong stride and the
-        // whole picture shears diagonally (hit by the PC Engine's 1128+ wide
-        // accurate-VDP frames when the ceiling was 1024). Drop the frame loudly.
+        // Never clamp-and-copy an oversized frame: rows would land at the wrong
+        // stride and the whole picture shears diagonally. Drop it loudly.
         LOGE("stageFrame: %ux%u exceeds staging %ux%u — frame dropped", w, h, kSrcW, kSrcH);
         return;
     }

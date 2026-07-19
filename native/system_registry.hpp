@@ -1,7 +1,6 @@
 // Per-system dispatch for the compiled ares cores — shared by the Android JNI
-// layer and the iOS C API. Everything the platform layers previously hardcoded
-// for SFC (load function, pak node names, controller device, button bitmask,
-// memory bus window) lives here, keyed by system id.
+// layer and the iOS C API. Keyed by system id: load function, pak node names,
+// controller device, button bitmask, memory bus window.
 #pragma once
 
 #include <ares/ares.hpp>
@@ -51,17 +50,6 @@ struct SystemDef {
     //   2 = select/mode, 3 = start, 4–7 = d-pad up/down/left/right,
     //   10 = L shoulder, 11 = R shoulder.
     std::unordered_map<std::string, uint32_t> buttons;
-
-    // Console-level buttons that live on the root's "Controls" node while the
-    // gamepads live on ports (Master System Pause). Cached onto logical port 1
-    // alongside its gamepad; bits share the port's mask space. Empty for
-    // systems whose controls are all-port (sfc) or all-system (gb, ws).
-    std::unordered_map<std::string, uint32_t> systemButtons{};
-
-    // Ports desktop connects unconditionally after the cartridge, beyond the
-    // controller ports: {port name, device name} — the Master System's
-    // {"Expansion Port", "FM Sound Unit"}, the MSX's {"Keyboard", "Japanese"}.
-    std::vector<std::pair<std::string, std::string>> extraPorts{};
 
     bool biosRequired;
 
@@ -162,8 +150,7 @@ auto find(const std::string& id) -> const SystemDef*;
 // that recycles the allocation matches the stale entry in Thread::Enter and
 // runs a dead component's main() forever. One core runs per process, so
 // after unload every pending entry is stale. Call from the platform destroy
-// paths, after root->unload(). Revisit if multiple cores ever share a
-// process; upstream PR planned (real fix belongs in Thread::destroy()).
+// paths, after root->unload().
 auto clearStaleEntryPoints() -> void;
 
 } // namespace SystemRegistry
