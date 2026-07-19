@@ -178,8 +178,11 @@ auto makeSystemPak(const std::string& systemId,
         pak->append("tmss.rom", std::span<const u8>(
             EmbeddedFirmware::MdTmss, EmbeddedFirmware::MdTmssSize));
     } else if(systemId == "gba") {
-        // BIOS required — LoadRom gated on biosRequired before this runs.
-        pak->append("bios.rom", bios);
+        // A dev-supplied BIOS (real dump, for accuracy) wins; otherwise fall back
+        // to the embedded Cult-of-GBA open BIOS so gba boots with no setup.
+        if(!bios.empty()) pak->append("bios.rom", bios);
+        else pak->append("bios.rom", std::span<const u8>(
+            EmbeddedFirmware::GbaBios, EmbeddedFirmware::GbaBiosSize));
     }
     // fc: no system files required.
     return pak;

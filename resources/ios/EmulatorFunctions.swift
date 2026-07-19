@@ -1010,18 +1010,18 @@ enum EmulatorFunctions {
     class GetSystems: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             let compiled = Set(EmulatorRenderer.supportedSystems)
-            func system(_ id: String, _ name: String, biosRequired: Bool, stable: Bool) -> [String: Any] {
-                ["id": id, "name": name, "biosRequired": biosRequired, "stable": stable,
+            func system(_ id: String, _ name: String, stable: Bool) -> [String: Any] {
+                ["id": id, "name": name, "stable": stable,
                  "supported": compiled.contains(id)]
             }
             let systems: [[String: Any]] = [
-                system("fc",  "NES / Famicom",            biosRequired: false, stable: true),
-                system("sfc", "SNES / Super Famicom",      biosRequired: false, stable: true),
-                system("gb",  "Game Boy",                  biosRequired: false, stable: true),
-                system("gbc", "Game Boy Color",            biosRequired: false, stable: true),
-                system("gba", "Game Boy Advance",          biosRequired: true,  stable: true),
-                system("md",  "Sega Mega Drive / Genesis", biosRequired: false, stable: true),
-                system("n64", "Nintendo 64",               biosRequired: false, stable: true),
+                system("fc",  "NES / Famicom",             stable: true),
+                system("sfc", "SNES / Super Famicom",      stable: true),
+                system("gb",  "Game Boy",                  stable: true),
+                system("gbc", "Game Boy Color",            stable: true),
+                system("gba", "Game Boy Advance",          stable: true),
+                system("md",  "Sega Mega Drive / Genesis", stable: true),
+                system("n64", "Nintendo 64",               stable: true),
             ]
             return BridgeResponse.success(data: ["systems": systems])
         }

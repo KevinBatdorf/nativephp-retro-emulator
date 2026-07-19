@@ -1167,20 +1167,20 @@ object EmulatorFunctions {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
             val compiled = AresCore().supportedSystems().split(",").toSet()
             val systems = listOf(
-                system("fc",  "NES / Famicom",            biosRequired = false, stable = true,  compiled),
-                system("sfc", "SNES / Super Famicom",     biosRequired = false, stable = true,  compiled),
-                system("gb",  "Game Boy",                 biosRequired = false, stable = true,  compiled),
-                system("gbc", "Game Boy Color",           biosRequired = false, stable = true,  compiled),
-                system("gba", "Game Boy Advance",         biosRequired = true,  stable = true,  compiled),
-                system("md",  "Sega Mega Drive / Genesis", biosRequired = false, stable = true,  compiled),
-                system("n64", "Nintendo 64",              biosRequired = false, stable = true,  compiled),
+                system("fc",  "NES / Famicom",             stable = true,  compiled),
+                system("sfc", "SNES / Super Famicom",      stable = true,  compiled),
+                system("gb",  "Game Boy",                  stable = true,  compiled),
+                system("gbc", "Game Boy Color",            stable = true,  compiled),
+                system("gba", "Game Boy Advance",          stable = true,  compiled),
+                system("md",  "Sega Mega Drive / Genesis", stable = true,  compiled),
+                system("n64", "Nintendo 64",               stable = true,  compiled),
             )
             return BridgeResponse.success(mapOf("systems" to systems))
         }
 
-        private fun system(id: String, name: String, biosRequired: Boolean, stable: Boolean, compiled: Set<String>) =
+        private fun system(id: String, name: String, stable: Boolean, compiled: Set<String>) =
             mapOf(
-                "id" to id, "name" to name, "biosRequired" to biosRequired,
+                "id" to id, "name" to name,
                 "stable" to stable, "supported" to (id in compiled),
             )
     }

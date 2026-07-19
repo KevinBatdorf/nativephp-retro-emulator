@@ -32,6 +32,7 @@ add_custom_command(
     COMMAND python3 "${CMAKE_CURRENT_SOURCE_DIR}/../scripts/generate_firmware.py"
             "${ARES_ROOT}" "${FIRMWARE_DIR}"
     DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/../scripts/generate_firmware.py"
+            "${CMAKE_CURRENT_SOURCE_DIR}/../native/firmware/gba_open_bios.bin"
     COMMENT "Generating embedded firmware from ares submodule"
 )
 

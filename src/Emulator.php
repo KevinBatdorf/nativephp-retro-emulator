@@ -640,7 +640,7 @@ class Emulator
      * GetSystems has no error path, so this static query talks to the bridge
      * directly rather than through the instance-scoped call() router.
      *
-     * @return array<int, array{id: string, name: string, biosRequired: bool, stable: bool, supported: bool}>
+     * @return array<int, array{id: string, name: string, stable: bool, supported: bool}>
      */
     public static function systems(): array
     {

@@ -360,11 +360,6 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
                         Log.e(TAG, "loadRom rejected — prior state kept")
                         eventListener?.onError("LOAD_FAILED", "ROM rejected by analyzer")
                     }
-                    AresCore.LOAD_BIOS_REQUIRED -> {
-                        Log.e(TAG, "loadRom rejected — system firmware missing")
-                        eventListener?.onError("BIOS_REQUIRED",
-                            "this system needs firmware — pass biosPath in the LoadSystem config")
-                    }
                     AresCore.LOAD_FAILED_STOPPED -> {
                         romLoaded = false
                         audioStarted = false

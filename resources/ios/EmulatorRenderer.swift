@@ -73,7 +73,8 @@ final class EmulatorRenderer: UIView {
     /// arrives with a ROM, so the region variant is always resolved ROM-first.
     /// Re-staging over a running core is legal; the running game continues
     /// until the next `loadRom`. System firmware is embedded in the native
-    /// library — no assets are required, except biosRequired systems (gba), which take a dev-supplied firmware image via `biosPath`.
+    /// library — no assets are required; `biosPath` optionally overrides gba's
+    /// embedded open BIOS with a real dump for accuracy.
     func loadSystem(_ system: String, biosPath: String? = nil) -> Bool {
         emuLock.lock()
         let ok = ares_load_system(ctx, system, biosPath ?? "")
@@ -135,11 +136,6 @@ final class EmulatorRenderer: UIView {
             audio.stop()
             currentStatus = "stopped"
             eventListener?.onError(code: "LOAD_FAILED", message: "boot failed; emulator stopped")
-            return false
-        case -2:
-            // Pre-teardown: firmware missing for a biosRequired system.
-            eventListener?.onError(code: "BIOS_REQUIRED",
-                message: "this system needs firmware — pass biosPath in the LoadSystem config")
             return false
         default:
             // Pre-teardown rejection: a running game is untouched.

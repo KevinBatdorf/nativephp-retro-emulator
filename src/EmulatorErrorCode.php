@@ -28,7 +28,6 @@ enum EmulatorErrorCode: string
     case RomNotFound = 'ROM_NOT_FOUND';
     case InvalidRom = 'INVALID_ROM';
     case LoadFailed = 'LOAD_FAILED';
-    case BiosRequired = 'BIOS_REQUIRED';
     case SlotEmpty = 'SLOT_EMPTY';
     case SaveFailed = 'SAVE_FAILED';
     case UndoFailed = 'UNDO_FAILED';

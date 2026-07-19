@@ -21,7 +21,6 @@ class AresCore {
         const val LOAD_OK = 1                  // booted and running
         const val LOAD_REJECTED = 0            // rejected pre-teardown; prior game untouched
         const val LOAD_FAILED_STOPPED = -1     // failed after teardown; emulator cleanly stopped
-        const val LOAD_BIOS_REQUIRED = -2      // system needs firmware; stage a biosPath first
     }
 
     init {
@@ -84,12 +83,12 @@ class AresCore {
      * Re-staging over a running core is legal; the running game continues
      * until the next [loadRom]. GL thread only.
      *
-     * System firmware (SFC ipl.rom + boards.bml, GB boot ROM, MD TMSS) is
-     * embedded in the native library — no assets need to be provided.
+     * System firmware (SFC ipl.rom + boards.bml, GB boot ROM, MD TMSS, and the
+     * embedded open GBA BIOS) ships in the native library — no assets needed.
      *
      * @param systemId One of [supportedSystems] (e.g. "sfc", "fc", "gb", "md").
-     * @param biosPath Dev-supplied firmware image for biosRequired systems
-     *                 (gba); null when firmware is embedded or unneeded.
+     * @param biosPath Optional real BIOS dump to override gba's embedded open
+     *                 BIOS for accuracy; null otherwise.
      */
     fun loadSystem(systemId: String, biosPath: String? = null): Boolean =
         nativeLoadSystem(systemId, biosPath ?: "")

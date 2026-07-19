@@ -85,26 +85,6 @@ class Phase11MultiSystemTest {
     }
 
     @Test
-    fun biosRequiredSystemsRejectRomWithoutFirmware() {
-        // gba ships as a biosPath-honest def: staging works, but LoadRom
-        // must refuse pre-teardown until a dev supplies firmware.
-        for (id in listOf("gba")) {
-            val core = AresCore()
-            try {
-                assert(core.init()) { "$id: init failed" }
-                assert(core.loadSystem(id)) { "$id: loadSystem failed" }
-                val rc = core.loadRom(ByteArray(0x40000))
-                assert(rc == AresCore.LOAD_BIOS_REQUIRED) {
-                    "$id: expected LOAD_BIOS_REQUIRED, got $rc"
-                }
-            } finally {
-                core.destroy()
-            }
-            android.util.Log.i("Phase11MultiSystemTest", "$id: BIOS gate OK")
-        }
-    }
-
-    @Test
     fun unknownSystemIsRejected() {
         val core = AresCore()
         try {

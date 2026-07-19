@@ -23,6 +23,14 @@ BLOBS = [
     ("MdSvp",      "mia/Firmware/Mega Drive/svp.rom"),
 ]
 
+# (C symbol, path relative to this repo) — firmware not carried by ares. The GBA
+# BIOS is the Cult-of-GBA open replacement (MIT); ares ships no GBA BIOS because
+# the real one is copyrighted. See native/firmware/LICENSE-cult-of-gba.
+REPO_BLOBS = [
+    ("GbaBios", "native/firmware/gba_open_bios.bin"),
+]
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
 
 def main() -> int:
     if len(sys.argv) != 3:
@@ -47,8 +55,10 @@ def main() -> int:
         "namespace EmbeddedFirmware {",
     ]
 
-    for symbol, rel_path in BLOBS:
-        data = (ares_root / rel_path).read_bytes()
+    sources = [(sym, ares_root / rel) for sym, rel in BLOBS]
+    sources += [(sym, REPO_ROOT / rel) for sym, rel in REPO_BLOBS]
+    for symbol, path in sources:
+        data = path.read_bytes()
         hpp.append(f"extern const unsigned char {symbol}[{len(data)}];")
         hpp.append(f"inline constexpr size_t {symbol}Size = {len(data)};")
         body = ",".join(str(b) for b in data)

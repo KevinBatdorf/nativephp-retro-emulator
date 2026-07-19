@@ -69,7 +69,6 @@ const SystemDef kDef = {
         {"Up", 1u << 4}, {"Down", 1u << 5}, {"Left", 1u << 6}, {"Right", 1u << 7},
         {"A", 1u << 8}, {"X", 1u << 9}, {"L", 1u << 10}, {"R", 1u << 11},
     },
-    .biosRequired  = false,
     .memBase       = 0x7E0000u,
     .memSize       = 0x20000u,
     .load          = loadSfc,

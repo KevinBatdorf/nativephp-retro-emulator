@@ -51,8 +51,6 @@ struct SystemDef {
     //   10 = L shoulder, 11 = R shoulder.
     std::unordered_map<std::string, uint32_t> buttons;
 
-    bool biosRequired;
-
     // Memory bus window exposed to readMemory/writeMemory.
     uint32_t memBase;
     uint32_t memSize;
@@ -60,9 +58,8 @@ struct SystemDef {
     bool (*load)(ares::Node::System& root, const SystemDef& def, const std::string& loadName);
     uint8_t (*memRead)(uint32_t offset);
     void (*memWrite)(uint32_t offset, uint8_t value);
-    // bios carries the dev-supplied firmware image (LoadSystem biosPath),
-    // empty when none was given. Systems with embedded/no firmware ignore it;
-    // biosRequired systems fail LoadRom with BIOS_REQUIRED before this runs.
+    // bios carries an optional dev-supplied firmware image (LoadSystem biosPath).
+    // gba uses it to override its embedded open BIOS; other systems ignore it.
     std::shared_ptr<vfs::directory> (*makeSystemPak)(const SystemDef& def,
                                                      const std::vector<uint8_t>& bios);
     CartridgePak (*makeCartridgePak)(const uint8_t* rom, size_t romSize);

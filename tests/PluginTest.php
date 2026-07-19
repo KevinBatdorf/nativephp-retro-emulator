@@ -442,16 +442,15 @@ describe('Bridge response parsing', function () {
     it('systems parses systems array from native response', function () {
         $GLOBALS['__nativephp_mock']['Emulator.GetSystems'] = json_encode([
             'systems' => [
-                ['id' => 'sfc', 'name' => 'SNES / Super Famicom', 'biosRequired' => false, 'stable' => true],
-                ['id' => 'gba', 'name' => 'Game Boy Advance', 'biosRequired' => true, 'stable' => true],
+                ['id' => 'sfc', 'name' => 'SNES / Super Famicom', 'stable' => true, 'supported' => true],
+                ['id' => 'gba', 'name' => 'Game Boy Advance', 'stable' => true, 'supported' => true],
             ],
         ]);
         $systems = Emulator::systems();
         expect($systems)->toHaveCount(2);
         expect($systems[0]['id'])->toBe('sfc');
-        expect($systems[0]['biosRequired'])->toBeFalse();
         expect($systems[1]['id'])->toBe('gba');
-        expect($systems[1]['biosRequired'])->toBeTrue();
+        expect($systems[1]['supported'])->toBeTrue();
     });
 
     it('surface returns Emulator instance after successful native call', function () {

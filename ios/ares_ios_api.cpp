@@ -625,8 +625,8 @@ bool ares_load_system(AresContext* ctx, const char* system_id, const char* bios_
         return false;
     }
 
-    // Firmware travels with the staging: read the dev-supplied image now so
-    // ares_load_rom can gate biosRequired systems before any teardown starts.
+    // An optional dev-supplied BIOS travels with the staging (gba may override
+    // its embedded open BIOS with a real dump); empty when none was given.
     ctx->biosBytes.clear();
     if (bios_path && bios_path[0]) {
         auto file = nall::file::read(nall::string(bios_path));
@@ -705,11 +705,6 @@ static int bootWithPak(AresContext* ctx, SystemRegistry::CartridgePak built,
         region_override ? region_override : "",
         preferred_regions ? preferred_regions : "");
     auto loadName = SystemRegistry::loadNameFor(*def, region);
-
-    if (def->biosRequired && ctx->biosBytes.empty()) {
-        fprintf(stderr, "ares_load_rom: %s requires firmware — stage a biosPath first\n", def->id.c_str());
-        return -2;   // BIOS_REQUIRED, pre-teardown: a running game is untouched
-    }
 
     // Fresh core per game, like desktop.
     if (ctx->systemLoaded) unloadCore(ctx);

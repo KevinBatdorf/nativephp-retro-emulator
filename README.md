@@ -73,7 +73,7 @@ $emu->setVideo(luminance: 100)->setVolume(80)->setBalance(0);
 $emu->setShader($presetPath);
 $emu->screenshot();
 
-Emulator::systems();   // rich objects: id, name, biosRequired, stable, supported
+Emulator::systems();   // rich objects: id, name, stable, supported
 ```
 
 > **Imperative boot caveat:** the surface must exist before the first bridge
@@ -94,8 +94,8 @@ $emu->loadRom(['base' => $bsxBiosPath,    'slotA' => $cassettePath]);
 ## Systems
 
 Source of truth at runtime is `Emulator::systems()` — `supported: true` means
-the core is compiled into the shipped binaries, `stable: false` mirrors ares
-marking the core experimental. Per-system game compatibility:
+the core is compiled into the shipped binaries, `stable: false` flags a core
+we consider not yet production-ready. Per-system game compatibility:
 `https://ares-emu.net/compatibility/<system>`.
 
 | System | id | Compiled today | Notes |
@@ -103,7 +103,7 @@ marking the core experimental. Per-system game compatibility:
 | NES / Famicom | `fc` | ✅ | |
 | SNES / Super Famicom | `sfc` | ✅ | Full feature set, incl. peripherals + slotted media |
 | Game Boy / Game Boy Color | `gb` / `gbc` | ✅ | |
-| Game Boy Advance | `gba` | ✅ | Needs a GBA BIOS via `biosPath` |
+| Game Boy Advance | `gba` | ✅ | Boots on an embedded open BIOS; supply a real one via `biosPath` for accuracy |
 | Mega Drive / Genesis | `md` | ✅ | |
 | Nintendo 64 | `n64` | ⏳ | In development |
 
@@ -112,17 +112,15 @@ they aren't compiled into the shipped binaries.
 
 ## BIOS files
 
-Some systems need firmware supplied via `biosPath` on their system config —
-freely-redistributable firmware (SFC `ipl.rom` + `boards.bml`, GB boot ROM,
-MD TMSS) is embedded, so the compiled systems need nothing today.
+No system needs a BIOS from you — all firmware is embedded in the native
+library: SFC `ipl.rom` + `boards.bml`, GB/GBC boot ROMs, MD TMSS (all from
+ares), and an open GBA BIOS ([Cult-of-GBA](https://github.com/Cult-of-GBA/BIOS),
+MIT) since ares ships none. Every system boots on `loadSystem` alone.
 
-| System | Firmware via `biosPath` |
-|---|---|
-| GBA | `bios.bin` |
-
-Sourcing BIOS files is your responsibility — dump them from hardware you own.
-Collections exist online (e.g. on archive.org); their legality varies by
-jurisdiction and title, so treat them accordingly.
+GBA optionally takes a real BIOS dump via `biosPath` on `GbaConfig` for
+bit-accurate compatibility on edge-case titles — it overrides the embedded
+one. Sourcing it is your responsibility (dump it from hardware you own); the
+embedded BIOS covers the common case without it.
 
 ## Cheats
 

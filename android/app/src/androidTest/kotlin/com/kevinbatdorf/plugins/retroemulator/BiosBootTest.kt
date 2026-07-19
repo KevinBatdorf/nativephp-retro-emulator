@@ -6,67 +6,55 @@ import org.junit.runner.RunWith
 import java.io.File
 
 /**
- * Firmware-gated boot: a biosRequired system, given a dev-supplied BIOS via
- * loadSystem(id, biosPath), boots a cartridge and runs. The BIOS files are the
- * developer's own dumps (copyrighted — never in the repo); push them first:
- *   adb push <gba bios>          /data/local/tmp/gba-bios.rom
+ * GBA boots with no dev-supplied firmware — the embedded open BIOS
+ * (Cult-of-GBA, MIT) is baked into the native library — and a dev-supplied
+ * biosPath (a real dump, for accuracy) still overrides it. Push a GBA ROM:
  *   adb push tests/roms/gba-shades.gba /data/local/tmp/test-gba.rom
+ * and, to exercise the override, a real BIOS:
+ *   adb push <gba bios> /data/local/tmp/gba-bios.rom
  *
- * Skips cleanly when the BIOS isn't present, so CI without firmware stays green
- * (the no-BIOS refusal is covered by Phase11's biosRequiredSystemsRejectRom…).
+ * Skips cleanly when the ROM isn't present, so CI without media stays green.
  */
 @RunWith(AndroidJUnit4::class)
 class BiosBootTest {
 
-    private data class BiosCase(val id: String, val biosPath: String, val romPath: String)
-
-    private val cases = listOf(
-        BiosCase("gba", "/data/local/tmp/gba-bios.rom", "/data/local/tmp/test-gba.rom"),
-    )
-
-    /**
-     * The airtight end-to-end proof that the dev-supplied firmware is actually
-     * consumed: the SAME core + ROM refuses to boot without a BIOS
-     * (LOAD_BIOS_REQUIRED) and boots cleanly with one (LOAD_OK, ticks without
-     * crashing). Independent of where a given homebrew writes its RAM.
-     */
     @Test
-    fun firmwareGatedSystemBootsOnlyWithBios() {
-        for (case in cases) {
-            val bios = File(case.biosPath)
-            val rom = File(case.romPath)
-            if (!bios.exists() || !rom.exists()) {
-                android.util.Log.w("BiosBootTest",
-                    "Skipping ${case.id}: bios/rom absent (${case.biosPath})")
-                continue
-            }
-            val romBytes = rom.readBytes()
+    fun gbaBootsOnEmbeddedBiosAndHonorsOverride() {
+        val rom = File("/data/local/tmp/test-gba.rom")
+        if (!rom.exists()) {
+            android.util.Log.w("BiosBootTest", "Skipping gba: ROM absent (${rom.path})")
+            return
+        }
+        val romBytes = rom.readBytes()
 
-            // No BIOS → refuse, pre-teardown.
+        // No biosPath → the embedded open BIOS boots and runs.
+        AresCore().run {
+            try {
+                assert(init()) { "gba: init failed" }
+                assert(loadSystem("gba")) { "gba: loadSystem failed" }
+                assert(loadRom(romBytes) == AresCore.LOAD_OK) {
+                    "gba: embedded BIOS should boot with no biosPath"
+                }
+                repeat(180) { tick() }
+                assert(getPortsJson().startsWith("[")) { "gba: ports read failed post-boot" }
+            } finally { destroy() }
+        }
+        android.util.Log.i("BiosBootTest", "gba: boots on embedded BIOS OK")
+
+        // A dev-supplied BIOS overrides the embedded one — still boots.
+        val bios = File("/data/local/tmp/gba-bios.rom")
+        if (bios.exists()) {
             AresCore().run {
                 try {
-                    assert(init()) { "${case.id}: init failed" }
-                    assert(loadSystem(case.id)) { "${case.id}: loadSystem failed" }
-                    assert(loadRom(romBytes) == AresCore.LOAD_BIOS_REQUIRED) {
-                        "${case.id}: expected LOAD_BIOS_REQUIRED without firmware"
-                    }
-                } finally { destroy() }
-            }
-
-            // With BIOS → boot and run.
-            AresCore().run {
-                try {
-                    assert(init()) { "${case.id}: init failed" }
-                    assert(loadSystem(case.id, case.biosPath)) { "${case.id}: loadSystem+bios failed" }
+                    assert(init()) { "gba: init failed (override)" }
+                    assert(loadSystem("gba", bios.absolutePath)) { "gba: loadSystem+bios failed" }
                     assert(loadRom(romBytes) == AresCore.LOAD_OK) {
-                        "${case.id}: loadRom with BIOS should succeed"
+                        "gba: override BIOS should boot"
                     }
                     repeat(180) { tick() }
-                    // Survived staging + boot + 180 frames on the real BIOS.
-                    assert(getPortsJson().startsWith("[")) { "${case.id}: ports read failed post-boot" }
                 } finally { destroy() }
             }
-            android.util.Log.i("BiosBootTest", "${case.id}: boots only with BIOS OK")
+            android.util.Log.i("BiosBootTest", "gba: biosPath override boots OK")
         }
     }
 }

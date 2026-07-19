@@ -1,8 +1,8 @@
 // Game Boy Advance core module — self-registers via SystemRegistry::Registrar.
 //
-// biosRequired: the GBA BIOS is copyrighted commercial firmware that never
-// ships with this plugin — devs supply their own dump via the LoadSystem
-// config's biosPath (desktop-ui game-boy-advance.cpp gates load the same way).
+// GBA boots on an embedded open BIOS (Cult-of-GBA, MIT — see multi_pak.cpp);
+// a dev may still pass a real BIOS dump via the LoadSystem config's biosPath
+// to override it for maximum accuracy.
 #include "system_registry.hpp"
 
 #include <gba/gba.hpp>
@@ -48,7 +48,6 @@ const SystemDef kDef = {
         {"Up", 1u << 4}, {"Down", 1u << 5}, {"Left", 1u << 6}, {"Right", 1u << 7},
         {"A", 1u << 8}, {"L", 1u << 10}, {"R", 1u << 11},
     },
-    .biosRequired  = true,
     .memBase       = 0x02000000u,
     .memSize       = 0x40000u,
     .load          = loadGba,

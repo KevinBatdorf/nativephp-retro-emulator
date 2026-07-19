@@ -787,8 +787,8 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadSystem(
         return JNI_FALSE;
     }
 
-    // Firmware travels with the staging: read the dev-supplied image now so
-    // LoadRom can gate biosRequired systems before any teardown starts.
+    // An optional dev-supplied BIOS travels with the staging (gba may override
+    // its embedded open BIOS with a real dump); empty when none was given.
     g_state->biosBytes.clear();
     auto biosPath = jstringToString(env, biosPathStr);
     if (!biosPath.empty()) {
@@ -898,11 +898,6 @@ static int bootWithPak(SystemRegistry::CartridgePak built,
     auto loadName = SystemRegistry::loadNameFor(*def, region);
     LOGI("ROM: title='%s' regions='%s' → boot '%s'",
          built.title.c_str(), built.region.c_str(), loadName.c_str());
-
-    if (def->biosRequired && g_state->biosBytes.empty()) {
-        LOGE("loadRom: %s requires firmware — stage a biosPath first", def->id.c_str());
-        return -2;   // BIOS_REQUIRED, pre-teardown: a running game is untouched
-    }
 
     // Fresh core per game, like desktop.
     if (g_state->systemLoaded) unloadCore();
