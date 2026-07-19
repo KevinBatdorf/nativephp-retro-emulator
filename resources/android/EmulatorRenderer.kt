@@ -951,16 +951,19 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     // ---------------------------------------------------------------------------
 
     private fun captureFramebuffer(): ByteArray? {
-        val rgba = core.screenshotRGBA() ?: return null
-        val fw = core.getFrameWidth()
-        val fh = core.getFrameHeight()
+        val dims = IntArray(2)
+        val rgba = core.screenshotRGBA(dims) ?: return null
+        // Raw path: the core frame's size; shader path: the post-shader
+        // output's size — either way the bytes' own dimensions.
+        val fw = dims[0]
+        val fh = dims[1]
         if (fw <= 0 || fh <= 0) return null
         val rect = outputRect
         return try {
-            // Native hands back the raw frame as top-down RGBA8 (no GL bottom-left
-            // flip). Scale it to the letterboxed on-screen content size so the
-            // screenshot matches the presented image (aspect-corrected, surface-
-            // scaled) — the semantics the old GL window read-back produced.
+            // Native hands back the presented frame as top-down RGBA8 (no GL
+            // bottom-left flip). Scale it to the letterboxed on-screen content
+            // size so the screenshot matches the presented image (aspect-
+            // corrected, surface-scaled).
             val frame = Bitmap.createBitmap(fw, fh, Bitmap.Config.ARGB_8888)
             frame.copyPixelsFromBuffer(ByteBuffer.wrap(rgba))
             val bmp = if (rect.w > 0 && rect.h > 0) {

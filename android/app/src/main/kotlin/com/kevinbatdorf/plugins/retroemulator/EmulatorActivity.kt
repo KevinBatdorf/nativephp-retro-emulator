@@ -34,6 +34,7 @@ class EmulatorActivity : Activity() {
         const val EXTRA_OUTPUT   = "OUTPUT"
         const val EXTRA_FIXED_SCALE = "FIXED_SCALE"
         const val EXTRA_ASPECT_CORRECTION = "ASPECT_CORRECTION"
+        const val EXTRA_SCREENSHOT_AFTER_MS = "SCREENSHOT_AFTER_MS"
         private const val TAG = "EmulatorActivity"
     }
 
@@ -82,6 +83,23 @@ class EmulatorActivity : Activity() {
                 Thread.sleep(2500)
                 val ok = renderer.syncSetShader(shaderPath)
                 Log.i(TAG, "setShader($shaderPath) → $ok")
+            }.start()
+        }
+
+        // Bridge-path screenshot after a delay — the on-device proof that
+        // Screenshot captures what's presented (post-shader when one is set).
+        val shotDelay = intent.getLongExtra(EXTRA_SCREENSHOT_AFTER_MS, 0)
+        if (shotDelay > 0) {
+            Thread {
+                Thread.sleep(shotDelay)
+                val png = renderer.syncScreenshot()
+                if (png != null) {
+                    val f = File(filesDir, "screenshot.png")
+                    f.writeBytes(png)
+                    Log.i(TAG, "screenshot saved: ${f.absolutePath} (${png.size} bytes)")
+                } else {
+                    Log.e(TAG, "screenshot returned null")
+                }
             }.start()
         }
     }

@@ -563,6 +563,94 @@ bool VulkanRenderer::screenshotRaw(std::vector<uint8_t>& rgbaOut, uint32_t& w, u
     return true;
 }
 
+bool VulkanRenderer::ensureReadback(VkDeviceSize size) {
+    if (readback_ && readbackCapacity_ >= size) return true;
+    if (device_) vkDeviceWaitIdle(device_);
+    if (readbackMapped_)  { vkUnmapMemory(device_, readbackMemory_);        readbackMapped_ = nullptr; }
+    if (readback_)        { vkDestroyBuffer(device_, readback_, nullptr);   readback_ = VK_NULL_HANDLE; }
+    if (readbackMemory_)  { vkFreeMemory(device_, readbackMemory_, nullptr); readbackMemory_ = VK_NULL_HANDLE; }
+    readbackCapacity_ = 0;
+
+    VkBufferCreateInfo bci{};
+    bci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bci.size = size;
+    bci.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    bci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    if (vkCreateBuffer(device_, &bci, nullptr, &readback_) != VK_SUCCESS) { readback_ = VK_NULL_HANDLE; return false; }
+    VkMemoryRequirements mreq{};
+    vkGetBufferMemoryRequirements(device_, readback_, &mreq);
+    uint32_t type = findMemoryType(mreq.memoryTypeBits,
+                                   VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    if (type == UINT32_MAX) return false;
+    VkMemoryAllocateInfo mai{};
+    mai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    mai.allocationSize = mreq.size;
+    mai.memoryTypeIndex = type;
+    if (vkAllocateMemory(device_, &mai, nullptr, &readbackMemory_) != VK_SUCCESS) return false;
+    vkBindBufferMemory(device_, readback_, readbackMemory_, 0);
+    if (vkMapMemory(device_, readbackMemory_, 0, size, 0, &readbackMapped_) != VK_SUCCESS) return false;
+    readbackCapacity_ = size;
+    return true;
+}
+
+bool VulkanRenderer::screenshotPresented(std::vector<uint8_t>& rgbaOut, uint32_t& w, uint32_t& h) {
+    // Passthrough (or shader output not built yet): the raw staging copy IS
+    // the presented content.
+    if (!shaderChain_ || !shaderOut_ || shaderOutW_ == 0 || shaderOutH_ == 0) {
+        return screenshotRaw(rgbaOut, w, h);
+    }
+    if (!hasFrame_ || !device_) return false;
+    const VkDeviceSize size = (VkDeviceSize)shaderOutW_ * shaderOutH_ * 4;
+    if (!ensureReadback(size)) return false;
+
+    // Runs on the render thread (the only queue_ submitter), between frames:
+    // drain in-flight presents so shaderOut_ sits idle in TRANSFER_SRC — the
+    // layout the last present's post-chain barrier left it in.
+    vkQueueWaitIdle(queue_);
+
+    VkCommandBufferAllocateInfo cai{};
+    cai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    cai.commandPool = cmdPool_;
+    cai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    cai.commandBufferCount = 1;
+    VkCommandBuffer cmd = VK_NULL_HANDLE;
+    if (vkAllocateCommandBuffers(device_, &cai, &cmd) != VK_SUCCESS) return false;
+    VkCommandBufferBeginInfo bi{};
+    bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    vkBeginCommandBuffer(cmd, &bi);
+
+    VkBufferImageCopy region{};
+    region.bufferOffset = 0;
+    region.bufferRowLength = shaderOutW_;
+    region.bufferImageHeight = shaderOutH_;
+    region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+    region.imageExtent = {shaderOutW_, shaderOutH_, 1};
+    vkCmdCopyImageToBuffer(cmd, shaderOut_, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, readback_, 1, &region);
+
+    vkEndCommandBuffer(cmd);
+    VkSubmitInfo si{};
+    si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    si.commandBufferCount = 1;
+    si.pCommandBuffers = &cmd;
+    bool ok = vkQueueSubmit(queue_, 1, &si, VK_NULL_HANDLE) == VK_SUCCESS;
+    if (ok) vkQueueWaitIdle(queue_);
+    vkFreeCommandBuffers(device_, cmdPool_, 1, &cmd);
+    if (!ok) return false;
+
+    w = shaderOutW_;
+    h = shaderOutH_;
+    rgbaOut.resize((size_t)w * h * 4);
+    const uint8_t* src = static_cast<const uint8_t*>(readbackMapped_);
+    for (size_t i = 0; i < (size_t)w * h; i++) {
+        rgbaOut[i * 4 + 0] = src[i * 4 + 2];  // R <- B
+        rgbaOut[i * 4 + 1] = src[i * 4 + 1];  // G
+        rgbaOut[i * 4 + 2] = src[i * 4 + 0];  // B <- R
+        rgbaOut[i * 4 + 3] = src[i * 4 + 3];  // A
+    }
+    return true;
+}
+
 // ---------------------------------------------------------------------------
 // librashader filter chain
 // ---------------------------------------------------------------------------
@@ -663,6 +751,9 @@ VulkanRenderer::~VulkanRenderer() {
     if (stagingMapped_) vkUnmapMemory(device_, stagingMemory_);
     if (staging_) vkDestroyBuffer(device_, staging_, nullptr);
     if (stagingMemory_) vkFreeMemory(device_, stagingMemory_, nullptr);
+    if (readbackMapped_) vkUnmapMemory(device_, readbackMemory_);
+    if (readback_) vkDestroyBuffer(device_, readback_, nullptr);
+    if (readbackMemory_) vkFreeMemory(device_, readbackMemory_, nullptr);
     if (srcImage_) vkDestroyImage(device_, srcImage_, nullptr);
     if (srcMemory_) vkFreeMemory(device_, srcMemory_, nullptr);
     for (int i = 0; i < kFramesInFlight; i++) {

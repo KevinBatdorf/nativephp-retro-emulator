@@ -298,6 +298,37 @@ final class MetalFrameRenderer: NSObject, MTKViewDelegate {
         cmd.commit()
     }
 
+    /// Read the post-shader intermediate back as BGRA bytes. Nil when no
+    /// filter chain is active (the raw frame IS the presented content then)
+    /// or nothing has been drawn yet. Queue ordering makes the blit run
+    /// after the in-flight draw, so the copy is a complete frame.
+    func screenshotShaded() -> (bytes: [UInt8], width: Int, height: Int)? {
+        chainLock.lock()
+        let source = shaderChain != nil ? intermediate : nil
+        chainLock.unlock()
+        guard let source else { return nil }
+
+        let w = source.width, h = source.height
+        let desc = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: source.pixelFormat, width: w, height: h, mipmapped: false)
+        desc.usage = []
+        desc.storageMode = .shared
+        guard let shared = device.makeTexture(descriptor: desc),
+              let cmd = commandQueue.makeCommandBuffer(),
+              let blit = cmd.makeBlitCommandEncoder() else { return nil }
+        blit.copy(from: source, to: shared)
+        blit.endEncoding()
+        cmd.commit()
+        cmd.waitUntilCompleted()
+
+        var bytes = [UInt8](repeating: 0, count: w * h * 4)
+        bytes.withUnsafeMutableBytes { raw in
+            shared.getBytes(raw.baseAddress!, bytesPerRow: w * 4,
+                            from: MTLRegionMake2D(0, 0, w, h), mipmapLevel: 0)
+        }
+        return (bytes, w, h)
+    }
+
     deinit {
         if let chain = shaderChain { lrs_mtl_chain_free(chain) }
     }

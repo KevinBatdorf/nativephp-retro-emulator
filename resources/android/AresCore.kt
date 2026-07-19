@@ -70,11 +70,13 @@ class AresCore {
     fun setShader(path: String?): Boolean = nativeSetShader(path)
 
     /**
-     * The last presented frame as raw RGBA8 bytes (row-major, width×height×4),
-     * or null if no frame yet. Width/height come from [getFrameWidth]/[getFrameHeight].
+     * The PRESENTED frame as raw RGBA8 bytes (row-major, width×height×4), or
+     * null if no frame yet. With an active shader this is the post-shader
+     * output — sized by the output rect, not the core frame — so dimensions
+     * come back in [dims] (w, h), not [getFrameWidth]/[getFrameHeight].
      * Render thread only.
      */
-    fun screenshotRGBA(): ByteArray? = nativeScreenshotRGBA()
+    fun screenshotRGBA(dims: IntArray = IntArray(2)): ByteArray? = nativeScreenshotRGBA(dims)
 
     /**
      * STAGE a system declaration — no core boots until [loadRom] arrives with
@@ -420,7 +422,7 @@ class AresCore {
     private external fun nativeReleaseRenderer()
     private external fun nativePresentFrame(outX: Int, outY: Int, outW: Int, outH: Int): Boolean
     private external fun nativeSetShader(path: String?): Boolean
-    private external fun nativeScreenshotRGBA(): ByteArray?
+    private external fun nativeScreenshotRGBA(dims: IntArray): ByteArray?
 
     private external fun nativeLoadSystem(systemId: String, biosPath: String): Boolean
     private external fun nativeGetSupportedSystems(): String

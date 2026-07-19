@@ -542,6 +542,13 @@ final class EmulatorRenderer: UIView {
     /// Encode the latest frame as PNG. Returns nil when no frame is available.
     /// Pixels are interpreted as BGRA8 (matching the Metal display path).
     func syncScreenshot() -> Data? {
+        // With an active filter chain, capture the post-shader intermediate —
+        // what the user actually sees. Passthrough falls to the raw frame,
+        // which IS the presented content then.
+        if let shaded = metalRenderer.screenshotShaded() {
+            return Self.pngFromBGRA(bytes: shaded.bytes, width: shaded.width, height: shaded.height)
+        }
+
         emuLock.lock()
         var w: UInt32 = 0, h: UInt32 = 0
         ares_get_frame(ctx, nil, 0, &w, &h)
@@ -554,22 +561,30 @@ final class EmulatorRenderer: UIView {
         guard ok else { return nil }
 
         let width = Int(w), height = Int(h)
-        let bytesPerRow = width * 4
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        return pixels.withUnsafeMutableBytes { raw -> Data? in
+            Self.pngFromBGRA(data: raw.baseAddress!, width: width, height: height)
+        }
+    }
+
+    private static func pngFromBGRA(bytes: [UInt8], width: Int, height: Int) -> Data? {
+        var copy = bytes
+        return copy.withUnsafeMutableBytes { raw -> Data? in
+            pngFromBGRA(data: raw.baseAddress!, width: width, height: height)
+        }
+    }
+
+    private static func pngFromBGRA(data: UnsafeMutableRawPointer, width: Int, height: Int) -> Data? {
         let bitmapInfo = CGBitmapInfo(rawValue:
             CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue)
-
-        return pixels.withUnsafeMutableBytes { raw -> Data? in
-            guard let context = CGContext(
-                data: raw.baseAddress,
-                width: width, height: height,
-                bitsPerComponent: 8, bytesPerRow: bytesPerRow,
-                space: colorSpace, bitmapInfo: bitmapInfo.rawValue
-            ), let cgImage = context.makeImage() else {
-                return nil
-            }
-            return UIImage(cgImage: cgImage).pngData()
+        guard let context = CGContext(
+            data: data,
+            width: width, height: height,
+            bitsPerComponent: 8, bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: bitmapInfo.rawValue
+        ), let cgImage = context.makeImage() else {
+            return nil
         }
+        return UIImage(cgImage: cgImage).pngData()
     }
 
     // MARK: - Private

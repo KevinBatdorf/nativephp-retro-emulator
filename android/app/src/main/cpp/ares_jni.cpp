@@ -793,12 +793,16 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetShader(
 
 JNIEXPORT jbyteArray JNICALL
 Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeScreenshotRGBA(
-    JNIEnv* env, jobject)
+    JNIEnv* env, jobject, jintArray dims)
 {
     if (!g_vk) return nullptr;
     std::vector<uint8_t> rgba;
     uint32_t w = 0, h = 0;
-    if (!g_vk->screenshotRaw(rgba, w, h)) return nullptr;
+    if (!g_vk->screenshotPresented(rgba, w, h)) return nullptr;
+    if (dims && env->GetArrayLength(dims) >= 2) {
+        jint wh[2] = {(jint)w, (jint)h};
+        env->SetIntArrayRegion(dims, 0, 2, wh);
+    }
     jbyteArray arr = env->NewByteArray((jsize)rgba.size());
     if (!arr) return nullptr;
     env->SetByteArrayRegion(arr, 0, (jsize)rgba.size(), reinterpret_cast<const jbyte*>(rgba.data()));

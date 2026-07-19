@@ -68,6 +68,11 @@ public:
     // straight from the mapped staging buffer (BGRA->RGBA swizzle), no GPU op.
     bool screenshotRaw(std::vector<uint8_t>& rgbaOut, uint32_t& w, uint32_t& h);
 
+    // Read the PRESENTED frame back as RGBA8: with an active filter chain this
+    // is the post-shader output image (GPU readback on the render thread);
+    // passthrough falls back to screenshotRaw — identical content either way.
+    bool screenshotPresented(std::vector<uint8_t>& rgbaOut, uint32_t& w, uint32_t& h);
+
 private:
     static constexpr int kFramesInFlight = 2;
     // Source image is fixed at the GL renderer's texture size (fits any SFC
@@ -88,6 +93,7 @@ private:
     // librashader (created lazily on setShader; freed/replaced on change).
     void destroyShaderChain();
     bool ensureShaderOutput(uint32_t w, uint32_t h);
+    bool ensureReadback(VkDeviceSize size);
 
     VkInstance       instance_       = VK_NULL_HANDLE;
     VkPhysicalDevice physical_       = VK_NULL_HANDLE;
@@ -120,6 +126,12 @@ private:
     uint32_t         stagedW_        = 0;
     uint32_t         stagedH_        = 0;
     bool             hasFrame_       = false;
+
+    // Shader-inclusive screenshot readback (lazily grown, persistently mapped).
+    VkBuffer         readback_         = VK_NULL_HANDLE;
+    VkDeviceMemory   readbackMemory_   = VK_NULL_HANDLE;
+    void*            readbackMapped_   = nullptr;
+    VkDeviceSize     readbackCapacity_ = 0;
 
     // librashader Vulkan filter chain (D). Null = passthrough.
     struct _filter_chain_vk* shaderChain_ = nullptr;
