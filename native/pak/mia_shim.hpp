@@ -13,6 +13,7 @@
 
 #include <nall/nall.hpp>
 #include <nall/vfs.hpp>
+#include <nall/vfs/cdrom.hpp>
 #include <nall/decode/wav.hpp>
 #include <nall/encode/wav.hpp>
 
@@ -120,6 +121,21 @@ struct Medium : Pak {
 
 struct Cartridge : Medium {
   auto type() -> string { return "Cartridge"; }
+};
+
+// Disc mediums (mia/medium/medium.hpp:20-33, minus the CHD variant our build
+// excludes). The CUE/BCD sector readers compile in mia_mediums.cpp, ported
+// verbatim from mia/medium/medium.cpp — unlike the cartridge analyzers these
+// ARE called at load time (region detection reads the license sector).
+struct CompactDisc : Medium {
+  auto type() -> string { return "Compact Disc"; }
+  auto extensions() -> std::vector<string> { return {"cue"}; }
+  auto isAudioCd(string location) -> bool;
+  auto manifestAudio(string location) -> string;
+  auto readDataSector(string filename, u32 sectorID) -> std::vector<u8>;
+private:
+  auto readDataSectorBCD(string filename, u32 sectorID) -> std::vector<u8>;
+  auto readDataSectorCUE(string filename, u32 sectorID) -> std::vector<u8>;
 };
 
 } // namespace mia

@@ -5,20 +5,13 @@
 
 using namespace nall;
 
-// Narrow analyzer entry points exported by mia_mediums.cpp.
+// Narrow analyzer entry points exported by mia_mediums.cpp (loadPlayStationDisc
+// is declared in multi_pak.hpp — it returns a pak, not a manifest string).
 namespace MiaAnalyzers {
   auto analyzeFamicom(std::vector<u8>& rom) -> string;
   auto analyzeGameBoy(std::vector<u8>& rom) -> string;
   auto analyzeMegaDrive(std::vector<u8>& rom) -> string;
-  auto analyzeSG1000(std::vector<u8>& rom) -> string;
-  auto analyzeMasterSystem(std::vector<u8>& rom) -> string;
-  auto analyzeAtari2600(std::vector<u8>& rom) -> string;
   auto analyzeGameBoyAdvance(std::vector<u8>& rom) -> string;
-  auto analyzeNeoGeoPocket(std::vector<u8>& rom) -> string;
-  auto analyzeMSX(std::vector<u8>& rom) -> string;
-  auto analyzePCEngine(std::vector<u8>& rom) -> string;
-  auto analyzeWonderSwan(std::vector<u8>& rom) -> string;
-  auto analyzeWonderSwanColor(std::vector<u8>& rom) -> string;
 }
 
 namespace MultiPak {
@@ -188,6 +181,11 @@ auto makeSystemPak(const std::string& systemId,
     } else if(systemId == "gba") {
         // BIOS required — LoadRom gated on biosRequired before this runs.
         pak->append("bios.rom", bios);
+    } else if(systemId == "ps1") {
+        // BIOS required (mia/system/playstation.cpp appends the dump the same
+        // way; desktop matches region-specific images by hash, we trust the
+        // dev's biosPath).
+        pak->append("bios.rom", bios);
     }
     // fc: no system files required.
     return pak;
@@ -227,6 +225,24 @@ auto makeCartridgePak(const std::string& systemId,
 
     result.title  = std::string(document["game/title"].string().data());
     result.region = std::string(document["game/region"].string().data());
+    return result;
+}
+
+auto makeMediaPak(const std::string& systemId,
+                  const std::string& path) -> CartridgeResult {
+    CartridgeResult result;
+    if(systemId != "ps1") {
+        result.error = "unknown media system: " + systemId;
+        return result;
+    }
+    auto disc = MiaAnalyzers::loadPlayStationDisc(path);
+    if(!disc.pak) {
+        result.error = disc.error;
+        return result;
+    }
+    result.pak    = disc.pak;
+    result.title  = disc.title;
+    result.region = disc.region;
     return result;
 }
 

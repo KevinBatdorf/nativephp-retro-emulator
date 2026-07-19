@@ -110,9 +110,16 @@ final class EmulatorRenderer: UIView {
         clearMemoryWatches()
 
         emuLock.lock()
-        let result = romData.withUnsafeBytes {
-            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count,
-                          savePrefix, stagedRegion, stagedPreferredRegions)
+        // Disc systems load by PATH (the .cue's BIN references resolve
+        // relative to it); cartridge systems take the bytes.
+        let result: Int32
+        if ares_uses_media_path(ctx) {
+            result = ares_load_media(ctx, path, savePrefix, stagedRegion, stagedPreferredRegions)
+        } else {
+            result = romData.withUnsafeBytes {
+                ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count,
+                              savePrefix, stagedRegion, stagedPreferredRegions)
+            }
         }
         // Fresh screen nodes boot with ares defaults — reapply the surface's
         // options like desktop reapplies its settings. (Context-side prefs —
@@ -147,6 +154,17 @@ final class EmulatorRenderer: UIView {
             // Pre-teardown rejection: a running game is untouched.
             eventListener?.onError(code: "LOAD_FAILED", message: "ROM rejected by analyzer")
             return false
+        }
+    }
+
+    /// Swap the disc in the running system's tray. A rejected disc leaves the
+    /// running game untouched and surfaces LOAD_FAILED on the event channel.
+    func swapDisc(path: String) {
+        emuLock.lock()
+        let ok = ares_swap_disc(ctx, path) == 1
+        emuLock.unlock()
+        if !ok {
+            eventListener?.onError(code: "LOAD_FAILED", message: "disc swap rejected: \(path)")
         }
     }
 

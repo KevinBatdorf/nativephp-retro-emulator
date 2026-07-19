@@ -28,6 +28,7 @@ class EmulatorActivity : Activity() {
     companion object {
         const val EXTRA_ROM_PATH = "ROM_PATH"
         const val EXTRA_SYSTEM   = "SYSTEM"
+        const val EXTRA_BIOS_PATH = "BIOS_PATH"
         const val EXTRA_REGION   = "REGION"
         const val EXTRA_SHADER   = "SHADER"
         const val EXTRA_OUTPUT   = "OUTPUT"
@@ -59,8 +60,9 @@ class EmulatorActivity : Activity() {
         intent.getStringExtra(EXTRA_ASPECT_CORRECTION)?.let { renderer.videoAspectCorrection = it }
         intent.getStringExtra(EXTRA_REGION)?.let { renderer.stagedRegion = it }
 
-        // Queue the system load (executes on GL thread).
-        renderer.queueSystemLoad(system)
+        // Queue the system load (executes on GL thread). BIOS_PATH feeds
+        // firmware-gated systems (gba, ps1) their dev-supplied dump.
+        renderer.queueSystemLoad(system, intent.getStringExtra(EXTRA_BIOS_PATH) ?: "")
 
         // Queue the ROM load (executes on GL thread after system is ready).
         val romFile = File(romPath)

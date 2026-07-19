@@ -60,6 +60,22 @@ int ares_load_rom(AresContext* ctx, const uint8_t* rom, size_t rom_size,
                   const char* save_prefix,
                   const char* region_override, const char* preferred_regions);
 
+// Disc-system variant of ares_load_rom: media loads by PATH (a .cue's BIN
+// references resolve relative to it, so bytes can't travel the cartridge
+// path).  Same result codes as ares_load_rom.
+int ares_load_media(AresContext* ctx, const char* path,
+                    const char* save_prefix,
+                    const char* region_override, const char* preferred_regions);
+
+// Whether the staged system loads media by path (disc systems).
+bool ares_uses_media_path(AresContext* ctx);
+
+// Swap the disc in the running system's tray: saves, opens the tray, stages
+// the new disc, and reconnects ~3 s later so the core notices the empty
+// drive.  Returns 1 = swapping; 0 = rejected pre-teardown (bad media, wrong
+// system, nothing running).  Emulation thread only.
+int ares_swap_disc(AresContext* ctx, const char* path);
+
 // Stage a slotted-media ROM (SuFami Turbo: index 0 = Slot A, 1 = Slot B;
 // BS-X: index 0 = the BS Memory slot) to be inserted at the next
 // ares_load_rom, whose base ROM must be the slot-carrying cartridge.

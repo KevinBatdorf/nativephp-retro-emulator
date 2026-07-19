@@ -38,6 +38,15 @@ struct AresContext {
     std::shared_ptr<vfs::directory> slotPak[2];
     bool                            slotConnected[2] = {false, false};  // test seam
 
+    // Extra paks the system owns beyond system+cartridge (def->extraPaks —
+    // the PS1 Memory Card), parallel to the def's list. Emulation thread only.
+    std::vector<std::shared_ptr<vfs::directory>> extraPaks;
+
+    // Disc swap in flight: frames until the tray reconnects. Desktop leaves
+    // the tray empty ~3 s so the core notices the open drive
+    // (playstation.cpp:151-158); we count frames on the emulation thread.
+    int discSwapFrames = 0;
+
     ares::Node::System root;
     bool systemLoaded = false;
     bool romLoaded    = false;
@@ -231,6 +240,11 @@ struct IosPlatform : ares::Platform {
             if (port == "Sufami Turbo Slot B") return g_ctx->slotPak[1];
         }
         if (name == "BS Memory Cartridge") return g_ctx->slotPak[0];
+        // Extra paks (the PS1 Memory Card) — parallel to def->extraPaks.
+        for (size_t i = 0; i < g_ctx->extraPaks.size(); i++) {
+            if (name == g_ctx->system->extraPaks[i].node.c_str())
+                return g_ctx->extraPaks[i];
+        }
         // Model-renamed cartridges ("TurboGrafx 16 Cartridge") — every core
         // names its main cartridge "<system> Cartridge", and the slot names
         // above are matched first.
@@ -378,6 +392,17 @@ static const std::unordered_map<std::string,
             // Container device — no inputs of its own; fans out to gamepad
             // sub-ports (handled specially in applyConnectedDevices).
             {"Super Multitap", {{}, {}}},
+        }},
+        {"ps1", {
+            // DualShock (playstation.cpp:42-72): the Digital Gamepad's bits
+            // plus stick clicks; sticks are the four analog axes.
+            {"DualShock", {{{"Cross", 1u << 0}, {"Square", 1u << 1}, {"Select", 1u << 2},
+                            {"Start", 1u << 3}, {"Up", 1u << 4}, {"Down", 1u << 5},
+                            {"Left", 1u << 6}, {"Right", 1u << 7}, {"Circle", 1u << 8},
+                            {"Triangle", 1u << 9}, {"L1", 1u << 10}, {"R1", 1u << 11},
+                            {"L2", 1u << 12}, {"R2", 1u << 13},
+                            {"L3", 1u << 14}, {"R3", 1u << 15}},
+                           {"L-Stick X", "L-Stick Y", "R-Stick X", "R-Stick Y"}}},
         }},
     };
     return t;
@@ -666,10 +691,21 @@ bool ares_load_system(AresContext* ctx, const char* system_id, const char* bios_
  * teardown order: flush saves, join worker threads via root->unload(), then
  * clear the per-boot state that must not leak into a fresh core.
  */
+// Flush every battery-backed pak — the cartridge plus def->extraPaks (the
+// PS1 Memory Card persists as "<savePrefix>.save.card" the same way).
+static bool flushAllSaves(AresContext* ctx)
+{
+    bool ok = SaveIO::flush(ctx->cartridgePak, ctx->savePrefix);
+    for (auto& pak : ctx->extraPaks) {
+        ok &= SaveIO::flush(pak, ctx->savePrefix);
+    }
+    return ok;
+}
+
 static void unloadCore(AresContext* ctx)
 {
     if (ctx->romLoaded && ctx->cartridgePak) {
-        SaveIO::flush(ctx->cartridgePak, ctx->savePrefix);
+        flushAllSaves(ctx);
     }
     if (ctx->root) {
         ctx->root->unload();
@@ -683,6 +719,8 @@ static void unloadCore(AresContext* ctx)
     ctx->cartridgePak.reset();
     ctx->slotPak[0].reset();
     ctx->slotPak[1].reset();
+    ctx->extraPaks.clear();
+    ctx->discSwapFrames = 0;
     ctx->slotConnected[0] = ctx->slotConnected[1] = false;
     ctx->inputCache.clear();
     ctx->axisCache.clear();
@@ -707,20 +745,15 @@ static void unloadCore(AresContext* ctx)
     ctx->paused.store(false, std::memory_order_relaxed);
 }
 
-int ares_load_rom(AresContext* ctx, const uint8_t* rom, size_t rom_size,
-                  const char* save_prefix,
-                  const char* region_override, const char* preferred_regions) {
-    if (!ctx || !ctx->system || !rom || rom_size == 0) return 0;
+/**
+ * Shared boot: takes an already-built game pak (cartridge bytes or disc
+ * media — analysis happened in the caller, BEFORE any teardown, so a bad
+ * file leaves a running game untouched) and runs the fresh-core boot.
+ */
+static int bootWithPak(AresContext* ctx, SystemRegistry::CartridgePak built,
+                       const char* save_prefix,
+                       const char* region_override, const char* preferred_regions) {
     auto* def = ctx->system;
-
-    // Analyze BEFORE any teardown — a ROM that fails analysis must leave a
-    // running game untouched (failures after teardown starts end in the clean
-    // stopped state instead).
-    auto built = def->makeCartridgePak(rom, rom_size);
-    if (!built) {
-        fprintf(stderr, "ares_load_rom: %s\n", built.error.c_str());
-        return 0;
-    }
 
     auto region = SystemRegistry::resolveRegion(
         *def, built.region,
@@ -766,13 +799,26 @@ int ares_load_rom(AresContext* ctx, const uint8_t* rom, size_t rom_size,
     ctx->savePrefix = save_prefix ? save_prefix : "";
     SaveIO::seed(ctx->cartridgePak, ctx->savePrefix);
 
-    auto cartridgeSlot = NodeUtil::findByName<ares::Node::Port>(ctx->root, "Cartridge Slot");
-    if (!cartridgeSlot) {
-        unloadCore(ctx);
-        return -1;
+    ares::Node::Peripheral baseCartridge;
+    if (def->mediaPort) {
+        // Disc systems: the game connects through the tray port, no device
+        // name (desktop-ui playstation.cpp:110-113).
+        auto tray = NodeUtil::findByName<ares::Node::Port>(ctx->root, def->mediaPort);
+        if (!tray) {
+            unloadCore(ctx);
+            return -1;
+        }
+        tray->allocate();
+        tray->connect();
+    } else {
+        auto cartridgeSlot = NodeUtil::findByName<ares::Node::Port>(ctx->root, "Cartridge Slot");
+        if (!cartridgeSlot) {
+            unloadCore(ctx);
+            return -1;
+        }
+        baseCartridge = cartridgeSlot->allocate();
+        cartridgeSlot->connect();
     }
-    auto baseCartridge = cartridgeSlot->allocate();
-    cartridgeSlot->connect();
 
     // Slotted media: connecting an ST-LOROM base created the Sufami Turbo slot
     // ports UNDER the base cartridge peripheral (not the root), so find them
@@ -816,11 +862,97 @@ int ares_load_rom(AresContext* ctx, const uint8_t* rom, size_t rom_size,
         }
     }
 
+    // Extra paks (the PS1 Memory Card): fresh writable entry per boot,
+    // seeded from disk, handed to the node by Platform::pak, then connected
+    // (desktop-ui playstation.cpp:120-126).
+    ctx->extraPaks.clear();
+    for (auto& ep : def->extraPaks) {
+        auto pak = std::make_shared<vfs::directory>();
+        pak->append(ep.entry.c_str(), (u64)ep.size);
+        SaveIO::seed(pak, ctx->savePrefix);
+        ctx->extraPaks.push_back(pak);
+        if (auto port = NodeUtil::findByName<ares::Node::Port>(ctx->root, ep.port.c_str())) {
+            port->allocate(ep.device.c_str());
+            port->connect();
+        }
+    }
+
     ctx->root->power(false);
     ctx->romLoaded = true;
     // Report the BOOTED region — for region-free systems (gb) fall back to
     // whatever the analyzer said (usually empty).
     ctx->romRegion = region.empty() ? built.region : region;
+    return 1;
+}
+
+int ares_load_rom(AresContext* ctx, const uint8_t* rom, size_t rom_size,
+                  const char* save_prefix,
+                  const char* region_override, const char* preferred_regions) {
+    if (!ctx || !ctx->system || !rom || rom_size == 0) return 0;
+    auto* def = ctx->system;
+    if (!def->makeCartridgePak) {
+        fprintf(stderr, "ares_load_rom: %s loads media by path — use ares_load_media\n", def->id.c_str());
+        return 0;
+    }
+
+    // Analyze BEFORE any teardown — a ROM that fails analysis must leave a
+    // running game untouched (failures after teardown starts end in the clean
+    // stopped state instead).
+    auto built = def->makeCartridgePak(rom, rom_size);
+    if (!built) {
+        fprintf(stderr, "ares_load_rom: %s\n", built.error.c_str());
+        return 0;
+    }
+
+    return bootWithPak(ctx, std::move(built), save_prefix, region_override, preferred_regions);
+}
+
+int ares_load_media(AresContext* ctx, const char* path,
+                    const char* save_prefix,
+                    const char* region_override, const char* preferred_regions) {
+    if (!ctx || !ctx->system || !path) return 0;
+    auto* def = ctx->system;
+    if (!def->makeMediaPak) {
+        fprintf(stderr, "ares_load_media: %s has no media loader\n", def->id.c_str());
+        return 0;
+    }
+
+    auto built = def->makeMediaPak(path);
+    if (!built) {
+        fprintf(stderr, "ares_load_media: %s\n", built.error.c_str());
+        return 0;
+    }
+
+    return bootWithPak(ctx, std::move(built), save_prefix, region_override, preferred_regions);
+}
+
+bool ares_uses_media_path(AresContext* ctx) {
+    return ctx && ctx->system && ctx->system->mediaPort;
+}
+
+int ares_swap_disc(AresContext* ctx, const char* path) {
+    if (!ctx || !ctx->system || !ctx->romLoaded || !path) return 0;
+    auto* def = ctx->system;
+    if (!def->mediaPort || !def->makeMediaPak) {
+        fprintf(stderr, "ares_swap_disc: %s has no disc tray\n", def->id.c_str());
+        return 0;
+    }
+
+    auto built = def->makeMediaPak(path);
+    if (!built) {
+        fprintf(stderr, "ares_swap_disc: %s\n", built.error.c_str());
+        return 0;
+    }
+
+    auto tray = NodeUtil::findByName<ares::Node::Port>(ctx->root, def->mediaPort);
+    if (!tray) return 0;
+
+    ctx->root->save();
+    flushAllSaves(ctx);
+    tray->disconnect();
+    ctx->cartridgePak = built.pak;   // Platform::pak answers the new disc at reconnect
+    ctx->romRegion = built.region.empty() ? ctx->romRegion : std::string(built.region);
+    ctx->discSwapFrames = 180;       // ≈3 s at 60 fps, like desktop's timer
     return 1;
 }
 
@@ -910,7 +1042,7 @@ bool ares_flush_saves(AresContext* ctx) {
     if (!ctx || !ctx->romLoaded || ctx->savePrefix.empty()) return false;
     // System::save() writes board memory back into the cartridge pak.
     ctx->root->save();
-    return SaveIO::flush(ctx->cartridgePak, ctx->savePrefix);
+    return flushAllSaves(ctx);
 }
 
 // Port of desktop-ui rewindRun(): in normal play, snapshot every `frequency`
@@ -954,6 +1086,17 @@ bool ares_tick(AresContext* ctx) {
         ctx->inputRemapDirty.store(false, std::memory_order_relaxed);
     } else if (ctx->inputRemapDirty.exchange(false, std::memory_order_relaxed)) {
         applyInputRemap();
+    }
+
+    // Disc swap: reconnect the tray once the countdown expires — the frames
+    // in between run with the drive empty, like desktop's 3 s timer
+    // (playstation.cpp:151-158). Platform::pak already answers the new disc.
+    if (ctx->discSwapFrames > 0 && --ctx->discSwapFrames == 0) {
+        if (auto tray = NodeUtil::findByName<ares::Node::Port>(
+                ctx->root, ctx->system->mediaPort)) {
+            tray->allocate();
+            tray->connect();
+        }
     }
 
     if (ctx->paused.load(std::memory_order_relaxed)) return false;

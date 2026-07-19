@@ -105,7 +105,15 @@ marking the core experimental. Per-system game compatibility:
 | Game Boy / Game Boy Color | `gb` / `gbc` | ✅ | |
 | Game Boy Advance | `gba` | ✅ | Needs a GBA BIOS via `biosPath` |
 | Mega Drive / Genesis | `md` | ✅ | |
-| PlayStation (`ps1`), Nintendo 64 (`n64`) | | ⏳ | In development |
+| PlayStation | `ps1` | ✅ | Discs (.cue/.bin) + `swapDisc()`; needs a BIOS via `biosPath`; `stable: false` (experimental in ares) |
+| Nintendo 64 | `n64` | ⏳ | In development |
+
+Disc systems load media by path — point `loadRom()` at the `.cue` (its BIN
+references resolve next to it) and swap discs on a running game with
+`$emu->swapDisc($cuePath)`: the tray opens, the new disc stages, and the
+drive reconnects a few seconds later, exactly like desktop-ares' Change
+Disc. Memory Card 1 persists beside the game's other saves as
+`<save>.save.card`.
 
 Other ares systems appear in `Emulator::systems()` with `supported: false` —
 they aren't compiled into the shipped binaries.
@@ -119,7 +127,7 @@ MD TMSS) is embedded, so the compiled systems need nothing today.
 | System | Firmware via `biosPath` |
 |---|---|
 | GBA | `bios.bin` |
-| PlayStation (when it lands) | SCPH BIOS |
+| PlayStation | SCPH BIOS (any region — match your discs) |
 
 Sourcing BIOS files is your responsibility — dump them from hardware you own.
 Collections exist online (e.g. on archive.org); their legality varies by

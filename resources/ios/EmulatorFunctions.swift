@@ -385,6 +385,24 @@ enum EmulatorFunctions {
         }
     }
 
+    /// Swap the disc in the running system's tray (disc systems only). The
+    /// tray opens, the new disc stages, and the drive reconnects ~3 s later
+    /// like desktop's Change Disc flow — the game keeps running against an
+    /// empty drive in between.
+    class SwapDisc: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
+            guard let path = parameters["path"] as? String else {
+                return BridgeResponse.error(code: "INVALID_PARAMETERS", message: "path is required")
+            }
+            guard FileManager.default.fileExists(atPath: path) else {
+                return operationalError(renderer, code: "ROM_NOT_FOUND", message: "disc not found: \(path)")
+            }
+            renderer.swapDisc(path: path)
+            return BridgeResponse.success(data: ["status": "swapping", "path": path])
+        }
+    }
+
     class Pause: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }

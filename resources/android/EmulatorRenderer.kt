@@ -344,7 +344,14 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
             val rom = pendingRomBytes
             if (systemStaged && rom != null) {
                 pendingRomBytes = null
-                when (core.loadRom(rom, pendingSavePrefix, stagedRegion, stagedPreferredRegions)) {
+                // Disc systems load by PATH (the .cue's BIN references resolve
+                // relative to it); cartridge systems take the bytes.
+                val loadResult = if (core.usesMediaPath()) {
+                    core.loadRomPath(loadedRomPath, pendingSavePrefix, stagedRegion, stagedPreferredRegions)
+                } else {
+                    core.loadRom(rom, pendingSavePrefix, stagedRegion, stagedPreferredRegions)
+                }
+                when (loadResult) {
                     AresCore.LOAD_OK -> {
                         romLoaded = true
                         currentStatus = "loading"
@@ -593,6 +600,19 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
         pendingSavePrefix = savePrefix
         pendingRomBytes = romBytes
         requestRender()
+    }
+
+    /**
+     * Swap the disc in the running system's tray. Runs on the render thread;
+     * a rejected disc leaves the running game untouched and surfaces
+     * LOAD_FAILED on the event channel.
+     */
+    fun swapDisc(path: String) {
+        queueEvent {
+            if (!core.swapDisc(path)) {
+                eventListener?.onError("LOAD_FAILED", "disc swap rejected: $path")
+            }
+        }
     }
 
     /** Pause emulation. Audio keeps running; tick() becomes a no-op until [resumeEmulation]. */

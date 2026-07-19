@@ -291,6 +291,22 @@ target_link_libraries(gba_core PUBLIC ares_iface)
 target_compile_definitions(gba_core PUBLIC CORE_GBA)
 
 # ---------------------------------------------------------------------------
+# ps1_core — Sony PlayStation (unity build via ps1.cpp)
+#   m68hc05 — Memory Card MCU (ares_components in upstream ps1/CMakeLists.txt)
+#   The disc image reaches the core as the pak's cd.rom (nall vfs::cdrom).
+# ---------------------------------------------------------------------------
+add_library(ps1_core STATIC
+    "${ARES_ROOT}/ares/ps1/ps1.cpp"
+    "${PROC}/m68hc05/m68hc05.cpp"
+)
+target_include_directories(ps1_core PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/stubs"
+    "${ARES_ROOT}/ares"
+)
+target_link_libraries(ps1_core PUBLIC ares_iface)
+target_compile_definitions(ps1_core PUBLIC CORE_PS1)
+
+# ---------------------------------------------------------------------------
 # retro_ares — the shared ares runtime, registry host, and pak/save plumbing.
 # Exactly ONE copy per process: the frontend and every dlopen'd core module
 # bind ares::platform, the node system, and the registry from here, so a core
@@ -349,6 +365,7 @@ retro_core_module(fc)
 retro_core_module(gb)
 retro_core_module(md)
 retro_core_module(gba)
+retro_core_module(ps1)
 
 # ---------------------------------------------------------------------------
 # retro_emulator — JNI frontend + Vulkan renderer. Links no core: nativeInit
