@@ -15,4 +15,5 @@ enum Region: string
     case NtscJ = 'NTSC-J';
     case Ntsc = 'NTSC';
     case Pal = 'PAL';
+    case Secam = 'SECAM';
 }

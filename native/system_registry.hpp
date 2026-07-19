@@ -52,6 +52,17 @@ struct SystemDef {
     //   10 = L shoulder, 11 = R shoulder.
     std::unordered_map<std::string, uint32_t> buttons;
 
+    // Console-level buttons that live on the root's "Controls" node while the
+    // gamepads live on ports (Master System Pause). Cached onto logical port 1
+    // alongside its gamepad; bits share the port's mask space. Empty for
+    // systems whose controls are all-port (sfc) or all-system (gb, ws).
+    std::unordered_map<std::string, uint32_t> systemButtons{};
+
+    // Ports desktop connects unconditionally after the cartridge, beyond the
+    // controller ports: {port name, device name} — the Master System's
+    // {"Expansion Port", "FM Sound Unit"}, the MSX's {"Keyboard", "Japanese"}.
+    std::vector<std::pair<std::string, std::string>> extraPorts{};
+
     bool biosRequired;
 
     // Memory bus window exposed to readMemory/writeMemory.
@@ -61,7 +72,11 @@ struct SystemDef {
     bool (*load)(ares::Node::System& root, const SystemDef& def, const std::string& loadName);
     uint8_t (*memRead)(uint32_t offset);
     void (*memWrite)(uint32_t offset, uint8_t value);
-    std::shared_ptr<vfs::directory> (*makeSystemPak)(const SystemDef& def);
+    // bios carries the dev-supplied firmware image (LoadSystem biosPath),
+    // empty when none was given. Systems with embedded/no firmware ignore it;
+    // biosRequired systems fail LoadRom with BIOS_REQUIRED before this runs.
+    std::shared_ptr<vfs::directory> (*makeSystemPak)(const SystemDef& def,
+                                                     const std::vector<uint8_t>& bios);
     CartridgePak (*makeCartridgePak)(const uint8_t* rom, size_t romSize);
 
     // Slotted-media pak builder (SuFami slots A/B, BS Memory); the platform

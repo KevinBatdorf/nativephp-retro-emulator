@@ -18,6 +18,7 @@ BLOBS = [
     ("SfcIpl",     "mia/Firmware/Super Famicom/ipl.rom"),
     ("SfcBoards",  "mia/Database/Super Famicom Boards.bml"),
     ("GbBootDmg1", "mia/Firmware/Game Boy/boot.dmg-1.rom"),
+    ("GbBootCgb1", "mia/Firmware/Game Boy Color/boot.cgb-1.rom"),
     ("MdTmss",     "mia/Firmware/Mega Drive/tmss.rom"),
     ("MdSvp",      "mia/Firmware/Mega Drive/svp.rom"),
     ("WsBoot",     "mia/Firmware/WonderSwan/boot.rom"),

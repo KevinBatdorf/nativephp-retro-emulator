@@ -20,6 +20,11 @@ DEPLOYMENT_TARGET="16.0"
 SIM_ONLY=false
 for arg in "$@"; do [[ "$arg" == "--sim-only" ]] && SIM_ONLY=true; done
 
+# The packaged Headers/ are a staged copy — refresh from the source of truth
+# so they can never drift from ios/ares_ios_api.h (check_artifacts verifies).
+cp "$IOS_SRC/ares_ios_api.h" "$HEADERS_DIR/ares_ios_api.h"
+cp "$IOS_SRC/librashader_metal_shim.h" "$HEADERS_DIR/librashader_metal_shim.h"
+
 DEVICE_SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
 SIM_SDK="$(xcrun --sdk iphonesimulator --show-sdk-path)"
 

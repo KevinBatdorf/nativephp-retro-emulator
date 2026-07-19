@@ -25,7 +25,7 @@ auto memWrite(uint32_t o, uint8_t v) -> void {
     else      word.byte(1) = v;
 }
 
-auto systemPak(const SystemDef& def) -> std::shared_ptr<vfs::directory> {
+auto systemPak(const SystemDef& def, const std::vector<uint8_t>&) -> std::shared_ptr<vfs::directory> {
     return MultiPak::makeSystemPak(def.id);
 }
 

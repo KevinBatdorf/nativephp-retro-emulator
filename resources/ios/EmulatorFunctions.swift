@@ -300,7 +300,7 @@ enum EmulatorFunctions {
             }
             let toggles = coreToggles(from: config)
             if !toggles.isEmpty { renderer.setCoreOptions(toggles) }
-            guard renderer.loadSystem(system) else {
+            guard renderer.loadSystem(system, biosPath: config["biosPath"] as? String) else {
                 return BridgeResponse.error(code: "LOAD_FAILED", message: "ares_load_system failed for '\(system)'")
             }
 
@@ -1019,12 +1019,12 @@ enum EmulatorFunctions {
                 system("n64", "Nintendo 64",               biosRequired: false, stable: true),
                 system("gb",  "Game Boy",                  biosRequired: false, stable: true),
                 system("gbc", "Game Boy Color",            biosRequired: false, stable: true),
-                system("gba", "Game Boy Advance",          biosRequired: false, stable: true),
+                system("gba", "Game Boy Advance",          biosRequired: true,  stable: true),
                 system("sg",  "Sega SG-1000",              biosRequired: false, stable: true),
                 system("ms",  "Sega Master System",        biosRequired: false, stable: true),
                 system("md",  "Sega Mega Drive / Genesis", biosRequired: false, stable: true),
                 system("pce", "PC Engine / TurboGrafx-16", biosRequired: false, stable: true),
-                system("ngp", "Neo Geo Pocket",            biosRequired: false, stable: true),
+                system("ngp", "Neo Geo Pocket",            biosRequired: true,  stable: true),
                 system("ws",  "WonderSwan",                biosRequired: false, stable: true),
                 system("ps1", "PlayStation",               biosRequired: true,  stable: false),
                 system("ng",  "Neo Geo AES / MVS",         biosRequired: true,  stable: false),

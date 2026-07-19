@@ -32,7 +32,9 @@ void ares_reset(AresContext* ctx);
 // firmware (SFC ipl.rom + boards.bml, GB boot ROM, MD TMSS) is embedded in
 // the library — no assets required.  Returns false for ids not compiled into
 // this build.
-bool ares_load_system(AresContext* ctx, const char* system_id);
+// bios_path: dev-supplied firmware for biosRequired systems (and optional
+// ones like the Master System BIOS); NULL/empty when embedded or unneeded.
+bool ares_load_system(AresContext* ctx, const char* system_id, const char* bios_path);
 
 // Comma-separated ids of the systems compiled into this build, e.g.
 // "fc,sfc,gb,md".  Static storage — do not free.
@@ -52,7 +54,8 @@ const char* ares_system_extensions(AresContext* ctx, const char* system_id);
 // the cartridge before boot.  NULL disables persistence.
 // Returns 1 on success; 0 when the ROM was rejected BEFORE any teardown (a
 // running game is untouched); -1 when a later failure left the emulator
-// cleanly stopped.
+// cleanly stopped; -2 when the system requires firmware and no biosPath was
+// staged (pre-teardown, running game untouched).
 int ares_load_rom(AresContext* ctx, const uint8_t* rom, size_t rom_size,
                   const char* save_prefix,
                   const char* region_override, const char* preferred_regions);

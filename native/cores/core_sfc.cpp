@@ -27,7 +27,7 @@ auto loadSfc(ares::Node::System& root, const SystemDef&, const std::string& load
 auto memRead(uint32_t o) -> uint8_t { return ares::SuperFamicom::cpu.wram[o]; }
 auto memWrite(uint32_t o, uint8_t v) -> void { ares::SuperFamicom::cpu.wram[o] = v; }
 
-auto systemPak(const SystemDef&) -> std::shared_ptr<vfs::directory> {
+auto systemPak(const SystemDef&, const std::vector<uint8_t>&) -> std::shared_ptr<vfs::directory> {
     return SfcPakBuilder::makeSystemPak(
         EmbeddedFirmware::SfcIpl,    EmbeddedFirmware::SfcIplSize,
         EmbeddedFirmware::SfcBoards, EmbeddedFirmware::SfcBoardsSize);

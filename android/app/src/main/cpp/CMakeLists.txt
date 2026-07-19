@@ -274,6 +274,86 @@ set_target_properties(librashader PROPERTIES
 
 
 # ---------------------------------------------------------------------------
+# msx_core — Microsoft MSX (unity build via msx.cpp)
+#   tms9918/v9938 video + ay38910 sound (own copies where not in retro_ares);
+#   the Z80 and YM2413 live in retro_ares
+# ---------------------------------------------------------------------------
+add_library(msx_core STATIC
+    "${ARES_ROOT}/ares/msx/msx.cpp"
+    "${ARES_ROOT}/ares/component/video/tms9918/tms9918.cpp"
+    "${ARES_ROOT}/ares/component/video/v9938/v9938.cpp"
+    "${ARES_ROOT}/ares/component/audio/ay38910/ay38910.cpp"
+)
+target_include_directories(msx_core PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/stubs"
+    "${ARES_ROOT}/ares"
+)
+target_link_libraries(msx_core PUBLIC ares_iface)
+target_compile_definitions(msx_core PUBLIC CORE_MSX)
+
+# ---------------------------------------------------------------------------
+# ngp_core — SNK Neo Geo Pocket (unity build via ngp.cpp)
+#   tlcs900h — main CPU; t6w28 — sound (own copies); the Z80 is in retro_ares
+# ---------------------------------------------------------------------------
+add_library(ngp_core STATIC
+    "${ARES_ROOT}/ares/ngp/ngp.cpp"
+    "${PROC}/tlcs900h/tlcs900h.cpp"
+    "${ARES_ROOT}/ares/component/audio/t6w28/t6w28.cpp"
+)
+target_include_directories(ngp_core PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/stubs"
+    "${ARES_ROOT}/ares"
+)
+target_link_libraries(ngp_core PUBLIC ares_iface)
+target_compile_definitions(ngp_core PUBLIC CORE_NGP)
+
+# ---------------------------------------------------------------------------
+# gba_core — Game Boy Advance (unity build via gba.cpp)
+#   arm7tdmi — main CPU (own copy, like sfc_core's)
+#   s3511a   — cartridge RTC
+# ---------------------------------------------------------------------------
+add_library(gba_core STATIC
+    "${ARES_ROOT}/ares/gba/gba.cpp"
+    "${PROC}/arm7tdmi/arm7tdmi.cpp"
+    "${ARES_ROOT}/ares/component/rtc/s3511a/s3511a.cpp"
+)
+target_include_directories(gba_core PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/stubs"
+    "${ARES_ROOT}/ares"
+)
+target_link_libraries(gba_core PUBLIC ares_iface)
+target_compile_definitions(gba_core PUBLIC CORE_GBA)
+
+# ---------------------------------------------------------------------------
+# a26_core — Atari 2600 (unity build via a26.cpp)
+#   mos6502 — main CPU (own copy, like fc_core's — cores never share it)
+# ---------------------------------------------------------------------------
+add_library(a26_core STATIC
+    "${ARES_ROOT}/ares/a26/a26.cpp"
+    "${PROC}/mos6502/mos6502.cpp"
+)
+target_include_directories(a26_core PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/stubs"
+    "${ARES_ROOT}/ares"
+)
+target_link_libraries(a26_core PUBLIC ares_iface)
+target_compile_definitions(a26_core PUBLIC CORE_A26)
+
+# ---------------------------------------------------------------------------
+# ms_core — Sega Master System (unity build via ms.cpp; the Z80, SN76489 and
+# YM2413 all live in retro_ares)
+# ---------------------------------------------------------------------------
+add_library(ms_core STATIC
+    "${ARES_ROOT}/ares/ms/ms.cpp"
+)
+target_include_directories(ms_core PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/stubs"
+    "${ARES_ROOT}/ares"
+)
+target_link_libraries(ms_core PUBLIC ares_iface)
+target_compile_definitions(ms_core PUBLIC CORE_MS)
+
+# ---------------------------------------------------------------------------
 # sg_core — Sega SG-1000 (unity build via sg.cpp; the Z80 lives in retro_ares)
 #   tms9918 — VDP
 #   i8255   — PPI (SC-3000 keyboard)
@@ -341,6 +421,26 @@ add_library(retro_ares SHARED
     "${ARES_ROOT}/ares/component/audio/ym2149/ym2149.cpp"
     "${ARES_ROOT}/ares/component/audio/ym2612/ym2612.cpp"
     "${ARES_ROOT}/thirdparty/qon/qon.cpp"
+    "${ARES_ROOT}/thirdparty/TZXFile/TZXAudioGenerator.cpp"
+    "${ARES_ROOT}/thirdparty/TZXFile/TZXBlock.cpp"
+    "${ARES_ROOT}/thirdparty/TZXFile/TZXBlockArchiveInfo.cpp"
+    "${ARES_ROOT}/thirdparty/TZXFile/TZXBlockCustomInfo.cpp"
+    "${ARES_ROOT}/thirdparty/TZXFile/TZXBlockGroupEnd.cpp"
+    "${ARES_ROOT}/thirdparty/TZXFile/TZXBlockGroupStart.cpp"
+    "${ARES_ROOT}/thirdparty/TZXFile/TZXBlockHardwareType.cpp"
+    "${ARES_ROOT}/thirdparty/TZXFile/TZXBlockKansasCityStandard.cpp"
+    "${ARES_ROOT}/thirdparty/TZXFile/TZXBlockLoopEnd.cpp"
+    "${ARES_ROOT}/thirdparty/TZXFile/TZXBlockLoopStart.cpp"
+    "${ARES_ROOT}/thirdparty/TZXFile/TZXBlockMessage.cpp"
+    "${ARES_ROOT}/thirdparty/TZXFile/TZXBlockPause.cpp"
+    "${ARES_ROOT}/thirdparty/TZXFile/TZXBlockPulseSequence.cpp"
+    "${ARES_ROOT}/thirdparty/TZXFile/TZXBlockPureData.cpp"
+    "${ARES_ROOT}/thirdparty/TZXFile/TZXBlockPureTone.cpp"
+    "${ARES_ROOT}/thirdparty/TZXFile/TZXBlockStandardSpeedData.cpp"
+    "${ARES_ROOT}/thirdparty/TZXFile/TZXBlockStopTheTape48K.cpp"
+    "${ARES_ROOT}/thirdparty/TZXFile/TZXBlockTextDescription.cpp"
+    "${ARES_ROOT}/thirdparty/TZXFile/TZXBlockTurboSpeedData.cpp"
+    "${ARES_ROOT}/thirdparty/TZXFile/TZXFile.cpp"
     "${ARES_ROOT}/ares/component/flash/sst39sf0x0/sst39sf0x0.cpp"
     "${NATIVE_ROOT}/system_registry.cpp"
     "${NATIVE_ROOT}/save_io.cpp"
@@ -352,6 +452,7 @@ add_library(retro_ares SHARED
 target_include_directories(retro_ares PUBLIC
     "${ARES_ROOT}"
     "${ARES_ROOT}/ares"
+    "${ARES_ROOT}/thirdparty/TZXFile"
     "${NATIVE_ROOT}"
     "${NATIVE_ROOT}/pak"
     "${FIRMWARE_DIR}"
@@ -386,6 +487,11 @@ retro_core_module(fc)
 retro_core_module(gb)
 retro_core_module(md)
 retro_core_module(sg)
+retro_core_module(ms)
+retro_core_module(a26)
+retro_core_module(gba)
+retro_core_module(ngp)
+retro_core_module(msx)
 retro_core_module(pce)
 retro_core_module(ws)
 

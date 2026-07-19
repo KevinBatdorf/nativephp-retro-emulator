@@ -21,6 +21,7 @@ class AresCore {
         const val LOAD_OK = 1                  // booted and running
         const val LOAD_REJECTED = 0            // rejected pre-teardown; prior game untouched
         const val LOAD_FAILED_STOPPED = -1     // failed after teardown; emulator cleanly stopped
+        const val LOAD_BIOS_REQUIRED = -2      // system needs firmware; stage a biosPath first
     }
 
     init {
@@ -85,8 +86,12 @@ class AresCore {
      * embedded in the native library — no assets need to be provided.
      *
      * @param systemId One of [supportedSystems] (e.g. "sfc", "fc", "gb", "md").
+     * @param biosPath Dev-supplied firmware image for biosRequired systems
+     *                 (and optional ones like the Master System BIOS); null
+     *                 for systems whose firmware is embedded or unneeded.
      */
-    fun loadSystem(systemId: String): Boolean = nativeLoadSystem(systemId)
+    fun loadSystem(systemId: String, biosPath: String? = null): Boolean =
+        nativeLoadSystem(systemId, biosPath ?: "")
 
     /** Comma-separated ares system IDs compiled into this build (e.g. "fc,sfc,gb,md"). */
     fun supportedSystems(): String = nativeGetSupportedSystems()
@@ -394,7 +399,7 @@ class AresCore {
     private external fun nativeSetShader(path: String?): Boolean
     private external fun nativeScreenshotRGBA(): ByteArray?
 
-    private external fun nativeLoadSystem(systemId: String): Boolean
+    private external fun nativeLoadSystem(systemId: String, biosPath: String): Boolean
     private external fun nativeGetSupportedSystems(): String
     private external fun nativeGetSystemExtensions(systemId: String): String
 

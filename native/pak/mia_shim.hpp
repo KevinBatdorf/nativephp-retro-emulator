@@ -13,6 +13,12 @@
 
 #include <nall/nall.hpp>
 #include <nall/vfs.hpp>
+#include <nall/decode/wav.hpp>
+#include <nall/encode/wav.hpp>
+
+// MSX/tape mediums reference the TZX tape parser (real mia.cpp:3 includes it
+// the same way); the class implementation compiles alongside in retro_ares.
+#include <TZXFile.h>
 
 using namespace nall;
 
@@ -81,9 +87,13 @@ namespace mia {
 struct Pak {
   virtual ~Pak() = default;
   virtual auto name() -> string { return {}; }
+  // Real mia's pak.hpp:7 — GBA/GBC mediums override it for shared saves.
+  virtual auto saveName() -> string { return name(); }
   virtual auto extensions() -> std::vector<string> { return {}; }
   virtual auto load(string location = {}) -> LoadResult { return successful; }
   virtual auto save(string location = {}) -> bool { return true; }
+  // Tape-save path only (never taken through the analyze-only flow).
+  auto saveLocation(string, string, string) -> string { return {}; }
 
   // Game name derived from a file location (used in FDS/database manifests).
   auto name(string location) const -> string { return Location::prefix(location); }

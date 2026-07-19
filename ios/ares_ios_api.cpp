@@ -140,6 +140,10 @@ struct AresContext {
     // Battery-save location ("<prefix>.save.ram", …); empty disables persistence.
     std::string savePrefix;
 
+    // Dev-supplied firmware image (loadSystem biosPath), staged with the
+    // system; handed to makeSystemPak on every boot. Empty = none given.
+    std::vector<uint8_t> biosBytes;
+
     // Cheats — every ctx access is serialized by the Swift-side emuLock, so
     // the emulation loop never reads these while a bridge call mutates them.
     // `cheats` keeps per-code pairs so ares_remove_cheat(code) works;
@@ -375,6 +379,21 @@ static const std::unordered_map<std::string,
             // sub-ports (handled specially in applyConnectedDevices).
             {"Super Multitap", {{}, {}}},
         }},
+        {"ms", {
+            // Desktop wiring (master-system.cpp): Paddle is analog X + one
+            // button; Sports Pad is a trackball (relative X/Y, mouse-style).
+            {"Paddle", {{{"Button", 1u << 0}}, {"X-Axis"}}},
+            {"Sports Pad", {{{"1", 1u << 0}, {"2", 1u << 8}}, {"X", "Y"}}},
+            {"MD Control Pad", {{{"B", 1u << 0}, {"A", 1u << 1}, {"Start", 1u << 3},
+                                 {"Up", 1u << 4}, {"Down", 1u << 5}, {"Left", 1u << 6},
+                                 {"Right", 1u << 7}, {"C", 1u << 8}}, {}}},
+            {"MD Fighting Pad", {{{"B", 1u << 0}, {"A", 1u << 1}, {"Mode", 1u << 2},
+                                  {"Start", 1u << 3}, {"Up", 1u << 4}, {"Down", 1u << 5},
+                                  {"Left", 1u << 6}, {"Right", 1u << 7}, {"C", 1u << 8},
+                                  {"Y", 1u << 9}, {"X", 1u << 10}, {"Z", 1u << 11}}, {}}},
+            {"Mega Mouse", {{{"Left", 1u << 0}, {"Right", 1u << 1}, {"Middle", 1u << 2},
+                             {"Start", 1u << 3}}, {"X", "Y"}}},
+        }},
         {"pce", {
             // 6-button pad (avenuepad.cpp); shared names keep the gamepad's bits.
             {"Avenue Pad 6", {{{"II", 1u << 0}, {"Select", 1u << 2}, {"Run", 1u << 3},
@@ -532,6 +551,15 @@ static void applyConnectedDevices() {
             logical += 1;
         }
     }
+
+    // Console-level buttons (Master System Pause) live on the root's
+    // "Controls" node — cache them onto logical port 1 next to its gamepad.
+    if (!def.systemButtons.empty()) {
+        if (auto controls = NodeUtil::findByName<ares::Node::Object>(g_ctx->root, "Controls")) {
+            DeviceDescriptor sys; sys.buttons = def.systemButtons;
+            cacheDevice(controls, sys, 1);
+        }
+    }
     applyInputRemap();
 }
 
@@ -629,13 +657,25 @@ const char* ares_supported_systems(void) {
 // fresh system per game load with the region already known from the ROM
 // analysis (desktop-ui/emulator/emulator.cpp:40-60, super-famicom.cpp:125-126).
 
-bool ares_load_system(AresContext* ctx, const char* system_id) {
+bool ares_load_system(AresContext* ctx, const char* system_id, const char* bios_path) {
     if (!ctx || !system_id) return false;
 
     auto* def = SystemRegistry::find(system_id);
     if (!def) {
         fprintf(stderr, "ares_load_system: unsupported system '%s'\n", system_id);
         return false;
+    }
+
+    // Firmware travels with the staging: read the dev-supplied image now so
+    // ares_load_rom can gate biosRequired systems before any teardown starts.
+    ctx->biosBytes.clear();
+    if (bios_path && bios_path[0]) {
+        auto file = nall::file::read(nall::string(bios_path));
+        if (!file.empty()) {
+            ctx->biosBytes.assign(file.begin(), file.end());
+        } else {
+            fprintf(stderr, "ares_load_system: bios not readable '%s'\n", bios_path);
+        }
     }
 
     // Stage only — re-staging over a running core is legal; the running game
@@ -712,10 +752,15 @@ int ares_load_rom(AresContext* ctx, const uint8_t* rom, size_t rom_size,
         preferred_regions ? preferred_regions : "");
     auto loadName = SystemRegistry::loadNameFor(*def, region);
 
+    if (def->biosRequired && ctx->biosBytes.empty()) {
+        fprintf(stderr, "ares_load_rom: %s requires firmware — stage a biosPath first\n", def->id.c_str());
+        return -2;   // BIOS_REQUIRED, pre-teardown: a running game is untouched
+    }
+
     // Fresh core per game, like desktop.
     if (ctx->systemLoaded) unloadCore(ctx);
 
-    ctx->systemPak = def->makeSystemPak(*def);
+    ctx->systemPak = def->makeSystemPak(*def, ctx->biosBytes);
     if (!def->load(ctx->root, *def, loadName)) {
         fprintf(stderr, "ares_load_rom: ares load failed: %s\n", loadName.c_str());
         unloadCore(ctx);
@@ -784,6 +829,15 @@ int ares_load_rom(AresContext* ctx, const uint8_t* rom, size_t rom_size,
         slot->connect();
         ctx->slotConnected[i] = (bool)NodeUtil::connected(slot);
         ctx->stagedSlot[i].clear();   // pak copied the bytes
+    }
+
+    // Ports desktop connects unconditionally after the cartridge (the Master
+    // System's FM Sound Unit, the MSX's keyboard); games probe for them.
+    for (auto& [portName, deviceName] : def->extraPorts) {
+        if (auto extra = NodeUtil::findByName<ares::Node::Port>(ctx->root, portName.c_str())) {
+            extra->allocate(deviceName.c_str());
+            extra->connect();
+        }
     }
 
     ctx->root->power(false);

@@ -17,7 +17,7 @@ auto loadSg(ares::Node::System& root, const SystemDef&, const std::string& loadN
 auto memRead(uint32_t o) -> uint8_t { return (uint8_t)ares::SG1000::cpu.ram[o]; }
 auto memWrite(uint32_t o, uint8_t v) -> void { ares::SG1000::cpu.ram[o] = v; }
 
-auto systemPak(const SystemDef& def) -> std::shared_ptr<vfs::directory> {
+auto systemPak(const SystemDef& def, const std::vector<uint8_t>&) -> std::shared_ptr<vfs::directory> {
     return MultiPak::makeSystemPak(def.id);
 }
 

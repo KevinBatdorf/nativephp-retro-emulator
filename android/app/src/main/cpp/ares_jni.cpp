@@ -161,6 +161,10 @@ struct EmulatorState {
     // empty disables persistence.
     std::string savePrefix;
 
+    // Dev-supplied firmware image (LoadSystem biosPath), staged with the
+    // system; handed to makeSystemPak on every boot. Empty = none given.
+    std::vector<uint8_t> biosBytes;
+
     // Port info JSON built once during nativeLoadSystem; read-only afterward.
     std::string portsJson;
 
@@ -441,6 +445,21 @@ static const std::unordered_map<std::string,
             // sub-ports (handled specially in applyConnectedDevices).
             {"Super Multitap", {{}, {}}},
         }},
+        {"ms", {
+            // Desktop wiring (master-system.cpp): Paddle is analog X + one
+            // button; Sports Pad is a trackball (relative X/Y, mouse-style).
+            {"Paddle", {{{"Button", 1u << 0}}, {"X-Axis"}}},
+            {"Sports Pad", {{{"1", 1u << 0}, {"2", 1u << 8}}, {"X", "Y"}}},
+            {"MD Control Pad", {{{"B", 1u << 0}, {"A", 1u << 1}, {"Start", 1u << 3},
+                                 {"Up", 1u << 4}, {"Down", 1u << 5}, {"Left", 1u << 6},
+                                 {"Right", 1u << 7}, {"C", 1u << 8}}, {}}},
+            {"MD Fighting Pad", {{{"B", 1u << 0}, {"A", 1u << 1}, {"Mode", 1u << 2},
+                                  {"Start", 1u << 3}, {"Up", 1u << 4}, {"Down", 1u << 5},
+                                  {"Left", 1u << 6}, {"Right", 1u << 7}, {"C", 1u << 8},
+                                  {"Y", 1u << 9}, {"X", 1u << 10}, {"Z", 1u << 11}}, {}}},
+            {"Mega Mouse", {{{"Left", 1u << 0}, {"Right", 1u << 1}, {"Middle", 1u << 2},
+                             {"Start", 1u << 3}}, {"X", "Y"}}},
+        }},
         {"pce", {
             // 6-button pad (avenuepad.cpp); shared names keep the gamepad's bits.
             {"Avenue Pad 6", {{{"II", 1u << 0}, {"Select", 1u << 2}, {"Run", 1u << 3},
@@ -595,6 +614,15 @@ static void applyConnectedDevices() {
                 cacheDevice(port, desc, logical);
             }
             logical += 1;
+        }
+    }
+
+    // Console-level buttons (Master System Pause) live on the root's
+    // "Controls" node — cache them onto logical port 1 next to its gamepad.
+    if (!def.systemButtons.empty()) {
+        if (auto controls = NodeUtil::findByName<ares::Node::Object>(g_state->root, "Controls")) {
+            DeviceDescriptor sys; sys.buttons = def.systemButtons;
+            cacheDevice(controls, sys, 1);
         }
     }
     applyInputRemap();
@@ -786,7 +814,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeScreenshotRGBA(
 
 JNIEXPORT jboolean JNICALL
 Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadSystem(
-    JNIEnv* env, jobject, jstring systemIdStr)
+    JNIEnv* env, jobject, jstring systemIdStr, jstring biosPathStr)
 {
     if (!g_state) return JNI_FALSE;
 
@@ -795,6 +823,20 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadSystem(
     if (!def) {
         LOGE("unsupported system: %s", systemId.c_str());
         return JNI_FALSE;
+    }
+
+    // Firmware travels with the staging: read the dev-supplied image now so
+    // LoadRom can gate biosRequired systems before any teardown starts.
+    g_state->biosBytes.clear();
+    auto biosPath = jstringToString(env, biosPathStr);
+    if (!biosPath.empty()) {
+        auto file = nall::file::read(nall::string(biosPath.c_str()));
+        if (!file.empty()) {
+            g_state->biosBytes.assign(file.begin(), file.end());
+            LOGI("bios staged: %s (%zu bytes)", biosPath.c_str(), g_state->biosBytes.size());
+        } else {
+            LOGE("bios not readable: %s", biosPath.c_str());
+        }
     }
 
     // Stage only — re-staging over a running core is legal; the running game
@@ -913,10 +955,15 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadRom(
     LOGI("ROM: title='%s' regions='%s' → boot '%s'",
          built.title.c_str(), built.region.c_str(), loadName.c_str());
 
+    if (def->biosRequired && g_state->biosBytes.empty()) {
+        LOGE("nativeLoadRom: %s requires firmware — stage a biosPath first", def->id.c_str());
+        return -2;   // BIOS_REQUIRED, pre-teardown: a running game is untouched
+    }
+
     // Fresh core per game, like desktop.
     if (g_state->systemLoaded) unloadCore();
 
-    g_state->systemPak = def->makeSystemPak(*def);
+    g_state->systemPak = def->makeSystemPak(*def, g_state->biosBytes);
     if (!def->load(g_state->root, *def, loadName)) {
         LOGE("ares load failed: %s", loadName.c_str());
         unloadCore();
@@ -988,6 +1035,15 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadRom(
         LOGI("slot '%s' connected=%d (%zu bytes)",
              slots[i].port, g_state->slotConnected[i] ? 1 : 0, g_state->stagedSlot[i].size());
         g_state->stagedSlot[i].clear();   // pak copied the bytes
+    }
+
+    // Ports desktop connects unconditionally after the cartridge (the Master
+    // System's FM Sound Unit, the MSX's keyboard); games probe for them.
+    for (auto& [portName, deviceName] : def->extraPorts) {
+        if (auto extra = NodeUtil::findByName<ares::Node::Port>(g_state->root, portName.c_str())) {
+            extra->allocate(deviceName.c_str());
+            extra->connect();
+        }
     }
 
     g_state->root->power(false);

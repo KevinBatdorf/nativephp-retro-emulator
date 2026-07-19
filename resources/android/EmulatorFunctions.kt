@@ -338,7 +338,7 @@ object EmulatorFunctions {
                 .mapNotNull { key -> (config[key] as? Boolean)?.let { key to it } }
                 .toMap()
             if (coreToggles.isNotEmpty()) renderer.queueCoreOptions(coreToggles)
-            renderer.queueSystemLoad(system)
+            renderer.queueSystemLoad(system, config["biosPath"] as? String)
 
             Log.d(TAG, "LoadSystem: staged system=$system")
             return BridgeResponse.success(mapOf("status" to "staged", "system" to system))
@@ -1172,12 +1172,12 @@ object EmulatorFunctions {
                 system("n64", "Nintendo 64",                  biosRequired = false, stable = true,  compiled),
                 system("gb",  "Game Boy",                     biosRequired = false, stable = true,  compiled),
                 system("gbc", "Game Boy Color",               biosRequired = false, stable = true,  compiled),
-                system("gba", "Game Boy Advance",             biosRequired = false, stable = true,  compiled),
+                system("gba", "Game Boy Advance",             biosRequired = true,  stable = true,  compiled),
                 system("sg",  "Sega SG-1000",                 biosRequired = false, stable = true,  compiled),
                 system("ms",  "Sega Master System",           biosRequired = false, stable = true,  compiled),
                 system("md",  "Sega Mega Drive / Genesis",    biosRequired = false, stable = true,  compiled),
                 system("pce", "PC Engine / TurboGrafx-16",    biosRequired = false, stable = true,  compiled),
-                system("ngp", "Neo Geo Pocket",               biosRequired = false, stable = true,  compiled),
+                system("ngp", "Neo Geo Pocket",               biosRequired = true,  stable = true,  compiled),
                 system("ws",  "WonderSwan",                   biosRequired = false, stable = true,  compiled),
                 system("ps1", "PlayStation",                  biosRequired = true,  stable = false, compiled),
                 system("ng",  "Neo Geo AES / MVS",            biosRequired = true,  stable = false, compiled),

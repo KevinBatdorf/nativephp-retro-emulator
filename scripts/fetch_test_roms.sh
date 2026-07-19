@@ -9,6 +9,9 @@
 #   cherilperils.sg   — Mojon Twins "Cheril Perils Classic" SG-1000 (LGPL-3.0)
 #   helloworld.pce    — krom (Peter Lemon) PC Engine HelloWorld (public domain)
 #   spritepriority.ws — Robert Peip's WonderSwan sprite test (GPL-2.0)
+#   sprite.sms        — krom (Peter Lemon) Master System sprite test (public domain)
+#   cgb-acid2.gbc     — Matt Currie's Game Boy Color PPU test (MIT)
+#   pipes.a26         — albf's Pipes 2600 homebrew (MIT)
 set -euo pipefail
 
 DEST="$(cd "$(dirname "$0")/.." && pwd)/tests/roms"
@@ -31,5 +34,8 @@ fetch helloworld.md     "https://raw.githubusercontent.com/Stephane-D/SGDK/maste
 fetch cherilperils.sg   "https://raw.githubusercontent.com/mojontwins/loves_the_sg1000/master/examples/cheril_perils_ntsc.sg"
 fetch helloworld.pce    "https://raw.githubusercontent.com/PeterLemon/PCE/master/VDC/HelloWorld/HelloWorld.pce"
 fetch spritepriority.ws "https://raw.githubusercontent.com/MiSTer-devel/WonderSwan_MiSTer/main/testroms/spritepriority/spritepriority.ws"
+fetch sprite.sms        "https://raw.githubusercontent.com/PeterLemon/SMS/master/VDP/Sprite/Sprite.sms"
+fetch cgb-acid2.gbc     "https://github.com/mattcurrie/cgb-acid2/releases/download/v1.1/cgb-acid2.gbc"
+fetch pipes.a26         "https://raw.githubusercontent.com/albf/pipes-2600/master/pipe2600.bin"
 
 ls -la "$DEST"

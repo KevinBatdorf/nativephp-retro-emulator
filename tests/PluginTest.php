@@ -1,9 +1,14 @@
 <?php
 
 use KevinBatdorf\RetroEmulator\AspectCorrection;
+use KevinBatdorf\RetroEmulator\Buttons\A26Button;
 use KevinBatdorf\RetroEmulator\Buttons\FcButton;
+use KevinBatdorf\RetroEmulator\Buttons\GbaButton;
 use KevinBatdorf\RetroEmulator\Buttons\GbButton;
 use KevinBatdorf\RetroEmulator\Buttons\MdButton;
+use KevinBatdorf\RetroEmulator\Buttons\MsButton;
+use KevinBatdorf\RetroEmulator\Buttons\MsxButton;
+use KevinBatdorf\RetroEmulator\Buttons\NgpButton;
 use KevinBatdorf\RetroEmulator\Buttons\PceButton;
 use KevinBatdorf\RetroEmulator\Buttons\SfcButton;
 use KevinBatdorf\RetroEmulator\Buttons\SgButton;
@@ -581,7 +586,15 @@ describe('Typed layer', function () {
         );
         expect($m)->not->toBe([], "no .buttons block found for '{$systemId}'");
 
-        preg_match_all('/\{"([^"]+)",/', $m[1], $names);
+        // Console-level buttons (Master System Pause) are part of the same
+        // pressable surface, declared in a sibling .systemButtons block.
+        preg_match(
+            '/\.id\s*=\s*"'.$systemId.'".*?\.systemButtons\s*=\s*\{(.*?)\n\s*\},/s',
+            $registry,
+            $sys,
+        );
+
+        preg_match_all('/\{"([^"]+)",/', $m[1].($sys[1] ?? ''), $names);
         $native = $names[1];
         $enum = array_map(fn ($case) => $case->value, $enumClass::cases());
 
@@ -594,6 +607,11 @@ describe('Typed layer', function () {
         ['gb', GbButton::class],
         ['md', MdButton::class],
         ['sg', SgButton::class],
+        ['ms', MsButton::class],
+        ['a26', A26Button::class],
+        ['gba', GbaButton::class],
+        ['ngp', NgpButton::class],
+        ['msx', MsxButton::class],
         ['pce', PceButton::class],
         ['ws', WsButton::class],
     ]);

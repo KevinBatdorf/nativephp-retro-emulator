@@ -29,7 +29,10 @@ struct CartridgeResult {
 // fc: empty pak — the Famicom needs no system files.
 // gb: boot.rom (DMG boot ROM).
 // md: tmss.rom (TMSS boot ROM; only read when the TMSS setting is enabled).
-auto makeSystemPak(const std::string& systemId) -> std::shared_ptr<nall::vfs::directory>;
+// bios: dev-supplied firmware image (empty = none) — the Master System
+// appends it as bios.rom; embedded-firmware systems ignore it.
+auto makeSystemPak(const std::string& systemId,
+                   const std::vector<u8>& bios = {}) -> std::shared_ptr<nall::vfs::directory>;
 
 // Analyze a raw ROM image with mia's header analyzer for the given system and
 // assemble the cartridge pak in memory. Save RAM/EEPROM are appended as

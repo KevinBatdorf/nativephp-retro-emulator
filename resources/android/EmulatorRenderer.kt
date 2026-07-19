@@ -98,6 +98,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
 
     // Pending commands posted from the main thread and consumed on the GL thread.
     @Volatile var pendingSystemId: String?    = null
+    @Volatile var pendingBiosPath: String?    = null
     @Volatile var pendingRomBytes: ByteArray? = null
     @Volatile var pendingSavePrefix: String?  = null
 
@@ -329,7 +330,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
                 // Consume on success too: a stale request left behind would
                 // silently re-stage on the frame after a stop.
                 pendingSystemId = null
-                systemStaged = core.loadSystem(systemId)
+                systemStaged = core.loadSystem(systemId, pendingBiosPath)
                 if (!systemStaged) Log.e(TAG, "loadSystem($systemId) failed")
             }
 
@@ -359,6 +360,11 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
                         // Pre-teardown rejection: a running game is untouched.
                         Log.e(TAG, "loadRom rejected — prior state kept")
                         eventListener?.onError("LOAD_FAILED", "ROM rejected by analyzer")
+                    }
+                    AresCore.LOAD_BIOS_REQUIRED -> {
+                        Log.e(TAG, "loadRom rejected — system firmware missing")
+                        eventListener?.onError("BIOS_REQUIRED",
+                            "this system needs firmware — pass biosPath in the LoadSystem config")
                     }
                     AresCore.LOAD_FAILED_STOPPED -> {
                         romLoaded = false
@@ -555,8 +561,9 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
      * legal and leaves the running game untouched until the next ROM load.
      * @param systemId ares system ID — one of [AresCore.supportedSystems].
      */
-    fun queueSystemLoad(systemId: String) {
+    fun queueSystemLoad(systemId: String, biosPath: String? = null) {
         stagedSystemId = systemId
+        pendingBiosPath = biosPath
         pendingSystemId = systemId
         requestRender()
     }
