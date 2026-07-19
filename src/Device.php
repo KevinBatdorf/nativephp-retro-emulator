@@ -15,6 +15,4 @@ enum Device: string
     case SuperScope = 'Super Scope';
     case Justifier = 'Justifier';
     case SuperMultitap = 'Super Multitap';
-    case AvenuePad6 = 'Avenue Pad 6';
-    case Multitap = 'Multitap';
 }

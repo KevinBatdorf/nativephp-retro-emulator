@@ -102,10 +102,13 @@ marking the core experimental. Per-system game compatibility:
 |---|---|---|---|
 | NES / Famicom | `fc` | ✅ | |
 | SNES / Super Famicom | `sfc` | ✅ | Full feature set, incl. peripherals + slotted media |
-| Game Boy | `gb` | ✅ | |
+| Game Boy / Game Boy Color | `gb` / `gbc` | ✅ | |
+| Game Boy Advance | `gba` | ✅ | Needs a GBA BIOS via `biosPath` |
 | Mega Drive / Genesis | `md` | ✅ | |
-| N64, GBA, SG-1000, Master System, PC Engine, Neo Geo Pocket, WonderSwan, … | | ⏳ | Arriving system by system |
-| PlayStation, Neo Geo, Atari 2600, MSX | | ⏳ | Experimental in ares (`stable: false`) |
+| PlayStation (`ps1`), Nintendo 64 (`n64`) | | ⏳ | In development |
+
+Other ares systems appear in `Emulator::systems()` with `supported: false` —
+they aren't compiled into the shipped binaries.
 
 ## BIOS files
 
@@ -115,14 +118,8 @@ MD TMSS) is embedded, so the compiled systems need nothing today.
 
 | System | Firmware via `biosPath` |
 |---|---|
-| PlayStation | SCPH BIOS |
 | GBA | `bios.bin` |
-| Mega CD | per-region BIOS |
-| PC Engine CD | System Card |
-| Saturn | per-region BIOS |
-| Neo Geo | `neogeo.zip` BIOS set |
-| Famicom Disk System | `disksys.rom` |
-| ColecoVision | `coleco.rom` |
+| PlayStation (when it lands) | SCPH BIOS |
 
 Sourcing BIOS files is your responsibility — dump them from hardware you own.
 Collections exist online (e.g. on archive.org); their legality varies by

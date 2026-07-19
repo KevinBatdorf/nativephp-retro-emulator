@@ -13,6 +13,10 @@
 # Private local working files — never tracked
 .claude/
 
+# Dev-supplied firmware + commercial ROMs — banned from the repo by policy,
+# kept local-only for on-device verification
+/local/
+
 # Android
 android/local.properties
 android/.gradle/

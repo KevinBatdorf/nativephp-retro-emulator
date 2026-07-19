@@ -445,29 +445,6 @@ static const std::unordered_map<std::string,
             // sub-ports (handled specially in applyConnectedDevices).
             {"Super Multitap", {{}, {}}},
         }},
-        {"ms", {
-            // Desktop wiring (master-system.cpp): Paddle is analog X + one
-            // button; Sports Pad is a trackball (relative X/Y, mouse-style).
-            {"Paddle", {{{"Button", 1u << 0}}, {"X-Axis"}}},
-            {"Sports Pad", {{{"1", 1u << 0}, {"2", 1u << 8}}, {"X", "Y"}}},
-            {"MD Control Pad", {{{"B", 1u << 0}, {"A", 1u << 1}, {"Start", 1u << 3},
-                                 {"Up", 1u << 4}, {"Down", 1u << 5}, {"Left", 1u << 6},
-                                 {"Right", 1u << 7}, {"C", 1u << 8}}, {}}},
-            {"MD Fighting Pad", {{{"B", 1u << 0}, {"A", 1u << 1}, {"Mode", 1u << 2},
-                                  {"Start", 1u << 3}, {"Up", 1u << 4}, {"Down", 1u << 5},
-                                  {"Left", 1u << 6}, {"Right", 1u << 7}, {"C", 1u << 8},
-                                  {"Y", 1u << 9}, {"X", 1u << 10}, {"Z", 1u << 11}}, {}}},
-            {"Mega Mouse", {{{"Left", 1u << 0}, {"Right", 1u << 1}, {"Middle", 1u << 2},
-                             {"Start", 1u << 3}}, {"X", "Y"}}},
-        }},
-        {"pce", {
-            // 6-button pad (avenuepad.cpp); shared names keep the gamepad's bits.
-            {"Avenue Pad 6", {{{"II", 1u << 0}, {"Select", 1u << 2}, {"Run", 1u << 3},
-                               {"Up", 1u << 4}, {"Down", 1u << 5}, {"Left", 1u << 6},
-                               {"Right", 1u << 7}, {"I", 1u << 8}, {"III", 1u << 9},
-                               {"IV", 1u << 10}, {"V", 1u << 11}, {"VI", 1u << 12}}, {}}},
-            {"Multitap", {{}, {}}},
-        }},
     };
     return t;
 }
@@ -503,7 +480,6 @@ struct MultitapInfo { const char* name; int block; };
 static const MultitapInfo* multitapInfo(const std::string& systemId) {
     static const std::unordered_map<std::string, MultitapInfo> t = {
         {"sfc", {"Super Multitap", 4}},
-        {"pce", {"Multitap", 5}},
     };
     auto it = t.find(systemId);
     return it == t.end() ? nullptr : &it->second;

@@ -15,13 +15,7 @@ import java.io.File
  *   adb push tests/roms/helloworld.sfc     /data/local/tmp/test-sfc.rom
  *   adb push tests/roms/dmg-acid2.gb       /data/local/tmp/test-gb.rom
  *   adb push tests/roms/helloworld.md      /data/local/tmp/test-md.rom
- *   adb push tests/roms/cherilperils.sg    /data/local/tmp/test-sg.rom
- *   adb push tests/roms/sprite.sms         /data/local/tmp/test-ms.rom
  *   adb push tests/roms/cgb-acid2.gbc      /data/local/tmp/test-gbc.rom
- *   adb push tests/roms/pipes.a26          /data/local/tmp/test-a26.rom
- *   adb push tests/roms/helloworld.pce     /data/local/tmp/test-pce.rom
- *   adb push tests/roms/spritepriority.ws  /data/local/tmp/test-ws.rom
- *   adb push tests/roms/chips1.wsc         /data/local/tmp/test-wsc.rom
  *
  * All ares calls stay on the test thread — libco requires the same thread
  * from loadSystem() onward.
@@ -49,16 +43,6 @@ class Phase11MultiSystemTest {
         SystemCase("gb",  "/data/local/tmp/test-gb.rom",  0xC000,   false),
         SystemCase("gbc", "/data/local/tmp/test-gbc.rom", 0xC000,   false),
         SystemCase("md",  "/data/local/tmp/test-md.rom",  0xFF0000, false),
-        SystemCase("sg",  "/data/local/tmp/test-sg.rom",  0xC000,   true),
-        SystemCase("ms",  "/data/local/tmp/test-ms.rom",  0xC000,   false),
-        // helloworld.pce runs stackless out of registers — no RAM guarantee
-        // (0x2100 is the HuC6280 stack page; a real game would write it).
-        SystemCase("pce", "/data/local/tmp/test-pce.rom", 0x2100,   false),
-        // The WS boot splash outlasts 120 frames before the game touches iram.
-        SystemCase("ws",  "/data/local/tmp/test-ws.rom",  0x0000,   false),
-        SystemCase("wsc", "/data/local/tmp/test-wsc.rom", 0x0000,   false),
-        // 2600 zero page IS the RIOT RAM — any running game writes it.
-        SystemCase("a26", "/data/local/tmp/test-a26.rom", 0x80,     true),
     )
 
     @Test
@@ -102,9 +86,9 @@ class Phase11MultiSystemTest {
 
     @Test
     fun biosRequiredSystemsRejectRomWithoutFirmware() {
-        // gba/ngp/msx ship as biosPath-honest defs: staging works, but LoadRom
+        // gba ships as a biosPath-honest def: staging works, but LoadRom
         // must refuse pre-teardown until a dev supplies firmware.
-        for (id in listOf("gba", "ngp", "msx")) {
+        for (id in listOf("gba")) {
             val core = AresCore()
             try {
                 assert(core.init()) { "$id: init failed" }

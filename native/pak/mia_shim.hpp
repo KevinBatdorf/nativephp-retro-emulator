@@ -16,14 +16,10 @@
 #include <nall/decode/wav.hpp>
 #include <nall/encode/wav.hpp>
 
-// MSX/tape mediums reference the TZX tape parser (real mia.cpp:3 includes it
-// the same way); the class implementation compiles alongside in retro_ares.
-#include <TZXFile.h>
-
 using namespace nall;
 
-// Real mia gets n1..n64/i*/u* via <ares/ares.hpp>; some mediums (sg-1000)
-// use them, so pull in just the alias header.
+// Real mia gets n1..n64/i*/u* via <ares/ares.hpp>; some mediums use them,
+// so pull in just the alias header.
 #include <ares/ares/types.hpp>
 
 // Free operator+= for nall::string, exactly as mia/mia.cpp defines it — the

@@ -21,8 +21,6 @@ BLOBS = [
     ("GbBootCgb1", "mia/Firmware/Game Boy Color/boot.cgb-1.rom"),
     ("MdTmss",     "mia/Firmware/Mega Drive/tmss.rom"),
     ("MdSvp",      "mia/Firmware/Mega Drive/svp.rom"),
-    ("WsBoot",     "mia/Firmware/WonderSwan/boot.rom"),
-    ("WscBoot",    "mia/Firmware/WonderSwan Color/boot.rom"),
 ]
 
 

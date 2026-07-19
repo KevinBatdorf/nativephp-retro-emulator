@@ -1,27 +1,17 @@
 <?php
 
 use KevinBatdorf\RetroEmulator\AspectCorrection;
-use KevinBatdorf\RetroEmulator\Buttons\A26Button;
 use KevinBatdorf\RetroEmulator\Buttons\FcButton;
 use KevinBatdorf\RetroEmulator\Buttons\GbaButton;
 use KevinBatdorf\RetroEmulator\Buttons\GbButton;
 use KevinBatdorf\RetroEmulator\Buttons\MdButton;
-use KevinBatdorf\RetroEmulator\Buttons\MsButton;
-use KevinBatdorf\RetroEmulator\Buttons\MsxButton;
-use KevinBatdorf\RetroEmulator\Buttons\NgpButton;
-use KevinBatdorf\RetroEmulator\Buttons\PceButton;
 use KevinBatdorf\RetroEmulator\Buttons\SfcButton;
-use KevinBatdorf\RetroEmulator\Buttons\SgButton;
-use KevinBatdorf\RetroEmulator\Buttons\WsButton;
 use KevinBatdorf\RetroEmulator\Components\Emulator as EmulatorComponent;
 use KevinBatdorf\RetroEmulator\Config\Config;
 use KevinBatdorf\RetroEmulator\Config\GbConfig;
 use KevinBatdorf\RetroEmulator\Config\MdConfig;
-use KevinBatdorf\RetroEmulator\Config\PceConfig;
 use KevinBatdorf\RetroEmulator\Config\RegionalSystemConfig;
 use KevinBatdorf\RetroEmulator\Config\SfcConfig;
-use KevinBatdorf\RetroEmulator\Config\SgConfig;
-use KevinBatdorf\RetroEmulator\Config\WsConfig;
 use KevinBatdorf\RetroEmulator\Controller;
 use KevinBatdorf\RetroEmulator\Device;
 use KevinBatdorf\RetroEmulator\Elements\Emulator as EmulatorElement;
@@ -617,15 +607,7 @@ describe('Typed layer', function () {
         ['gb', GbButton::class],
         ['gbc', GbButton::class],
         ['md', MdButton::class],
-        ['sg', SgButton::class],
-        ['ms', MsButton::class],
-        ['a26', A26Button::class],
         ['gba', GbaButton::class],
-        ['ngp', NgpButton::class],
-        ['msx', MsxButton::class],
-        ['pce', PceButton::class],
-        ['ws', WsButton::class],
-        ['wsc', WsButton::class],
     ]);
 
     it('system enum matches the ids GetSystems reports', function () {
@@ -683,22 +665,6 @@ describe('Typed layer', function () {
             'colorEmulation' => true,
             'interframeBlending' => true,
         ]);
-    });
-
-    it('WsConfig carries the WonderSwan display toggles', function () {
-        $config = new WsConfig(colorEmulation: true, interframeBlending: true, showIcons: true);
-
-        expect($config->toArray())->toBe([
-            'colorEmulation' => true,
-            'interframeBlending' => true,
-            'showIcons' => true,
-        ]);
-    });
-
-    it('the regional SgConfig and PceConfig expose region knobs', function () {
-        expect(is_subclass_of(SgConfig::class, RegionalSystemConfig::class))->toBeTrue()
-            ->and(is_subclass_of(PceConfig::class, RegionalSystemConfig::class))->toBeTrue()
-            ->and(is_subclass_of(WsConfig::class, RegionalSystemConfig::class))->toBeFalse();
     });
 
     it('the global Config serializes shared knobs as wire values', function () {

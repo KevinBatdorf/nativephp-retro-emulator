@@ -156,51 +156,6 @@ static auto assembleMegaDrive(Markup::Node document, string& manifest,
     return pak;
 }
 
-// --- SG-1000 / PC Engine / WonderSwan — simple linear cartridges, mirroring
-// --- their mia/medium load() bodies ------------------------------------------
-static auto assembleSG1000(Markup::Node document, string& manifest,
-                           std::vector<u8>& rom) -> std::shared_ptr<vfs::directory> {
-    auto pak = std::make_shared<vfs::directory>();
-    pak->setAttribute("board",  document["game/board"].string());
-    pak->setAttribute("title",  document["game/title"].string());
-    pak->setAttribute("region", document["game/region"].string());
-    pak->setAttribute("expansionRam",
-        document["game/board/memory(type=RAM,content=Expansion)/size"].integer());
-    pak->append("manifest.bml", manifest);
-    pak->append("program.rom",  rom);
-    if(auto node = document["game/board/memory(type=RAM,content=Save)"]) {
-        appendMemory(pak, node);
-    }
-    return pak;
-}
-
-static auto assembleMasterSystem(Markup::Node document, string& manifest,
-                                 std::vector<u8>& rom) -> std::shared_ptr<vfs::directory> {
-    auto pak = std::make_shared<vfs::directory>();
-    pak->setAttribute("board",     document["game/board"].string());
-    pak->setAttribute("title",     document["game/title"].string());
-    pak->setAttribute("region",    document["game/region"].string());
-    pak->setAttribute("paddle",    (bool)document["game/paddle"]);
-    pak->setAttribute("sportspad", (bool)document["game/sportspad"]);
-    pak->append("manifest.bml", manifest);
-    pak->append("program.rom",  rom);
-    if(auto node = document["game/board/memory(type=RAM,content=Save)"]) {
-        appendMemory(pak, node);
-    }
-    return pak;
-}
-
-static auto assembleAtari2600(Markup::Node document, string& manifest,
-                              std::vector<u8>& rom) -> std::shared_ptr<vfs::directory> {
-    auto pak = std::make_shared<vfs::directory>();
-    pak->setAttribute("title",  document["game/title"].string());
-    pak->setAttribute("region", document["game/region"].string());
-    pak->setAttribute("board",  document["game/board"].string());
-    pak->append("manifest.bml", manifest);
-    pak->append("program.rom",  rom);
-    return pak;
-}
-
 static auto assembleGameBoyAdvance(Markup::Node document, string& manifest,
                                    std::vector<u8>& rom) -> std::shared_ptr<vfs::directory> {
     auto pak = std::make_shared<vfs::directory>();
@@ -218,62 +173,6 @@ static auto assembleGameBoyAdvance(Markup::Node document, string& manifest,
     return pak;
 }
 
-static auto assembleNeoGeoPocket(Markup::Node document, string& manifest,
-                                 std::vector<u8>& rom) -> std::shared_ptr<vfs::directory> {
-    auto pak = std::make_shared<vfs::directory>();
-    pak->setAttribute("title", document["game/title"].string());
-    pak->append("manifest.bml",  manifest);
-    // NGP carts are flash — writable in place, persisted as one .sav image.
-    pak->append("program.flash", rom);
-    return pak;
-}
-
-static auto assembleMSX(Markup::Node document, string& manifest,
-                        std::vector<u8>& rom) -> std::shared_ptr<vfs::directory> {
-    auto pak = std::make_shared<vfs::directory>();
-    pak->setAttribute("title",  document["game/title"].string());
-    pak->setAttribute("region", document["game/region"].string());
-    pak->setAttribute("board",  document["game/board"].string());
-    pak->setAttribute("vauspaddle", (bool)document["game/vauspaddle"]);
-    pak->append("manifest.bml", manifest);
-    pak->append("program.rom",  rom);
-    return pak;
-}
-
-static auto assemblePCEngine(Markup::Node document, string& manifest,
-                             std::vector<u8>& rom) -> std::shared_ptr<vfs::directory> {
-    auto pak = std::make_shared<vfs::directory>();
-    pak->setAttribute("title",  document["game/title"].string());
-    pak->setAttribute("region", document["game/region"].string());
-    pak->setAttribute("board",  document["game/board"].string());
-    pak->append("manifest.bml", manifest);
-    pak->append("program.rom",  rom);
-    if(auto node = document["game/board/memory(type=RAM,content=Save)"])    appendMemory(pak, node);
-    if(auto node = document["game/board/memory(type=RAM,content=Dynamic)"]) appendMemory(pak, node);
-    if(auto node = document["game/board/memory(type=RAM,content=Work)"])    appendMemory(pak, node);
-    return pak;
-}
-
-static auto assembleWonderSwan(Markup::Node document, string& manifest,
-                               std::vector<u8>& rom) -> std::shared_ptr<vfs::directory> {
-    auto pak = std::make_shared<vfs::directory>();
-    pak->setAttribute("title",       document["game/title"].string());
-    pak->setAttribute("orientation", document["game/orientation"].string());
-    pak->setAttribute("board",       document["game/board"].string());
-    pak->setAttribute("width",
-        document["game/board/memory(content=Program)/width"].string());
-    pak->append("manifest.bml", manifest);
-    if(document["game/board/memory(type=Flash,content=Program)"]) {
-        pak->append("program.flash", rom);
-    } else {
-        pak->append("program.rom", rom);
-    }
-    if(auto node = document["game/board/memory(type=RAM,content=Save)"])    appendMemory(pak, node);
-    if(auto node = document["game/board/memory(type=EEPROM,content=Save)"]) appendMemory(pak, node);
-    if(auto node = document["game/board/memory(type=RTC,content=Time)"])    appendMemory(pak, node);
-    return pak;
-}
-
 auto makeSystemPak(const std::string& systemId,
                    const std::vector<u8>& bios) -> std::shared_ptr<vfs::directory> {
     auto pak = std::make_shared<vfs::directory>();
@@ -286,39 +185,11 @@ auto makeSystemPak(const std::string& systemId,
     } else if(systemId == "md") {
         pak->append("tmss.rom", std::span<const u8>(
             EmbeddedFirmware::MdTmss, EmbeddedFirmware::MdTmssSize));
-    } else if(systemId == "ms") {
-        // BIOS optional (mia/system/master-system.cpp): carts boot without it.
-        if(!bios.empty()) pak->append("bios.rom", bios);
     } else if(systemId == "gba") {
         // BIOS required — LoadRom gated on biosRequired before this runs.
         pak->append("bios.rom", bios);
-    } else if(systemId == "msx") {
-        // BIOS required — LoadRom gated on biosRequired before this runs.
-        pak->append("bios.rom", bios);
-    } else if(systemId == "ngp") {
-        // BIOS required; the console RAM is battery-backed and lives in the
-        // system pak (mia/system/neo-geo-pocket.cpp).
-        pak->append("bios.rom", bios);
-        pak->append("cpu.ram", (u64)(12 * 1024));
-        pak->append("apu.ram", (u64)(4 * 1024));
-    } else if(systemId == "pce") {
-        // 2 KiB battery-backed BRAM (mia/system/pc-engine.cpp) — games format
-        // it themselves on first use.
-        pak->append("backup.ram", (u64)2048);
-    } else if(systemId == "ws") {
-        // Boot ROM ships in the ares tree (freely licensed); the 128-byte
-        // internal EEPROM holds the console's user profile.
-        pak->append("boot.rom", std::span<const u8>(
-            EmbeddedFirmware::WsBoot, EmbeddedFirmware::WsBootSize));
-        pak->append("save.eeprom", (u64)128);
-    } else if(systemId == "wsc") {
-        // WonderSwan Color: its own freely-licensed boot ROM; the Color
-        // profile EEPROM is 2 KiB (mia/system/wonderswan-color.cpp).
-        pak->append("boot.rom", std::span<const u8>(
-            EmbeddedFirmware::WscBoot, EmbeddedFirmware::WscBootSize));
-        pak->append("save.eeprom", (u64)2048);
     }
-    // fc, sg: no system files required.
+    // fc: no system files required.
     return pak;
 }
 
@@ -336,15 +207,7 @@ auto makeCartridgePak(const std::string& systemId,
     else if(systemId == "gb")  manifest = MiaAnalyzers::analyzeGameBoy(data);
     else if(systemId == "gbc") manifest = MiaAnalyzers::analyzeGameBoy(data);
     else if(systemId == "md")  manifest = MiaAnalyzers::analyzeMegaDrive(data);
-    else if(systemId == "sg")  manifest = MiaAnalyzers::analyzeSG1000(data);
-    else if(systemId == "ms")  manifest = MiaAnalyzers::analyzeMasterSystem(data);
-    else if(systemId == "a26") manifest = MiaAnalyzers::analyzeAtari2600(data);
     else if(systemId == "gba") manifest = MiaAnalyzers::analyzeGameBoyAdvance(data);
-    else if(systemId == "ngp") manifest = MiaAnalyzers::analyzeNeoGeoPocket(data);
-    else if(systemId == "msx") manifest = MiaAnalyzers::analyzeMSX(data);
-    else if(systemId == "pce") manifest = MiaAnalyzers::analyzePCEngine(data);
-    else if(systemId == "ws")  manifest = MiaAnalyzers::analyzeWonderSwan(data);
-    else if(systemId == "wsc") manifest = MiaAnalyzers::analyzeWonderSwanColor(data);
     else {
         result.error = "unknown system: " + systemId;
         return result;
@@ -360,15 +223,7 @@ auto makeCartridgePak(const std::string& systemId,
     else if(systemId == "gb")  result.pak = assembleGameBoy(document, manifest, data);
     else if(systemId == "gbc") result.pak = assembleGameBoy(document, manifest, data);
     else if(systemId == "md")  result.pak = assembleMegaDrive(document, manifest, data);
-    else if(systemId == "sg")  result.pak = assembleSG1000(document, manifest, data);
-    else if(systemId == "ms")  result.pak = assembleMasterSystem(document, manifest, data);
-    else if(systemId == "a26") result.pak = assembleAtari2600(document, manifest, data);
     else if(systemId == "gba") result.pak = assembleGameBoyAdvance(document, manifest, data);
-    else if(systemId == "ngp") result.pak = assembleNeoGeoPocket(document, manifest, data);
-    else if(systemId == "msx") result.pak = assembleMSX(document, manifest, data);
-    else if(systemId == "pce") result.pak = assemblePCEngine(document, manifest, data);
-    else if(systemId == "ws")  result.pak = assembleWonderSwan(document, manifest, data);
-    else if(systemId == "wsc") result.pak = assembleWonderSwan(document, manifest, data);
 
     result.title  = std::string(document["game/title"].string().data());
     result.region = std::string(document["game/region"].string().data());
