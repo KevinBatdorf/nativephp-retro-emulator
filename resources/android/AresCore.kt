@@ -89,7 +89,7 @@ class AresCore {
      *
      * @param systemId One of [supportedSystems] (e.g. "sfc", "fc", "gb", "md").
      * @param biosPath Dev-supplied firmware image for biosRequired systems
-     *                 (gba, ps1); null when firmware is embedded or unneeded.
+     *                 (gba); null when firmware is embedded or unneeded.
      */
     fun loadSystem(systemId: String, biosPath: String? = null): Boolean =
         nativeLoadSystem(systemId, biosPath ?: "")
@@ -129,29 +129,6 @@ class AresCore {
         region: String = "",
         preferredRegions: String = "",
     ): Int = nativeLoadRom(romBytes, savePrefix, region, preferredRegions)
-
-    /** Whether the staged system loads media by file path (disc systems). */
-    fun usesMediaPath(): Boolean = nativeUsesMediaPath()
-
-    /**
-     * Disc-system variant of [loadRom]: media loads by PATH — a .cue's BIN
-     * references resolve relative to it, so the bytes can't travel the
-     * cartridge path. Same result codes as [loadRom].
-     */
-    fun loadRomPath(
-        path: String,
-        savePrefix: String? = null,
-        region: String = "",
-        preferredRegions: String = "",
-    ): Int = nativeLoadRomPath(path, savePrefix, region, preferredRegions)
-
-    /**
-     * Swap the disc in the running system's tray: saves, opens the tray,
-     * stages the new disc, and reconnects ~3 s later so the core notices the
-     * empty drive. Returns true when the swap was staged; false when the
-     * media was rejected (the running game is untouched). GL thread only.
-     */
-    fun swapDisc(path: String): Boolean = nativeSwapDisc(path) == 1
 
     /**
      * Stage a Sufami Turbo slot ROM (index 0 = Slot A, 1 = Slot B) to insert at
@@ -433,10 +410,6 @@ class AresCore {
     ): Int
     private external fun nativeStageSlot(index: Int, rom: ByteArray)
     private external fun nativeIsSlotConnected(index: Int): Boolean
-    private external fun nativeUsesMediaPath(): Boolean
-    private external fun nativeLoadRomPath(
-        path: String, savePrefix: String?, region: String, preferredRegions: String): Int
-    private external fun nativeSwapDisc(path: String): Int
     private external fun nativeFlushSaves(): Boolean
     private external fun nativeSetAudio(volume: Float, balance: Float)
     private external fun nativeSetVideo(

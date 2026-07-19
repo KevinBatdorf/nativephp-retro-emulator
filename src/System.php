@@ -15,6 +15,5 @@ enum System: string
     case Gbc = 'gbc';
     case Gba = 'gba';
     case Md = 'md';
-    case Ps1 = 'ps1';
     case N64 = 'n64';
 }

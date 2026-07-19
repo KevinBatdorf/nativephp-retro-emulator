@@ -77,27 +77,6 @@ struct SystemDef {
     // type per core namespace, so only the core can reach it (see
     // clearStaleEntryPoints).
     void (*clearEntryPoints)();
-
-    // Disc systems load media by PATH (a .cue's BIN references resolve
-    // relative to it, so bytes can't travel the cartridge path) and connect
-    // through this port instead of "Cartridge Slot". Both set = disc system;
-    // makeCartridgePak is then unused and may be nullptr. mediaPort is also
-    // the tray SwapDisc drives (desktop-ui playstation.cpp:141-158).
-    const char* mediaPort = nullptr;
-    CartridgePak (*makeMediaPak)(const char* path) = nullptr;
-
-    // Paks the system owns beyond system+cartridge (the PS1 Memory Card):
-    // allocated fresh per boot with one writable entry, persisted through
-    // SaveIO under "<savePrefix>.<entry>", answered by Platform::pak at
-    // `node`, connected at `port` as `device`.
-    struct ExtraPak {
-        std::string node;
-        std::string entry;
-        uint32_t size;
-        std::string port;
-        std::string device;
-    };
-    std::vector<ExtraPak> extraPaks{};
 };
 
 // Registers a compiled core at static-init time: dlopen (Android's modular

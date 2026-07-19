@@ -21,7 +21,6 @@ inline const char* nodeName(const std::string& key) {
     if (key == "deepBlackBoost")     return "Deep Black Boost";
     if (key == "interframeBlending") return "Interframe Blending";
     if (key == "showIcons")          return "Show Icons";
-    if (key == "fastBoot")           return "Fast Boot";
     return nullptr;
 }
 

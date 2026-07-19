@@ -26,7 +26,7 @@ struct CartridgeResult {
 };
 
 // Build the system pak from embedded firmware: fc none, gb/gbc boot.rom,
-// md tmss.rom. bios is the dev-supplied firmware (empty = none) — gba and ps1
+// md tmss.rom. bios is the dev-supplied firmware (empty = none) — gba
 // append it as bios.rom; the embedded-firmware systems ignore it.
 auto makeSystemPak(const std::string& systemId,
                    const std::vector<u8>& bios = {}) -> std::shared_ptr<nall::vfs::directory>;
@@ -37,24 +37,4 @@ auto makeSystemPak(const std::string& systemId,
 auto makeCartridgePak(const std::string& systemId,
                       const uint8_t* rom, size_t romSize) -> CartridgeResult;
 
-// Build a media pak from a file PATH (disc systems: a .cue whose BIN
-// references resolve relative to it, or a PS-X EXE). Runs mia's real medium
-// load() — the pak carries manifest.bml + cd.rom (vfs::cdrom) / program.exe.
-auto makeMediaPak(const std::string& systemId,
-                  const std::string& path) -> CartridgeResult;
-
 } // namespace MultiPak
-
-// Shared contract with mia_mediums.cpp for disc loads.
-namespace MiaAnalyzers {
-
-struct DiscLoad {
-    std::shared_ptr<nall::vfs::directory> pak;
-    std::string title;
-    std::string region;
-    std::string error;   // non-empty on failure
-};
-
-auto loadPlayStationDisc(const std::string& location) -> DiscLoad;
-
-} // namespace MiaAnalyzers

@@ -5,13 +5,11 @@ use KevinBatdorf\RetroEmulator\Buttons\FcButton;
 use KevinBatdorf\RetroEmulator\Buttons\GbaButton;
 use KevinBatdorf\RetroEmulator\Buttons\GbButton;
 use KevinBatdorf\RetroEmulator\Buttons\MdButton;
-use KevinBatdorf\RetroEmulator\Buttons\Ps1Button;
 use KevinBatdorf\RetroEmulator\Buttons\SfcButton;
 use KevinBatdorf\RetroEmulator\Components\Emulator as EmulatorComponent;
 use KevinBatdorf\RetroEmulator\Config\Config;
 use KevinBatdorf\RetroEmulator\Config\GbConfig;
 use KevinBatdorf\RetroEmulator\Config\MdConfig;
-use KevinBatdorf\RetroEmulator\Config\Ps1Config;
 use KevinBatdorf\RetroEmulator\Config\RegionalSystemConfig;
 use KevinBatdorf\RetroEmulator\Config\SfcConfig;
 use KevinBatdorf\RetroEmulator\Controller;
@@ -65,7 +63,6 @@ describe('Plugin Manifest', function () {
             'Emulator.UndoStateSave',
             'Emulator.UndoStateLoad',
             'Emulator.StageSlot',
-            'Emulator.SwapDisc',
             'Emulator.ReadMemory',
             'Emulator.ReadMemoryAsync',
             'Emulator.WriteMemory',
@@ -165,7 +162,7 @@ describe('Emulator class', function () {
 
     it('has all instance methods', function () {
         $methods = [
-            'surface', 'loadSystem', 'loadRom', 'swapDisc',
+            'surface', 'loadSystem', 'loadRom',
             'pause', 'resume', 'stop',
             'saveState', 'loadState', 'undoSaveState', 'undoLoadState',
             'readMemory', 'readMemoryAsync', 'writeMemory',
@@ -446,16 +443,15 @@ describe('Bridge response parsing', function () {
         $GLOBALS['__nativephp_mock']['Emulator.GetSystems'] = json_encode([
             'systems' => [
                 ['id' => 'sfc', 'name' => 'SNES / Super Famicom', 'biosRequired' => false, 'stable' => true],
-                ['id' => 'ps1', 'name' => 'PlayStation', 'biosRequired' => true, 'stable' => false],
+                ['id' => 'gba', 'name' => 'Game Boy Advance', 'biosRequired' => true, 'stable' => true],
             ],
         ]);
         $systems = Emulator::systems();
         expect($systems)->toHaveCount(2);
         expect($systems[0]['id'])->toBe('sfc');
         expect($systems[0]['biosRequired'])->toBeFalse();
-        expect($systems[1]['id'])->toBe('ps1');
+        expect($systems[1]['id'])->toBe('gba');
         expect($systems[1]['biosRequired'])->toBeTrue();
-        expect($systems[1]['stable'])->toBeFalse();
     });
 
     it('surface returns Emulator instance after successful native call', function () {
@@ -602,7 +598,6 @@ describe('Typed layer', function () {
         ['gbc', GbButton::class],
         ['md', MdButton::class],
         ['gba', GbaButton::class],
-        ['ps1', Ps1Button::class],
     ]);
 
     it('system enum matches the ids GetSystems reports', function () {
@@ -660,19 +655,6 @@ describe('Typed layer', function () {
             'colorEmulation' => true,
             'interframeBlending' => true,
         ]);
-    });
-
-    it('Ps1Config is regional and carries fastBoot', function () {
-        expect(is_subclass_of(Ps1Config::class, RegionalSystemConfig::class))->toBeTrue();
-        expect((new Ps1Config(fastBoot: true))->toArray())->toBe(['fastBoot' => true]);
-    });
-
-    it('swapDisc sends the disc path and stays fluent', function () {
-        $emu = Emulator::surface()->swapDisc('/discs/game-disc-2.cue');
-
-        expect($emu)->toBeInstanceOf(Emulator::class);
-        $call = collect($GLOBALS['__nativephp_calls'])->firstWhere('function', 'Emulator.SwapDisc');
-        expect($call['payload']['path'])->toBe('/discs/game-disc-2.cue');
     });
 
     it('the global Config serializes shared knobs as wire values', function () {

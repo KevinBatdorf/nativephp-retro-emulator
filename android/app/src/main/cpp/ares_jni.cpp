@@ -47,15 +47,6 @@ struct EmulatorState {
     std::shared_ptr<vfs::directory> slotPak[2];
     bool                            slotConnected[2] = {false, false};  // test seam
 
-    // Extra paks the system owns beyond system+cartridge (def->extraPaks —
-    // the PS1 Memory Card), parallel to the def's list. Emu thread only.
-    std::vector<std::shared_ptr<vfs::directory>> extraPaks;
-
-    // Disc swap in flight: frames until the tray reconnects. Desktop leaves
-    // the tray empty ~3 s so the core notices the open drive
-    // (playstation.cpp:151-158); we count frames on the emu thread.
-    int discSwapFrames = 0;
-
     u32    frameWidth  = 0;
     u32    frameHeight = 0;
 
@@ -267,11 +258,6 @@ struct AndroidPlatform : ares::Platform {
             if (port == "Sufami Turbo Slot B") return g_state->slotPak[1];
         }
         if (name == "BS Memory Cartridge") return g_state->slotPak[0];
-        // Extra paks (the PS1 Memory Card) — parallel to def->extraPaks.
-        for (size_t i = 0; i < g_state->extraPaks.size(); i++) {
-            if (name == g_state->system->extraPaks[i].node.c_str())
-                return g_state->extraPaks[i];
-        }
         return {};
     }
 
@@ -454,17 +440,6 @@ static const std::unordered_map<std::string,
             // sub-ports (handled specially in applyConnectedDevices).
             {"Super Multitap", {{}, {}}},
         }},
-        {"ps1", {
-            // DualShock (playstation.cpp:42-72): the Digital Gamepad's bits
-            // plus stick clicks; sticks are the four analog axes.
-            {"DualShock", {{{"Cross", 1u << 0}, {"Square", 1u << 1}, {"Select", 1u << 2},
-                            {"Start", 1u << 3}, {"Up", 1u << 4}, {"Down", 1u << 5},
-                            {"Left", 1u << 6}, {"Right", 1u << 7}, {"Circle", 1u << 8},
-                            {"Triangle", 1u << 9}, {"L1", 1u << 10}, {"R1", 1u << 11},
-                            {"L2", 1u << 12}, {"R2", 1u << 13},
-                            {"L3", 1u << 14}, {"R3", 1u << 15}},
-                           {"L-Stick X", "L-Stick Y", "R-Stick X", "R-Stick Y"}}},
-        }},
     };
     return t;
 }
@@ -633,7 +608,7 @@ static void loadCoreModules()
     attempted = true;
 
     static const char* kCoreIds[] = {
-        "fc", "sfc", "gb", "gba", "md", "ps1",
+        "fc", "sfc", "gb", "gba", "md",
     };
     for (auto* id : kCoreIds) {
         char name[64];
@@ -840,21 +815,10 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadSystem(
  * teardown order: flush saves, join worker threads via root->unload(), then
  * clear the per-boot state that must not leak into a fresh core.
  */
-// Flush every battery-backed pak — the cartridge plus def->extraPaks (the
-// PS1 Memory Card persists as "<savePrefix>.save.card" the same way).
-static bool flushAllSaves()
-{
-    bool ok = SaveIO::flush(g_state->cartridgePak, g_state->savePrefix);
-    for (auto& pak : g_state->extraPaks) {
-        ok &= SaveIO::flush(pak, g_state->savePrefix);
-    }
-    return ok;
-}
-
 static void unloadCore()
 {
     if (g_state->romLoaded && g_state->cartridgePak) {
-        flushAllSaves();
+        SaveIO::flush(g_state->cartridgePak, g_state->savePrefix);
     }
     if (g_state->root) {
         g_state->root->unload();
@@ -868,8 +832,6 @@ static void unloadCore()
     g_state->cartridgePak.reset();
     g_state->slotPak[0].reset();
     g_state->slotPak[1].reset();
-    g_state->extraPaks.clear();
-    g_state->discSwapFrames = 0;
     g_state->slotConnected[0] = g_state->slotConnected[1] = false;
     g_state->inputCache.clear();
     g_state->axisCache.clear();
@@ -974,29 +936,15 @@ static int bootWithPak(SystemRegistry::CartridgePak built,
     g_state->savePrefix = savePrefix;
     SaveIO::seed(g_state->cartridgePak, g_state->savePrefix);
 
-    ares::Node::Peripheral baseCartridge;
-    if (def->mediaPort) {
-        // Disc systems: the game connects through the tray port, no device
-        // name (desktop-ui playstation.cpp:110-113).
-        auto tray = NodeUtil::findByName<ares::Node::Port>(g_state->root, def->mediaPort);
-        if (!tray) {
-            LOGE("loadRom: no '%s' port found", def->mediaPort);
-            unloadCore();
-            return -1;
-        }
-        tray->allocate();
-        tray->connect();
-    } else {
-        auto cartridgeSlot =
-            NodeUtil::findByName<ares::Node::Port>(g_state->root, "Cartridge Slot");
-        if (!cartridgeSlot) {
-            LOGE("loadRom: no Cartridge Slot port found");
-            unloadCore();
-            return -1;
-        }
-        baseCartridge = cartridgeSlot->allocate();
-        cartridgeSlot->connect();
+    auto cartridgeSlot =
+        NodeUtil::findByName<ares::Node::Port>(g_state->root, "Cartridge Slot");
+    if (!cartridgeSlot) {
+        LOGE("loadRom: no Cartridge Slot port found");
+        unloadCore();
+        return -1;
     }
+    ares::Node::Peripheral baseCartridge = cartridgeSlot->allocate();
+    cartridgeSlot->connect();
 
     // Slotted media: connecting an ST-LOROM base created the Sufami Turbo slot
     // ports UNDER the base cartridge peripheral (not the root), so find them
@@ -1033,21 +981,6 @@ static int bootWithPak(SystemRegistry::CartridgePak built,
         g_state->stagedSlot[i].clear();   // pak copied the bytes
     }
 
-    // Extra paks (the PS1 Memory Card): fresh writable entry per boot,
-    // seeded from disk, handed to the node by Platform::pak, then connected
-    // (desktop-ui playstation.cpp:120-126).
-    g_state->extraPaks.clear();
-    for (auto& ep : def->extraPaks) {
-        auto pak = std::make_shared<vfs::directory>();
-        pak->append(ep.entry.c_str(), (u64)ep.size);
-        SaveIO::seed(pak, g_state->savePrefix);
-        g_state->extraPaks.push_back(pak);
-        if (auto port = NodeUtil::findByName<ares::Node::Port>(g_state->root, ep.port.c_str())) {
-            port->allocate(ep.device.c_str());
-            port->connect();
-        }
-    }
-
     g_state->root->power(false);
     g_state->romLoaded = true;
     // Report the BOOTED region — for region-free systems (gb) fall back to
@@ -1057,7 +990,6 @@ static int bootWithPak(SystemRegistry::CartridgePak built,
     return 1;
 }
 
-/** Cartridge systems: analyze raw ROM bytes, then boot. */
 JNIEXPORT jint JNICALL
 Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadRom(
     JNIEnv* env, jobject, jbyteArray romBytes, jstring savePrefixStr,
@@ -1068,10 +1000,6 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadRom(
         return 0;
     }
     auto* def = g_state->system;
-    if (!def->makeCartridgePak) {
-        LOGE("nativeLoadRom: %s loads media by path — use nativeLoadRomPath", def->id.c_str());
-        return 0;
-    }
 
     auto rom = jbyteArrayToVector(env, romBytes);
     if (rom.empty()) {
@@ -1092,88 +1020,6 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadRom(
                        jstringToString(env, savePrefixStr),
                        jstringToString(env, regionOverrideStr),
                        jstringToString(env, preferredRegionsStr));
-}
-
-/** Disc systems: build the media pak from the file path, then boot. */
-JNIEXPORT jint JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadRomPath(
-    JNIEnv* env, jobject, jstring pathStr, jstring savePrefixStr,
-    jstring regionOverrideStr, jstring preferredRegionsStr)
-{
-    if (!g_state || !g_state->system) {
-        LOGE("nativeLoadRomPath: no system staged");
-        return 0;
-    }
-    auto* def = g_state->system;
-    if (!def->makeMediaPak) {
-        LOGE("nativeLoadRomPath: %s has no media loader", def->id.c_str());
-        return 0;
-    }
-
-    auto path = jstringToString(env, pathStr);
-    auto built = def->makeMediaPak(path.c_str());
-    if (!built) {
-        LOGE("nativeLoadRomPath: %s", built.error.c_str());
-        return 0;
-    }
-
-    return bootWithPak(std::move(built),
-                       jstringToString(env, savePrefixStr),
-                       jstringToString(env, regionOverrideStr),
-                       jstringToString(env, preferredRegionsStr));
-}
-
-/** Whether the staged system loads media by path (disc systems). */
-JNIEXPORT jboolean JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeUsesMediaPath(
-    JNIEnv*, jobject)
-{
-    if (!g_state || !g_state->system) return JNI_FALSE;
-    return g_state->system->mediaPort ? JNI_TRUE : JNI_FALSE;
-}
-
-/**
- * Swap the disc in the open tray — desktop-ui playstation.cpp:141-158: save,
- * disconnect the tray, stage the new disc's pak, reconnect after ~3 s (the
- * core must notice the empty drive). Returns 1 = swapping; 0 = rejected
- * pre-teardown (bad media, wrong system, nothing running).
- */
-JNIEXPORT jint JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSwapDisc(
-    JNIEnv* env, jobject, jstring pathStr)
-{
-    if (!g_state || !g_state->system || !g_state->romLoaded) {
-        LOGE("nativeSwapDisc: nothing running");
-        return 0;
-    }
-    auto* def = g_state->system;
-    if (!def->mediaPort || !def->makeMediaPak) {
-        LOGE("nativeSwapDisc: %s has no disc tray", def->id.c_str());
-        return 0;
-    }
-
-    auto path = jstringToString(env, pathStr);
-    auto built = def->makeMediaPak(path.c_str());
-    if (!built) {
-        LOGE("nativeSwapDisc: %s", built.error.c_str());
-        return 0;
-    }
-
-    auto tray = NodeUtil::findByName<ares::Node::Port>(g_state->root, def->mediaPort);
-    if (!tray) {
-        LOGE("nativeSwapDisc: no '%s' port found", def->mediaPort);
-        return 0;
-    }
-
-    g_state->root->save();
-    flushAllSaves();
-    tray->disconnect();
-    g_state->cartridgePak = built.pak;   // Platform::pak answers the new disc at reconnect
-    g_state->romRegion = built.region.empty() ? g_state->romRegion : built.region;
-    g_state->discSwapFrames = 180;       // ≈3 s at 60 fps, like desktop's timer
-    LOGI("disc swap staged: title='%s' — tray reconnects in %d frames",
-         built.title.c_str(), g_state->discSwapFrames);
-    return 1;
 }
 
 // Phase 4 — tick (real frame) -----------------------------------------------
@@ -1222,18 +1068,6 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeTick(
         g_state->inputRemapDirty.store(false, std::memory_order_relaxed);
     } else if (g_state->inputRemapDirty.exchange(false, std::memory_order_relaxed)) {
         applyInputRemap();
-    }
-
-    // Disc swap: reconnect the tray once the countdown expires — the frames
-    // in between run with the drive empty, like desktop's 3 s timer
-    // (playstation.cpp:151-158). Platform::pak already answers the new disc.
-    if (g_state->discSwapFrames > 0 && --g_state->discSwapFrames == 0) {
-        if (auto tray = NodeUtil::findByName<ares::Node::Port>(
-                g_state->root, g_state->system->mediaPort)) {
-            tray->allocate();
-            tray->connect();
-            LOGI("disc swap: tray reconnected");
-        }
     }
 
     if (!g_state->paused.load(std::memory_order_relaxed)) {
@@ -2078,7 +1912,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeFlushSaves(
     }
     // System::save() writes board memory back into the cartridge pak.
     g_state->root->save();
-    return flushAllSaves() ? JNI_TRUE : JNI_FALSE;
+    return SaveIO::flush(g_state->cartridgePak, g_state->savePrefix) ? JNI_TRUE : JNI_FALSE;
 }
 
 // Phase 11 — supported systems ------------------------------------------------

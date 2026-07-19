@@ -15,6 +15,4 @@ enum Device: string
     case SuperScope = 'Super Scope';
     case Justifier = 'Justifier';
     case SuperMultitap = 'Super Multitap';
-    case DigitalGamepad = 'Digital Gamepad';
-    case DualShock = 'DualShock';
 }

@@ -430,27 +430,6 @@ object EmulatorFunctions {
         }
     }
 
-    /**
-     * Swap the disc in the running system's tray (disc systems only). The tray
-     * opens, the new disc stages, and the drive reconnects ~3 s later like
-     * desktop's Change Disc flow — the game keeps running against an empty
-     * drive in between.
-     */
-    class SwapDisc(private val activity: FragmentActivity) : BridgeFunction {
-        override fun execute(parameters: Map<String, Any>): Map<String, Any> {
-            val (entry, err) = entry(parameters)
-            if (err != null) return err
-            val path = parameters["path"] as? String
-                ?: return BridgeResponse.error("INVALID_PARAMETERS", "path is required")
-            val file = File(path)
-            if (!file.exists()) {
-                return operationalError(entry!!, "ROM_NOT_FOUND", "disc not found: $path")
-            }
-            entry!!.renderer.swapDisc(path)
-            return BridgeResponse.success(mapOf("status" to "swapping", "path" to path))
-        }
-    }
-
     /** Pause emulation. */
     class Pause(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
@@ -1194,7 +1173,6 @@ object EmulatorFunctions {
                 system("gbc", "Game Boy Color",           biosRequired = false, stable = true,  compiled),
                 system("gba", "Game Boy Advance",         biosRequired = true,  stable = true,  compiled),
                 system("md",  "Sega Mega Drive / Genesis", biosRequired = false, stable = true,  compiled),
-                system("ps1", "PlayStation",              biosRequired = true,  stable = false, compiled),
                 system("n64", "Nintendo 64",              biosRequired = false, stable = true,  compiled),
             )
             return BridgeResponse.success(mapOf("systems" to systems))

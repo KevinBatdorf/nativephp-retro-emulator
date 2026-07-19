@@ -62,7 +62,7 @@ class EmulatorActivity : Activity() {
         intent.getStringExtra(EXTRA_REGION)?.let { renderer.stagedRegion = it }
 
         // Queue the system load (executes on GL thread). BIOS_PATH feeds
-        // firmware-gated systems (gba, ps1) their dev-supplied dump.
+        // firmware-gated systems (gba) their dev-supplied dump.
         renderer.queueSystemLoad(system, intent.getStringExtra(EXTRA_BIOS_PATH) ?: "")
 
         // Queue the ROM load (executes on GL thread after system is ready).

@@ -73,8 +73,7 @@ final class EmulatorRenderer: UIView {
     /// arrives with a ROM, so the region variant is always resolved ROM-first.
     /// Re-staging over a running core is legal; the running game continues
     /// until the next `loadRom`. System firmware is embedded in the native
-    /// library — no assets are required, except biosRequired systems (gba,
-    /// ps1), which take a dev-supplied firmware image via `biosPath`.
+    /// library — no assets are required, except biosRequired systems (gba), which take a dev-supplied firmware image via `biosPath`.
     func loadSystem(_ system: String, biosPath: String? = nil) -> Bool {
         emuLock.lock()
         let ok = ares_load_system(ctx, system, biosPath ?? "")
@@ -109,16 +108,9 @@ final class EmulatorRenderer: UIView {
         clearMemoryWatches()
 
         emuLock.lock()
-        // Disc systems load by PATH (the .cue's BIN references resolve
-        // relative to it); cartridge systems take the bytes.
-        let result: Int32
-        if ares_uses_media_path(ctx) {
-            result = ares_load_media(ctx, path, savePrefix, stagedRegion, stagedPreferredRegions)
-        } else {
-            result = romData.withUnsafeBytes {
-                ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count,
-                              savePrefix, stagedRegion, stagedPreferredRegions)
-            }
+        let result = romData.withUnsafeBytes {
+            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count,
+                          savePrefix, stagedRegion, stagedPreferredRegions)
         }
         // Fresh screen nodes boot with ares defaults — reapply the surface's
         // options like desktop reapplies its settings. (Context-side prefs —
@@ -156,16 +148,6 @@ final class EmulatorRenderer: UIView {
         }
     }
 
-    /// Swap the disc in the running system's tray. A rejected disc leaves the
-    /// running game untouched and surfaces LOAD_FAILED on the event channel.
-    func swapDisc(path: String) {
-        emuLock.lock()
-        let ok = ares_swap_disc(ctx, path) == 1
-        emuLock.unlock()
-        if !ok {
-            eventListener?.onError(code: "LOAD_FAILED", message: "disc swap rejected: \(path)")
-        }
-    }
 
     // MARK: - Lifecycle
 

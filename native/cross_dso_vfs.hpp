@@ -13,14 +13,6 @@
 #include <nall/nall.hpp>
 #include <nall/vfs.hpp>
 
-// nall/serial.hpp (via nall.hpp) drags in <termios.h>, whose NCCS macro
-// ("number of control chars", 19) collides with the PS1 GTE instruction
-// CPU::NCCS. ares core TUs never see termios upstream — only this
-// force-include introduces it, so it un-defines what it dragged in.
-#ifdef NCCS
-#undef NCCS
-#endif
-
 extern template std::shared_ptr<nall::vfs::file>
 nall::vfs::directory::read<nall::vfs::file>(const nall::string&);
 extern template std::shared_ptr<nall::vfs::file>

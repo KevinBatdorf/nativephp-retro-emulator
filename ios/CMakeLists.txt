@@ -222,21 +222,6 @@ target_link_libraries(gba_core PUBLIC ares_core)
 target_compile_definitions(gba_core PUBLIC PROFILE_PERFORMANCE BUILD_RELEASE CORE_GBA)
 
 # ---------------------------------------------------------------------------
-# ps1_core — Sony PlayStation (unity build via ps1.cpp)
-#   m68hc05 — Memory Card MCU
-# ---------------------------------------------------------------------------
-add_library(ps1_core OBJECT
-    "${ARES_ROOT}/ares/ps1/ps1.cpp"
-    "${PROC}/m68hc05/m68hc05.cpp"
-)
-target_include_directories(ps1_core PUBLIC
-    "${CMAKE_CURRENT_SOURCE_DIR}/stubs"
-    "${ARES_ROOT}/ares"
-)
-target_link_libraries(ps1_core PUBLIC ares_core)
-target_compile_definitions(ps1_core PUBLIC PROFILE_PERFORMANCE BUILD_RELEASE CORE_PS1)
-
-# ---------------------------------------------------------------------------
 # retro_emulator_ios — single self-contained static library for the xcframework.
 #
 # All object libraries are collected here so the xcframework slice is
@@ -252,7 +237,6 @@ add_library(retro_emulator_ios STATIC
     "${NATIVE_ROOT}/cores/core_gb.cpp"
     "${NATIVE_ROOT}/cores/core_md.cpp"
     "${NATIVE_ROOT}/cores/core_gba.cpp"
-    "${NATIVE_ROOT}/cores/core_ps1.cpp"
     "${NATIVE_ROOT}/save_io.cpp"
     "${NATIVE_ROOT}/pak/sfc_pak.cpp"
     "${NATIVE_ROOT}/pak/multi_pak.cpp"
@@ -267,7 +251,6 @@ add_library(retro_emulator_ios STATIC
     $<TARGET_OBJECTS:gb_core>
     $<TARGET_OBJECTS:md_core>
     $<TARGET_OBJECTS:gba_core>
-    $<TARGET_OBJECTS:ps1_core>
     $<TARGET_OBJECTS:ymfm>
 )
 target_include_directories(retro_emulator_ios PUBLIC

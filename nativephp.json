@@ -59,12 +59,6 @@
             "description": "Stage a Sufami Turbo slot ROM for the next slotted LoadRom"
         },
         {
-            "name": "Emulator.SwapDisc",
-            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.SwapDisc",
-            "ios": "EmulatorFunctions.SwapDisc",
-            "description": "Swap the disc in the running system\u2019s tray (disc systems)"
-        },
-        {
             "name": "Emulator.Pause",
             "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.Pause",
             "ios": "EmulatorFunctions.Pause",

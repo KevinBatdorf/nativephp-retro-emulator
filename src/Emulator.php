@@ -163,23 +163,6 @@ class Emulator
         return $this;
     }
 
-    /**
-     * Swap the disc in the running system's tray (disc systems). The tray
-     * opens, the new disc stages, and the drive reconnects a few seconds
-     * later — the game keeps running and drives the change itself, unlike
-     * loadRom() which reboots. A rejected disc surfaces on the EmulatorError
-     * event channel.
-     */
-    public function swapDisc(string $path): static
-    {
-        $this->call('Emulator.SwapDisc', [
-            'surface' => $this->surface,
-            'path' => $path,
-        ]);
-
-        return $this;
-    }
-
     public function pause(): static
     {
         $this->call('Emulator.Pause', ['surface' => $this->surface]);
