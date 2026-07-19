@@ -223,6 +223,10 @@ static EmulatorState* g_state = nullptr;
 // ---------------------------------------------------------------------------
 struct AndroidPlatform : ares::Platform {
 
+    auto status(string_view message) -> void override {
+        LOGI("ares status: %.*s", (int)message.size(), message.data());
+    }
+
     auto attach(ares::Node::Object node) -> void override {
         if (!g_state) return;
         if (auto stream = NodeUtil::as<ares::Node::Audio::Stream>(node)) {
@@ -608,7 +612,7 @@ static void loadCoreModules()
     attempted = true;
 
     static const char* kCoreIds[] = {
-        "fc", "sfc", "gb", "gba", "md",
+        "fc", "sfc", "gb", "gba", "md", "n64",
     };
     for (auto* id : kCoreIds) {
         char name[64];
@@ -785,6 +789,15 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadSystem(
     if (!def) {
         LOGE("unsupported system: %s", systemId.c_str());
         return JNI_FALSE;
+    }
+
+    // Adreno's shader compiler rejects parallel-RDP's specialized per-combiner
+    // compute shaders (vkCreateComputePipelines → VK_ERROR_UNKNOWN), but it
+    // compiles the single ubershader fine — force that path. Read by
+    // parallel-RDP at RDP init (loadRom). TODO: gate on driver_id == Qualcomm
+    // so faster GPUs keep the specialized shaders.
+    if (systemId == "n64") {
+        setenv("PARALLEL_RDP_UBERSHADER", "1", 1);
     }
 
     // An optional dev-supplied BIOS travels with the staging (gba may override

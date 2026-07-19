@@ -105,7 +105,7 @@ we consider not yet production-ready. Per-system game compatibility:
 | Game Boy / Game Boy Color | `gb` / `gbc` | ✅ | |
 | Game Boy Advance | `gba` | ✅ | Boots on an embedded open BIOS; supply a real one via `biosPath` for accuracy |
 | Mega Drive / Genesis | `md` | ✅ | |
-| Nintendo 64 | `n64` | ⏳ | In development |
+| Nintendo 64 | `n64` | ✅ | Renders through Vulkan paraLLEl-RDP; Android today, iOS pending MoltenVK |
 
 Other ares systems appear in `Emulator::systems()` with `supported: false` —
 they aren't compiled into the shipped binaries.

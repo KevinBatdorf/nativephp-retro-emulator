@@ -5,6 +5,7 @@ use KevinBatdorf\RetroEmulator\Buttons\FcButton;
 use KevinBatdorf\RetroEmulator\Buttons\GbaButton;
 use KevinBatdorf\RetroEmulator\Buttons\GbButton;
 use KevinBatdorf\RetroEmulator\Buttons\MdButton;
+use KevinBatdorf\RetroEmulator\Buttons\N64Button;
 use KevinBatdorf\RetroEmulator\Buttons\SfcButton;
 use KevinBatdorf\RetroEmulator\Components\Emulator as EmulatorComponent;
 use KevinBatdorf\RetroEmulator\Config\Config;
@@ -597,6 +598,7 @@ describe('Typed layer', function () {
         ['gbc', GbButton::class],
         ['md', MdButton::class],
         ['gba', GbaButton::class],
+        ['n64', N64Button::class],
     ]);
 
     it('system enum matches the ids GetSystems reports', function () {

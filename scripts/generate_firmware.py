@@ -21,6 +21,8 @@ BLOBS = [
     ("GbBootCgb1", "mia/Firmware/Game Boy Color/boot.cgb-1.rom"),
     ("MdTmss",     "mia/Firmware/Mega Drive/tmss.rom"),
     ("MdSvp",      "mia/Firmware/Mega Drive/svp.rom"),
+    ("N64PifNtsc", "mia/Firmware/Nintendo 64/pif.ntsc.rom"),
+    ("N64PifPal",  "mia/Firmware/Nintendo 64/pif.pal.rom"),
 ]
 
 # (C symbol, path relative to this repo) — firmware not carried by ares. The GBA
