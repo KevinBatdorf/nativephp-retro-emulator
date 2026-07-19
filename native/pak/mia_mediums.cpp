@@ -33,6 +33,7 @@ auto Medium::manifestDatabase(string) -> string { return {}; }
 #include <mia/medium/msx.cpp>
 #include <mia/medium/pc-engine.cpp>
 #include <mia/medium/wonderswan.cpp>
+#include <mia/medium/wonderswan-color.cpp>
 
 } // namespace mia
 
@@ -92,6 +93,11 @@ auto analyzePCEngine(std::vector<u8>& rom) -> string {
 
 auto analyzeWonderSwan(std::vector<u8>& rom) -> string {
     mia::WonderSwan medium;
+    return medium.analyze(rom);
+}
+
+auto analyzeWonderSwanColor(std::vector<u8>& rom) -> string {
+    mia::WonderSwanColor medium;
     return medium.analyze(rom);
 }
 

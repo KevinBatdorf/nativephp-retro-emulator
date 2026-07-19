@@ -1026,6 +1026,7 @@ enum EmulatorFunctions {
                 system("pce", "PC Engine / TurboGrafx-16", biosRequired: false, stable: true),
                 system("ngp", "Neo Geo Pocket",            biosRequired: true,  stable: true),
                 system("ws",  "WonderSwan",                biosRequired: false, stable: true),
+                system("wsc", "WonderSwan Color",          biosRequired: false, stable: true),
                 system("ps1", "PlayStation",               biosRequired: true,  stable: false),
                 system("ng",  "Neo Geo AES / MVS",         biosRequired: true,  stable: false),
                 system("a26", "Atari 2600",                biosRequired: false, stable: true),

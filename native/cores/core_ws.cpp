@@ -29,6 +29,11 @@ auto cartridgePak(const uint8_t* rom, size_t romSize) -> CartridgePak {
     return {built.pak, built.title, built.region, built.error};
 }
 
+auto cartridgePakColor(const uint8_t* rom, size_t romSize) -> CartridgePak {
+    auto built = MultiPak::makeCartridgePak("wsc", rom, romSize);
+    return {built.pak, built.title, built.region, built.error};
+}
+
 auto clearEntryPoints() -> void { ares::WonderSwan::Thread::EntryPoints().clear(); }
 
 const SystemDef kDef = {
@@ -64,7 +69,39 @@ const SystemDef kDef = {
     .clearEntryPoints = clearEntryPoints,
 };
 
+// WonderSwan Color — same ares core booted as the Color model (system.cpp:9
+// "[Bandai] WonderSwan Color"), its own freely-licensed boot ROM + 2 KiB
+// profile EEPROM. iram window is the same 16 KiB.
+const SystemDef kDefColor = {
+    .id            = "wsc",
+    .name          = "WonderSwan Color",
+    .loadNameBase  = "[Bandai] WonderSwan Color",
+    .regions       = {},
+    .extensions    = {"wsc"},
+    .systemNode    = "WonderSwan Color",
+    .cartridgeNode = "WonderSwan Color Cartridge",
+    .device        = nullptr,
+    .ports         = 0,
+    .buttons       = {
+        {"B", 1u << 0}, {"Y1", 1u << 1}, {"Start", 1u << 3},
+        {"X1", 1u << 4}, {"X3", 1u << 5}, {"X4", 1u << 6}, {"X2", 1u << 7},
+        {"A", 1u << 8}, {"Y2", 1u << 9}, {"Y3", 1u << 10}, {"Y4", 1u << 11},
+        {"Volume", 1u << 12},
+    },
+    .biosRequired  = false,
+    .memBase       = 0x0000u,
+    .memSize       = 0x4000u,
+    .load          = loadWs,
+    .memRead       = memRead,
+    .memWrite      = memWrite,
+    .makeSystemPak = systemPak,
+    .makeCartridgePak = cartridgePakColor,
+    .makeSlotPak   = nullptr,
+    .clearEntryPoints = clearEntryPoints,
+};
+
 const SystemRegistry::Registrar kRegistrar{&kDef};
+const SystemRegistry::Registrar kRegistrarColor{&kDefColor};
 
 } // namespace
 

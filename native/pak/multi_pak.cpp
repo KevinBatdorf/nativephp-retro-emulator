@@ -18,6 +18,7 @@ namespace MiaAnalyzers {
   auto analyzeMSX(std::vector<u8>& rom) -> string;
   auto analyzePCEngine(std::vector<u8>& rom) -> string;
   auto analyzeWonderSwan(std::vector<u8>& rom) -> string;
+  auto analyzeWonderSwanColor(std::vector<u8>& rom) -> string;
 }
 
 namespace MultiPak {
@@ -310,6 +311,12 @@ auto makeSystemPak(const std::string& systemId,
         pak->append("boot.rom", std::span<const u8>(
             EmbeddedFirmware::WsBoot, EmbeddedFirmware::WsBootSize));
         pak->append("save.eeprom", (u64)128);
+    } else if(systemId == "wsc") {
+        // WonderSwan Color: its own freely-licensed boot ROM; the Color
+        // profile EEPROM is 2 KiB (mia/system/wonderswan-color.cpp).
+        pak->append("boot.rom", std::span<const u8>(
+            EmbeddedFirmware::WscBoot, EmbeddedFirmware::WscBootSize));
+        pak->append("save.eeprom", (u64)2048);
     }
     // fc, sg: no system files required.
     return pak;
@@ -337,6 +344,7 @@ auto makeCartridgePak(const std::string& systemId,
     else if(systemId == "msx") manifest = MiaAnalyzers::analyzeMSX(data);
     else if(systemId == "pce") manifest = MiaAnalyzers::analyzePCEngine(data);
     else if(systemId == "ws")  manifest = MiaAnalyzers::analyzeWonderSwan(data);
+    else if(systemId == "wsc") manifest = MiaAnalyzers::analyzeWonderSwanColor(data);
     else {
         result.error = "unknown system: " + systemId;
         return result;
@@ -360,6 +368,7 @@ auto makeCartridgePak(const std::string& systemId,
     else if(systemId == "msx") result.pak = assembleMSX(document, manifest, data);
     else if(systemId == "pce") result.pak = assemblePCEngine(document, manifest, data);
     else if(systemId == "ws")  result.pak = assembleWonderSwan(document, manifest, data);
+    else if(systemId == "wsc") result.pak = assembleWonderSwan(document, manifest, data);
 
     result.title  = std::string(document["game/title"].string().data());
     result.region = std::string(document["game/region"].string().data());

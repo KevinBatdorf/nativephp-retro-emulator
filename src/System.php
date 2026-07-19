@@ -21,6 +21,7 @@ enum System: string
     case Pce = 'pce';
     case Ngp = 'ngp';
     case Ws = 'ws';
+    case Wsc = 'wsc';
     case Ps1 = 'ps1';
     case Ng = 'ng';
     case A26 = 'a26';

@@ -577,7 +577,17 @@ describe('Typed layer', function () {
     });
 
     it('button enums match the native registry', function (string $systemId, string $enumClass) {
-        $registry = file_get_contents(dirname(__DIR__)."/native/cores/core_{$systemId}.cpp");
+        // Most ids map to core_<id>.cpp, but model variants share a core file
+        // (wsc lives in core_ws.cpp, gbc in core_gb.cpp) — resolve by which
+        // core actually declares `.id = "<id>"`.
+        $registry = '';
+        foreach (glob(dirname(__DIR__).'/native/cores/core_*.cpp') as $file) {
+            $contents = file_get_contents($file);
+            if (preg_match('/\.id\s*=\s*"'.$systemId.'"/', $contents)) {
+                $registry = $contents;
+                break;
+            }
+        }
 
         preg_match(
             '/\.id\s*=\s*"'.$systemId.'".*?\.buttons\s*=\s*\{(.*?)\n\s*\},/s',
@@ -605,6 +615,7 @@ describe('Typed layer', function () {
         ['sfc', SfcButton::class],
         ['fc', FcButton::class],
         ['gb', GbButton::class],
+        ['gbc', GbButton::class],
         ['md', MdButton::class],
         ['sg', SgButton::class],
         ['ms', MsButton::class],
@@ -614,6 +625,7 @@ describe('Typed layer', function () {
         ['msx', MsxButton::class],
         ['pce', PceButton::class],
         ['ws', WsButton::class],
+        ['wsc', WsButton::class],
     ]);
 
     it('system enum matches the ids GetSystems reports', function () {

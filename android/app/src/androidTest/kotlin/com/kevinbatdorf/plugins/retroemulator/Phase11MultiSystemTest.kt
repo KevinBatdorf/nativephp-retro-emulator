@@ -21,6 +21,7 @@ import java.io.File
  *   adb push tests/roms/pipes.a26          /data/local/tmp/test-a26.rom
  *   adb push tests/roms/helloworld.pce     /data/local/tmp/test-pce.rom
  *   adb push tests/roms/spritepriority.ws  /data/local/tmp/test-ws.rom
+ *   adb push tests/roms/chips1.wsc         /data/local/tmp/test-wsc.rom
  *
  * All ares calls stay on the test thread — libco requires the same thread
  * from loadSystem() onward.
@@ -55,6 +56,7 @@ class Phase11MultiSystemTest {
         SystemCase("pce", "/data/local/tmp/test-pce.rom", 0x2100,   false),
         // The WS boot splash outlasts 120 frames before the game touches iram.
         SystemCase("ws",  "/data/local/tmp/test-ws.rom",  0x0000,   false),
+        SystemCase("wsc", "/data/local/tmp/test-wsc.rom", 0x0000,   false),
         // 2600 zero page IS the RIOT RAM — any running game writes it.
         SystemCase("a26", "/data/local/tmp/test-a26.rom", 0x80,     true),
     )

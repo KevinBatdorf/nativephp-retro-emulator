@@ -1179,6 +1179,7 @@ object EmulatorFunctions {
                 system("pce", "PC Engine / TurboGrafx-16",    biosRequired = false, stable = true,  compiled),
                 system("ngp", "Neo Geo Pocket",               biosRequired = true,  stable = true,  compiled),
                 system("ws",  "WonderSwan",                   biosRequired = false, stable = true,  compiled),
+                system("wsc", "WonderSwan Color",             biosRequired = false, stable = true,  compiled),
                 system("ps1", "PlayStation",                  biosRequired = true,  stable = false, compiled),
                 system("ng",  "Neo Geo AES / MVS",            biosRequired = true,  stable = false, compiled),
                 system("a26", "Atari 2600",                   biosRequired = false, stable = true,  compiled),
