@@ -397,7 +397,7 @@ static bool resolveDevice(const SystemRegistry::SystemDef& def,
                           const std::string& name, DeviceDescriptor& out) {
     if (def.device && name == def.device) {          // the system's default pad
         out.buttons = def.buttons;
-        out.axes.clear();
+        out.axes = def.axes;   // N64's default pad IS the stick controller
         return true;
     }
     auto sit = deviceTable().find(def.id);

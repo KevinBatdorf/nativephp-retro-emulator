@@ -83,6 +83,7 @@ const SystemDef kDef = {
         {"C-Up", 1u << 6}, {"C-Down", 1u << 7}, {"C-Left", 1u << 8}, {"C-Right", 1u << 9},
         {"L", 1u << 10}, {"R", 1u << 11}, {"Z", 1u << 12}, {"Start", 1u << 13},
     },
+    .axes          = {"X-Axis", "Y-Axis"},
     .memBase       = 0x00000000u,
     .memSize       = 0x00800000u,   // 8 MiB RDRAM (base + Expansion Pak)
     .load          = loadN64,

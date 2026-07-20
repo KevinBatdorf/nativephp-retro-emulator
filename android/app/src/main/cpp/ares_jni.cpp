@@ -463,7 +463,7 @@ static bool resolveDevice(const SystemRegistry::SystemDef& def,
                           const std::string& name, DeviceDescriptor& out) {
     if (def.device && name == def.device) {          // the system's default pad
         out.buttons = def.buttons;
-        out.axes.clear();
+        out.axes = def.axes;   // N64's default pad IS the stick controller
         return true;
     }
     auto sit = deviceTable().find(def.id);
@@ -1965,6 +1965,11 @@ JNIEXPORT jstring JNICALL
 Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetSupportedSystems(
     JNIEnv* env, jobject)
 {
+    // Registry reads must not depend on a surface existing: nativeInit only
+    // runs when a renderer boots, but GetSystems is called from plain screens
+    // (a console list) long before any surface. Idempotent.
+    loadCoreModules();
+
     std::string ids;
     for (auto* def : SystemRegistry::all()) {
         if (!ids.empty()) ids += ",";
@@ -1982,6 +1987,7 @@ JNIEXPORT jstring JNICALL
 Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetSystemExtensions(
     JNIEnv* env, jobject, jstring systemIdStr)
 {
+    loadCoreModules();  // registry read — see nativeGetSupportedSystems
     auto* def = SystemRegistry::find(jstringToString(env, systemIdStr));
     std::string exts;
     if (def) {

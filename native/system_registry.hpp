@@ -52,6 +52,10 @@ struct SystemDef {
     //   10 = L shoulder, 11 = R shoulder.
     std::unordered_map<std::string, uint32_t> buttons;
 
+    // Analog axes on the system's default pad (ares node names, e.g. the N64
+    // stick's "X-Axis"/"Y-Axis"). Empty = digital-only pad.
+    std::vector<std::string> axes;
+
     // Memory bus window exposed to readMemory/writeMemory.
     uint32_t memBase;
     uint32_t memSize;
