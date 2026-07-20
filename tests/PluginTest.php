@@ -658,6 +658,34 @@ describe('Typed layer', function () {
         ]);
     });
 
+    it('N64Config carries the pre-load options as wire values', function () {
+        $config = new \KevinBatdorf\RetroEmulator\Config\N64Config(
+            quality: \KevinBatdorf\RetroEmulator\N64Quality::Hd,
+            supersampling: true,
+            disableVideoInterfaceProcessing: true,
+            weaveDeinterlacing: false,
+            homebrewMode: true,
+            recompiler: false,
+            expansionPak: false,
+            controllerPakBanks: \KevinBatdorf\RetroEmulator\ControllerPakBanks::Datel1Meg,
+        );
+
+        expect($config->toArray())->toBe([
+            'quality' => 'HD',
+            'supersampling' => true,
+            'disableVideoInterfaceProcessing' => true,
+            'weaveDeinterlacing' => false,
+            'homebrewMode' => true,
+            'recompiler' => false,
+            'expansionPak' => false,
+            'controllerPakBanks' => '128KiB (Datel 1Meg)',
+        ]);
+    });
+
+    it('N64Config omits unset options so native defaults stay authoritative', function () {
+        expect((new \KevinBatdorf\RetroEmulator\Config\N64Config)->toArray())->toBe([]);
+    });
+
     it('the global Config serializes shared knobs as wire values', function () {
         $config = new Config(
             luminance: 100,

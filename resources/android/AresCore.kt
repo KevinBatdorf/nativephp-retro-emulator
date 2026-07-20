@@ -90,8 +90,13 @@ class AresCore {
      * @param biosPath Optional real BIOS dump to override gba's embedded open
      *                 BIOS for accuracy; null otherwise.
      */
-    fun loadSystem(systemId: String, biosPath: String? = null): Boolean =
-        nativeLoadSystem(systemId, biosPath ?: "")
+    /**
+     * @param options Pre-load system options as "key=value" lines (n64 quality,
+     *                recompiler, …) — applied natively right before boot, like
+     *                desktop's option() calls. Empty = the core's defaults.
+     */
+    fun loadSystem(systemId: String, biosPath: String? = null, options: String = ""): Boolean =
+        nativeLoadSystem(systemId, biosPath ?: "", options)
 
     /** Comma-separated ares system IDs compiled into this build (e.g. "fc,gb,gba,gbc,md,n64,sfc"). */
     fun supportedSystems(): String = nativeGetSupportedSystems()
@@ -398,7 +403,7 @@ class AresCore {
     private external fun nativeSetShader(path: String?): Boolean
     private external fun nativeScreenshotRGBA(dims: IntArray): ByteArray?
 
-    private external fun nativeLoadSystem(systemId: String, biosPath: String): Boolean
+    private external fun nativeLoadSystem(systemId: String, biosPath: String, options: String): Boolean
     private external fun nativeGetSupportedSystems(): String
     private external fun nativeGetSystemExtensions(systemId: String): String
 

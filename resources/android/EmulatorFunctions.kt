@@ -33,6 +33,15 @@ object EmulatorFunctions {
     // core doesn't declare it (see native/core_options.hpp).
     private val CORE_TOGGLE_KEYS = listOf("colorEmulation", "deepBlackBoost", "interframeBlending", "showIcons")
 
+    // Pre-load option keys (applied before boot, not runtime toggles) — the
+    // n64 set desktop passes before Nintendo64::load. Booleans arrive as
+    // Boolean and serialize as true/false; the rest are wire strings.
+    private val SYSTEM_OPTION_KEYS = listOf(
+        "quality", "supersampling", "disableVideoInterfaceProcessing",
+        "weaveDeinterlacing", "homebrewMode", "recompiler",
+        "expansionPak", "controllerPakBanks",
+    )
+
     private data class SurfaceEntry(
         val renderer: EmulatorRenderer,
         val activity: FragmentActivity,
@@ -338,7 +347,14 @@ object EmulatorFunctions {
                 .mapNotNull { key -> (config[key] as? Boolean)?.let { key to it } }
                 .toMap()
             if (coreToggles.isNotEmpty()) renderer.queueCoreOptions(coreToggles)
-            renderer.queueSystemLoad(system, config["biosPath"] as? String)
+
+            // Pre-load options (n64: quality, recompiler, …) travel as
+            // "key=value" lines and apply natively right before boot; absent
+            // keys fall back to desktop's defaults in the core.
+            val systemOptions = SYSTEM_OPTION_KEYS
+                .mapNotNull { key -> config[key]?.let { "$key=$it" } }
+                .joinToString("\n")
+            renderer.queueSystemLoad(system, config["biosPath"] as? String, systemOptions)
 
             Log.d(TAG, "LoadSystem: staged system=$system")
             return BridgeResponse.success(mapOf("status" to "staged", "system" to system))

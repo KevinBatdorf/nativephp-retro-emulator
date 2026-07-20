@@ -98,6 +98,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     // Pending commands posted from the main thread and consumed on the GL thread.
     @Volatile var pendingSystemId: String?    = null
     @Volatile var pendingBiosPath: String?    = null
+    @Volatile var pendingSystemOptions: String = ""
     @Volatile var pendingRomBytes: ByteArray? = null
     @Volatile var pendingSavePrefix: String?  = null
 
@@ -186,6 +187,8 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     // (Vulkan FIFO/vsync; 120 Hz on some devices), so ticks are budgeted by wall
     // clock against the console's native frame rate rather than per present.
     private var lastTickNanos = 0L
+    private var fpsTickCount = 0
+    private var fpsWindowStartNanos = 0L
     private var tickAccumulator = 0.0
 
     // Phase 13 — periodic battery-save flush (30 s, matching ares' desktop
@@ -337,7 +340,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
                 // Consume on success too: a stale request left behind would
                 // silently re-stage on the frame after a stop.
                 pendingSystemId = null
-                systemStaged = core.loadSystem(systemId, pendingBiosPath)
+                systemStaged = core.loadSystem(systemId, pendingBiosPath, pendingSystemOptions)
                 if (!systemStaged) Log.e(TAG, "loadSystem($systemId) failed")
             }
 
@@ -422,6 +425,17 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
                 tickAccumulator -= ticks
             }
             repeat(ticks) { core.tick() }
+
+            // Emulated-fps telemetry: ticks actually executed per wallclock,
+            // logged every 5s. targetFps alongside makes shortfall obvious.
+            fpsTickCount += ticks
+            if (fpsWindowStartNanos == 0L) fpsWindowStartNanos = now
+            if (now - fpsWindowStartNanos >= 5_000_000_000L) {
+                val fps = fpsTickCount * 1e9 / (now - fpsWindowStartNanos)
+                Log.i(TAG, "emulated fps: %.1f (target %.1f)".format(fps, targetFps))
+                fpsTickCount = 0
+                fpsWindowStartNanos = now
+            }
 
             // --- Periodic battery-save flush ---
             if (autoSave) {
@@ -568,9 +582,10 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
      * legal and leaves the running game untouched until the next ROM load.
      * @param systemId ares system ID — one of [AresCore.supportedSystems].
      */
-    fun queueSystemLoad(systemId: String, biosPath: String? = null) {
+    fun queueSystemLoad(systemId: String, biosPath: String? = null, systemOptions: String = "") {
         stagedSystemId = systemId
         pendingBiosPath = biosPath
+        pendingSystemOptions = systemOptions
         pendingSystemId = systemId
         requestRender()
     }

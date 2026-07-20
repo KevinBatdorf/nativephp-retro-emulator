@@ -7,6 +7,7 @@
 #include <nall/vfs.hpp>
 
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -74,6 +75,13 @@ struct SystemDef {
     // type per core namespace, so only the core can reach it (see
     // clearStaleEntryPoints).
     void (*clearEntryPoints)();
+
+    // Pre-load option setter, called immediately before load() with the staged
+    // system options (config key → wire value). Some cores read globals that
+    // must be set before System::load — desktop sets them the same way
+    // (nintendo-64.cpp:107-118). The core applies its reference defaults
+    // first, then the overrides. nullptr = the system has no pre-load options.
+    void (*applyOptions)(const std::map<std::string, std::string>& options);
 };
 
 // Registers a compiled core at static-init time: dlopen (Android's modular

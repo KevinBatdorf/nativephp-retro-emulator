@@ -34,7 +34,11 @@ void ares_reset(AresContext* ctx);
 // false for ids not compiled into this build.
 // bios_path: optional real BIOS dump to override gba's embedded open BIOS;
 // NULL/empty otherwise (all systems boot on embedded firmware).
-bool ares_load_system(AresContext* ctx, const char* system_id, const char* bios_path);
+// options: pre-load system options as "key=value" lines (n64 quality,
+// recompiler, …), applied right before boot like desktop's option() calls;
+// NULL/empty = the core's reference defaults.
+bool ares_load_system(AresContext* ctx, const char* system_id, const char* bios_path,
+                      const char* options);
 
 // Comma-separated ids of the systems compiled into this build, e.g.
 // "fc,gb,gba,gbc,md,n64,sfc".  Static storage — do not free.

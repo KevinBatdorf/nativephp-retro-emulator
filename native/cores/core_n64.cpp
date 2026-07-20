@@ -20,6 +20,33 @@ auto loadN64(ares::Node::System& root, const SystemDef&, const std::string& load
     return ares::Nintendo64::load(root, nall::string(loadName.c_str()));
 }
 
+// Pre-load options, exactly the set desktop passes before Nintendo64::load
+// (desktop-ui/emulator/nintendo-64.cpp:107-118). Defaults mirror desktop's
+// settings.hpp:45-119 — critically Recompiler=true: the CPU/RSP recompilers
+// ship DISABLED in the core (cpu.hpp:1204, rsp.hpp:683) and desktop switches
+// them on here. Skipping this call runs the interpreters — ~4x slower.
+// On iOS Accuracy::* force the interpreter at compile time and the Recompiler
+// option compiles to a no-op; every other option applies the same as Android.
+auto applyN64Options(const std::map<std::string, std::string>& options) -> void {
+    const auto value = [&](const char* key, const char* fallback) -> std::string {
+        auto it = options.find(key);
+        return it == options.end() ? fallback : it->second;
+    };
+
+    ares::Nintendo64::option("Quality", value("quality", "SD").c_str());
+    ares::Nintendo64::option("Supersampling", value("supersampling", "false").c_str());
+    // Desktop's #if defined(VULKAN) branch — both our platforms compile it.
+    ares::Nintendo64::option("Enable GPU acceleration", "true");
+    ares::Nintendo64::option("Disable Video Interface Processing",
+                             value("disableVideoInterfaceProcessing", "false").c_str());
+    ares::Nintendo64::option("Weave Deinterlacing", value("weaveDeinterlacing", "true").c_str());
+    ares::Nintendo64::option("Homebrew Mode", value("homebrewMode", "false").c_str());
+    ares::Nintendo64::option("Recompiler", value("recompiler", "true").c_str());
+    ares::Nintendo64::option("Expansion Pak", value("expansionPak", "true").c_str());
+    ares::Nintendo64::option("Controller Pak Banks",
+                             value("controllerPakBanks", "32KiB (Default)").c_str());
+}
+
 // RDRAM byte window for readMemory/writeMemory (rdram.ram is the writable RAM).
 auto memRead(uint32_t o) -> uint8_t { return ares::Nintendo64::rdram.ram.data[o]; }
 auto memWrite(uint32_t o, uint8_t v) -> void { ares::Nintendo64::rdram.ram.data[o] = v; }
@@ -65,6 +92,7 @@ const SystemDef kDef = {
     .makeCartridgePak = cartridgePak,
     .makeSlotPak   = nullptr,
     .clearEntryPoints = clearEntryPoints,
+    .applyOptions  = applyN64Options,
 };
 
 const SystemRegistry::Registrar kRegistrar{&kDef};

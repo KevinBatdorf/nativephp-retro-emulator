@@ -16,7 +16,7 @@ final class N64DeviceRenderTests: XCTestCase {
         let ctx = ares_create()
         defer { ares_destroy(ctx) }
 
-        XCTAssertTrue(ares_load_system(ctx, "n64", nil), "n64 must stage")
+        XCTAssertTrue(ares_load_system(ctx, "n64", nil, nil), "n64 must stage")
 
         let rom = try Data(contentsOf: URL(fileURLWithPath: romPath))
         let loaded = rom.withUnsafeBytes {

@@ -75,9 +75,12 @@ final class EmulatorRenderer: UIView {
     /// until the next `loadRom`. System firmware is embedded in the native
     /// library — no assets are required; `biosPath` optionally overrides gba's
     /// embedded open BIOS with a real dump for accuracy.
-    func loadSystem(_ system: String, biosPath: String? = nil) -> Bool {
+    /// - Parameter systemOptions: pre-load options as "key=value" lines (n64
+    ///   quality, recompiler, …), applied natively right before boot like
+    ///   desktop's option() calls. Empty = the core's reference defaults.
+    func loadSystem(_ system: String, biosPath: String? = nil, systemOptions: String = "") -> Bool {
         emuLock.lock()
-        let ok = ares_load_system(ctx, system, biosPath ?? "")
+        let ok = ares_load_system(ctx, system, biosPath ?? "", systemOptions)
         emuLock.unlock()
         if ok { loadedSystem = system }
         return ok

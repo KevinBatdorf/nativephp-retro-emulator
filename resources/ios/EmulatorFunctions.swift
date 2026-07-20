@@ -262,6 +262,14 @@ enum EmulatorFunctions {
     /// config keys: biosPath (String?), autoSave, speed, runAhead, rewind,
     /// rewindBufferSeconds, dynamicRateControl.
     class LoadSystem: BridgeFunction {
+        // Pre-load option keys (applied before boot, not runtime toggles) —
+        // the n64 set desktop passes before Nintendo64::load.
+        static let systemOptionKeys = [
+            "quality", "supersampling", "disableVideoInterfaceProcessing",
+            "weaveDeinterlacing", "homebrewMode", "recompiler",
+            "expansionPak", "controllerPakBanks",
+        ]
+
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
 
@@ -300,7 +308,22 @@ enum EmulatorFunctions {
             }
             let toggles = coreToggles(from: config)
             if !toggles.isEmpty { renderer.setCoreOptions(toggles) }
-            guard renderer.loadSystem(system, biosPath: config["biosPath"] as? String) else {
+
+            // Pre-load options (n64: quality, recompiler, …) travel as
+            // "key=value" lines and apply natively right before boot; absent
+            // keys fall back to desktop's defaults in the core. Booleans must
+            // read "true"/"false" — nall's boolean() is equals("true"), and a
+            // JSON Bool stringifies as 1/0 via NSNumber.
+            let systemOptions = Self.systemOptionKeys
+                .compactMap { key -> String? in
+                    guard let raw = config[key] else { return nil }
+                    if let b = raw as? Bool { return "\(key)=\(b ? "true" : "false")" }
+                    return "\(key)=\(raw)"
+                }
+                .joined(separator: "\n")
+            guard renderer.loadSystem(system,
+                                      biosPath: config["biosPath"] as? String,
+                                      systemOptions: systemOptions) else {
                 return BridgeResponse.error(code: "LOAD_FAILED", message: "ares_load_system failed for '\(system)'")
             }
 

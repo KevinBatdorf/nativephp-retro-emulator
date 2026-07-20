@@ -18,6 +18,7 @@
 #include <climits>
 #include <map>
 #include <mutex>
+#include <sstream>
 #include <string>
 #include <unordered_map>
 
@@ -147,6 +148,10 @@ struct AresContext {
     // Dev-supplied firmware image (loadSystem biosPath), staged with the
     // system; handed to makeSystemPak on every boot. Empty = none given.
     std::vector<uint8_t> biosBytes;
+
+    // Pre-load system options staged by loadSystem (config key → wire value),
+    // consumed via SystemDef::applyOptions right before every boot.
+    std::map<std::string, std::string> systemOptions;
 
     // Cheats — every ctx access is serialized by the Swift-side emuLock, so
     // the emulation loop never reads these while a bridge call mutates them.
@@ -645,7 +650,8 @@ static void setupN64Vulkan() {
     if (!loaderReady) fprintf(stderr, "setupN64Vulkan: MoltenVK loader init failed\n");
 }
 
-bool ares_load_system(AresContext* ctx, const char* system_id, const char* bios_path) {
+bool ares_load_system(AresContext* ctx, const char* system_id, const char* bios_path,
+                      const char* options) {
     if (!ctx || !system_id) return false;
 
     auto* def = SystemRegistry::find(system_id);
@@ -655,6 +661,18 @@ bool ares_load_system(AresContext* ctx, const char* system_id, const char* bios_
     }
 
     if (std::strcmp(system_id, "n64") == 0) setupN64Vulkan();
+
+    // Stage pre-load system options ("key=value" per line) for applyOptions.
+    ctx->systemOptions.clear();
+    if (options && options[0]) {
+        std::istringstream lines(options);
+        std::string line;
+        while (std::getline(lines, line)) {
+            auto eq = line.find('=');
+            if (eq == std::string::npos || eq == 0) continue;
+            ctx->systemOptions[line.substr(0, eq)] = line.substr(eq + 1);
+        }
+    }
 
     // An optional dev-supplied BIOS travels with the staging (gba may override
     // its embedded open BIOS with a real dump); empty when none was given.
@@ -741,6 +759,9 @@ static int bootWithPak(AresContext* ctx, SystemRegistry::CartridgePak built,
     if (ctx->systemLoaded) unloadCore(ctx);
 
     ctx->systemPak = def->makeSystemPak(*def, ctx->biosBytes);
+    // Pre-load options (currently n64) must land before load(), like desktop's
+    // option() calls before Nintendo64::load (nintendo-64.cpp:107-118).
+    if (def->applyOptions) def->applyOptions(ctx->systemOptions);
     if (!def->load(ctx->root, *def, loadName)) {
         fprintf(stderr, "ares_load_rom: ares load failed: %s\n", loadName.c_str());
         unloadCore(ctx);

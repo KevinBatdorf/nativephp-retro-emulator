@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <map>
 #include <mutex>
+#include <sstream>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -160,6 +161,10 @@ struct EmulatorState {
     // Battery-save location ("<prefix>.save.ram", …). Set per nativeLoadRom;
     // empty disables persistence.
     std::string savePrefix;
+
+    // Pre-load system options staged by LoadSystem (config key → wire value),
+    // consumed via SystemDef::applyOptions right before every boot.
+    std::map<std::string, std::string> systemOptions;
 
     // Dev-supplied firmware image (LoadSystem biosPath), staged with the
     // system; handed to makeSystemPak on every boot. Empty = none given.
@@ -780,12 +785,24 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeScreenshotRGBA(
 
 JNIEXPORT jboolean JNICALL
 Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadSystem(
-    JNIEnv* env, jobject, jstring systemIdStr, jstring biosPathStr)
+    JNIEnv* env, jobject, jstring systemIdStr, jstring biosPathStr, jstring optionsStr)
 {
     if (!g_state) return JNI_FALSE;
 
     auto systemId = jstringToString(env, systemIdStr);
     auto* def = SystemRegistry::find(systemId);
+
+    // Stage pre-load system options ("key=value" per line) for applyOptions.
+    g_state->systemOptions.clear();
+    {
+        std::istringstream lines(jstringToString(env, optionsStr));
+        std::string line;
+        while (std::getline(lines, line)) {
+            auto eq = line.find('=');
+            if (eq == std::string::npos || eq == 0) continue;
+            g_state->systemOptions[line.substr(0, eq)] = line.substr(eq + 1);
+        }
+    }
     if (!def) {
         LOGE("unsupported system: %s", systemId.c_str());
         return JNI_FALSE;
@@ -916,6 +933,9 @@ static int bootWithPak(SystemRegistry::CartridgePak built,
     if (g_state->systemLoaded) unloadCore();
 
     g_state->systemPak = def->makeSystemPak(*def, g_state->biosBytes);
+    // Pre-load options (currently n64) must land before load(), like desktop's
+    // option() calls before Nintendo64::load (nintendo-64.cpp:107-118).
+    if (def->applyOptions) def->applyOptions(g_state->systemOptions);
     if (!def->load(g_state->root, *def, loadName)) {
         LOGE("ares load failed: %s", loadName.c_str());
         unloadCore();
