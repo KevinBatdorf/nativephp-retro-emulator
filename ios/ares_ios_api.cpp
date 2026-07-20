@@ -105,8 +105,11 @@ struct AresContext {
         std::string name;
     };
     std::vector<CachedAxis> axisCache;
-    std::mutex axisMutex;   // guards axisAccum + lightgun cursor
+    std::mutex axisMutex;   // guards axisAccum/axisHold + lightgun cursor
     std::unordered_map<std::string, int32_t> axisAccum[kMaxPorts];
+    // Held absolute deflection (analog stick): applied on EVERY poll until
+    // changed, unlike axisAccum's consume-once relative deltas (mouse/gun).
+    std::unordered_map<std::string, int32_t> axisHold[kMaxPorts];
 
     // Light-gun shadow cursor per port, mirroring ares' internal cursor (starts
     // center-screen, same clamp as super-scope.cpp:52-56) so aimAt() can feed the
@@ -327,7 +330,9 @@ struct IosPlatform : ares::Platform {
                 if (cached.node == axis) {
                     std::lock_guard<std::mutex> lock(g_ctx->axisMutex);
                     auto& acc = g_ctx->axisAccum[cached.port - 1][cached.name];
-                    axis->setValue(acc);
+                    auto& hold = g_ctx->axisHold[cached.port - 1];
+                    auto held = hold.find(cached.name);
+                    axis->setValue((held != hold.end() ? held->second : 0) + acc);
                     acc = 0;   // consume: a relative delta applies once per poll
                     return;
                 }
@@ -720,8 +725,13 @@ static void unloadCore(AresContext* ctx)
     ctx->axisCache.clear();
     // connectedDevice[] intentionally survives (registrations persist across a
     // reboot); the swMask does not — a device teardown drops held buttons.
+    // Held axis deflections drop for the same reason.
     for (int i = 0; i < AresContext::kMaxPorts; i++) {
         ctx->swMask[i].store(0, std::memory_order_relaxed);
+    }
+    {
+        std::lock_guard<std::mutex> lock(ctx->axisMutex);
+        for (auto& m : ctx->axisHold) m.clear();
     }
     ctx->audioStreams.clear();
     {
@@ -1177,7 +1187,7 @@ const char* ares_press_button(AresContext* ctx, int port,
     return statusRet("");
 }
 
-const char* ares_set_axis(AresContext* ctx, int port, const char* name, int value) {
+const char* ares_set_axis(AresContext* ctx, int port, const char* name, int value, bool hold) {
     if (!ctx || !ctx->system) return statusRet("SYSTEM_NOT_LOADED");
     if (port < 1 || port > AresContext::kMaxPorts) return statusRet("INVALID_PARAMETERS");
 
@@ -1188,7 +1198,13 @@ const char* ares_set_axis(AresContext* ctx, int port, const char* name, int valu
         return statusRet("INVALID_PARAMETERS");
 
     std::lock_guard<std::mutex> lock(ctx->axisMutex);
-    ctx->axisAccum[port - 1][axisName] += value;
+    if (hold) {
+        // Absolute stick deflection, applied every poll until changed;
+        // 0 releases. The on-screen-stick path (relative deltas can't hold).
+        ctx->axisHold[port - 1][axisName] = value;
+    } else {
+        ctx->axisAccum[port - 1][axisName] += value;
+    }
     return statusRet("");
 }
 

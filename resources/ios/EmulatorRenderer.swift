@@ -476,11 +476,12 @@ final class EmulatorRenderer: UIView {
         return String(cString: ares_press_button(ctx, Int32(port), name, down))
     }
 
-    /// Accumulate a relative axis delta (mouse / light-gun X/Y) on a port.
-    func setAxis(port: Int, name: String, value: Int) -> String {
+    /// Accumulate a relative axis delta (mouse / light-gun X/Y), or with
+    /// hold=true set an absolute stick deflection applied every poll (0 releases).
+    func setAxis(port: Int, name: String, value: Int, hold: Bool = false) -> String {
         emuLock.lock()
         defer { emuLock.unlock() }
-        return String(cString: ares_set_axis(ctx, Int32(port), name, Int32(value)))
+        return String(cString: ares_set_axis(ctx, Int32(port), name, Int32(value), hold))
     }
 
     /// Aim a light-gun at an absolute normalized (0..1) screen position.

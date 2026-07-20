@@ -119,7 +119,10 @@ const char* ares_press_button(AresContext* ctx, int port,
 
 // Accumulate a relative delta on one axis of the connected device (mouse /
 // light-gun X/Y).  Consumed on the core's next poll.
-const char* ares_set_axis(AresContext* ctx, int port, const char* name, int value);
+// hold=false: accumulate a relative delta (mouse / light-gun), consumed once
+// per poll. hold=true: absolute stick deflection applied every poll until
+// changed; 0 releases.
+const char* ares_set_axis(AresContext* ctx, int port, const char* name, int value, bool hold);
 
 // Aim a light-gun at an absolute normalized position (0..1).  ares' guns are
 // relative-only, so a shadow cursor mirrors the gun's internal cursor and the

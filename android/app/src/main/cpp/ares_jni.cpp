@@ -119,8 +119,11 @@ struct EmulatorState {
         std::string name;
     };
     std::vector<CachedAxis> axisCache;
-    std::mutex axisMutex;   // guards axisAccum + lightgun cursor
+    std::mutex axisMutex;   // guards axisAccum/axisHold + lightgun cursor
     std::unordered_map<std::string, int32_t> axisAccum[kMaxPorts];
+    // Held absolute deflection (analog stick): applied on EVERY poll until
+    // changed, unlike axisAccum's consume-once relative deltas (mouse/gun).
+    std::unordered_map<std::string, int32_t> axisHold[kMaxPorts];
 
     // Light-gun shadow cursor per port, mirroring ares' internal cursor (starts
     // center-screen, same clamp as super-scope.cpp:52-56) so aimAt() can feed the
@@ -368,7 +371,9 @@ struct AndroidPlatform : ares::Platform {
                 if (cached.node == axis) {
                     std::lock_guard<std::mutex> lock(g_state->axisMutex);
                     auto& acc = g_state->axisAccum[cached.port - 1][cached.name];
-                    axis->setValue(acc);
+                    auto& hold = g_state->axisHold[cached.port - 1];
+                    auto held = hold.find(cached.name);
+                    axis->setValue((held != hold.end() ? held->second : 0) + acc);
                     acc = 0;   // consume: a relative delta applies once per poll
                     return;
                 }
@@ -867,8 +872,13 @@ static void unloadCore()
     g_state->axisCache.clear();
     // connectedDevice[] intentionally survives (registrations persist across a
     // reboot); the swMask does not — a device teardown drops held buttons.
+    // Held axis deflections drop for the same reason.
     for (int i = 0; i < EmulatorState::kMaxPorts; i++) {
         g_state->swMask[i].store(0, std::memory_order_relaxed);
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_state->axisMutex);
+        for (auto& m : g_state->axisHold) m.clear();
     }
     g_state->audioStreams.clear();
     {
@@ -1490,7 +1500,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativePressButton(
  */
 JNIEXPORT jstring JNICALL
 Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetAxis(
-    JNIEnv* env, jobject, jint port, jstring nameStr, jint value)
+    JNIEnv* env, jobject, jint port, jstring nameStr, jint value, jboolean hold)
 {
     auto ret = [&](const char* s) { return env->NewStringUTF(s); };
     if (!g_state || !g_state->system) return ret("SYSTEM_NOT_LOADED");
@@ -1503,7 +1513,13 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetAxis(
         return ret("INVALID_PARAMETERS");
 
     std::lock_guard<std::mutex> lock(g_state->axisMutex);
-    g_state->axisAccum[port - 1][name] += value;
+    if (hold) {
+        // Absolute stick deflection, applied every poll until changed;
+        // 0 releases. The on-screen-stick path (relative deltas can't hold).
+        g_state->axisHold[port - 1][name] = value;
+    } else {
+        g_state->axisAccum[port - 1][name] += value;
+    }
     return ret("");
 }
 

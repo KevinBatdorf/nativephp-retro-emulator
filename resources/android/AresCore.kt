@@ -89,11 +89,9 @@ class AresCore {
      * @param systemId One of [supportedSystems] (e.g. "sfc", "fc", "gb", "md").
      * @param biosPath Optional real BIOS dump to override gba's embedded open
      *                 BIOS for accuracy; null otherwise.
-     */
-    /**
-     * @param options Pre-load system options as "key=value" lines (n64 quality,
-     *                recompiler, …) — applied natively right before boot, like
-     *                desktop's option() calls. Empty = the core's defaults.
+     * @param options  Pre-load system options as "key=value" lines (n64 quality,
+     *                 recompiler, …) — applied natively right before boot, like
+     *                 desktop's option() calls. Empty = the core's defaults.
      */
     fun loadSystem(systemId: String, biosPath: String? = null, options: String = ""): Boolean =
         nativeLoadSystem(systemId, biosPath ?: "", options)
@@ -276,7 +274,7 @@ class AresCore {
      *
      * @return "" on success, or "SYSTEM_NOT_LOADED" / "INVALID_PARAMETERS".
      */
-    fun setAxis(port: Int, name: String, value: Int): String = nativeSetAxis(port, name, value)
+    fun setAxis(port: Int, name: String, value: Int, hold: Boolean = false): String = nativeSetAxis(port, name, value, hold)
 
     /**
      * Aim a light-gun at an absolute normalized position (0..1). ares' guns are
@@ -439,7 +437,7 @@ class AresCore {
     private external fun nativeConnectDevice(systemId: String, port: Int, device: String): String
     private external fun nativeDevicePorts(systemId: String, port: Int): IntArray
     private external fun nativePressButton(port: Int, name: String, down: Boolean): String
-    private external fun nativeSetAxis(port: Int, name: String, value: Int): String
+    private external fun nativeSetAxis(port: Int, name: String, value: Int, hold: Boolean): String
     private external fun nativeAimAt(port: Int, x: Float, y: Float): String
     private external fun nativeGetAxisAccum(port: Int, name: String): Int
 

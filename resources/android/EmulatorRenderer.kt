@@ -848,7 +848,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
         core.pressButton(port, name, down)
 
     /** Accumulate a relative axis delta on a port (see [AresCore.setAxis]). Thread-safe. */
-    fun setAxis(port: Int, name: String, value: Int): String = core.setAxis(port, name, value)
+    fun setAxis(port: Int, name: String, value: Int, hold: Boolean = false): String = core.setAxis(port, name, value, hold)
 
     /** Aim a light-gun at a normalized position (see [AresCore.aimAt]). Thread-safe. */
     fun aimAt(port: Int, x: Float, y: Float): String = core.aimAt(port, x, y)

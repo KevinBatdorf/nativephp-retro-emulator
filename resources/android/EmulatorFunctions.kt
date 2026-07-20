@@ -1058,7 +1058,11 @@ object EmulatorFunctions {
         }
     }
 
-    /** Accumulate a relative axis delta on a port (mouse / light-gun X/Y). */
+    /**
+     * Accumulate a relative axis delta (mouse / light-gun X/Y), or with
+     * hold=true set an absolute deflection applied every poll until changed
+     * (analog stick; 0 releases).
+     */
     class SetAxis(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
             val (entry, err) = entry(parameters)
@@ -1067,8 +1071,9 @@ object EmulatorFunctions {
             val axis = parameters["axis"] as? String
                 ?: return BridgeResponse.error("INVALID_PARAMETERS", "axis is required")
             val value = (parameters["value"] as? Number)?.toInt() ?: 0
+            val hold = parameters["hold"] as? Boolean ?: false
             return statusResponse(
-                entry!!.renderer.setAxis(port, axis, value),
+                entry!!.renderer.setAxis(port, axis, value, hold),
                 mapOf("status" to "ok", "axis" to axis, "value" to value))
         }
     }

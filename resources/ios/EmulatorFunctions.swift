@@ -840,8 +840,9 @@ enum EmulatorFunctions {
                 return BridgeResponse.error(code: "INVALID_PARAMETERS", message: "axis is required")
             }
             let value = int(parameters["value"]) ?? 0
+            let hold = parameters["hold"] as? Bool ?? false
             return statusResponse(
-                renderer.setAxis(port: port, name: axis, value: value),
+                renderer.setAxis(port: port, name: axis, value: value, hold: hold),
                 success: ["status": "ok", "axis": axis, "value": value])
         }
     }
