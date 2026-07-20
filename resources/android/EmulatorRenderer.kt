@@ -189,6 +189,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     private var lastTickNanos = 0L
     private var fpsTickCount = 0
     private var fpsWindowStartNanos = 0L
+    private var votedFrameRate = 0.0
     private var tickAccumulator = 0.0
 
     // Phase 13 — periodic battery-save flush (30 s, matching ares' desktop
@@ -415,6 +416,22 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
             val speed = if (fastForward) 4.0 else speedMultiplier
             val hint = core.refreshRateHint()
             val targetFps = if (hint > 0.0) hint else FALLBACK_FPS
+
+            // Vote the display down to the CONTENT's rate. Handhelds default to
+            // 120Hz, and our FIFO-paced loop then uploads + presents (+ shader
+            // passes) twice per emulated frame — pure GPU/battery waste. One
+            // vote per hint value; the OS falls back gracefully if the policy
+            // pins the mode.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && targetFps != votedFrameRate) {
+                votedFrameRate = targetFps
+                runCatching {
+                    currentSurface?.setFrameRate(
+                        targetFps.toFloat(),
+                        Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE,
+                    )
+                }
+            }
+
             tickAccumulator += elapsed * targetFps * speed
             var ticks = tickAccumulator.toInt()
             if (ticks > MAX_TICKS_PER_FRAME) {
@@ -512,7 +529,17 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
             // The native blit scales the source with a linear filter and centers
             // it in outputRect (the clear paints the letterbox bars) — the exact
             // ruby presentation, done by vkCmdBlitImage instead of a quad.
-            core.presentFrame(outputRect.x, outputRect.y, outputRect.w, outputRect.h)
+            //
+            // Only when the core produced a new frame: with the display pinned
+            // above the content rate (handhelds default 120Hz and can refuse
+            // the setFrameRate vote), presenting every vsync re-uploads and
+            // re-shades identical pixels — measurable GPU/battery waste. On
+            // no-tick passes just yield to the next vsync interval.
+            if (ticks > 0 || !firstFrameSent) {
+                core.presentFrame(outputRect.x, outputRect.y, outputRect.w, outputRect.h)
+            } else {
+                Thread.sleep(3)
+            }
     }
 
     // -----------------------------------------------------------------------
