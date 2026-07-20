@@ -5,9 +5,11 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Device selection + the axis input channel (plan.md step 1.5). Controllers are
- * explicit: nothing is connected until connectDevice, and each device exposes
- * its own buttons/axes. The SNES Mouse is the reference axis device.
+ * Device selection + the axis input channel (plan.md step 1.5). Port 1
+ * auto-connects the system's default pad on boot (desktop parity); ports 2+
+ * stay empty until connectDevice. Each device exposes its own buttons/axes;
+ * an explicit connectDevice on port 1 overrides the default. The SNES Mouse is
+ * the reference axis device.
  */
 @RunWith(AndroidJUnit4::class)
 class DeviceTest {
@@ -20,9 +22,9 @@ class DeviceTest {
             assert(core.loadSystem("sfc"))
             assert(core.loadRom(makeLoRom(), null) == AresCore.LOAD_OK)
 
-            // Nothing plugged in yet — no cached inputs.
+            // Port 1 boots with the system's default gamepad (auto-connected).
             core.tick()
-            assert(core.getButtonBit(1, "A") == -1) { "no device → no button" }
+            assert(core.getButtonBit(1, "A") == (1 shl 8)) { "default gamepad A on port 1" }
 
             // Connect a mouse; its buttons are Left/Right, axes X/Y.
             assert(core.connectDevice("sfc", 1, "Mouse").isEmpty()) { "connect mouse" }

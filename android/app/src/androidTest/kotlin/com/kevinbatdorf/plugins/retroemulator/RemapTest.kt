@@ -72,8 +72,9 @@ class RemapTest {
             assert(core.loadRom(makeLoRom(), null) == AresCore.LOAD_OK)
             core.tick()
 
-            // No controller registered on the port yet.
-            assert(core.setInputMapping(1, arrayOf("A"), arrayOf("B")) == "INVALID_PARAMETERS") {
+            // Port 2 has no controller registered (port 1 auto-defaults to the
+            // system pad; ports 2+ stay empty until connected).
+            assert(core.setInputMapping(2, arrayOf("A"), arrayOf("B")) == "INVALID_PARAMETERS") {
                 "remap with no device is INVALID_PARAMETERS"
             }
             assert(core.connectDevice("sfc", 1, "Gamepad").isEmpty()) { "connect gamepad" }

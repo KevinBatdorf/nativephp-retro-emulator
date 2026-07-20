@@ -568,6 +568,12 @@ static void applyConnectedDevices() {
             std::lock_guard<std::mutex> lock(g_state->deviceMutex);
             name = g_state->connectedDevice[p - 1];
         }
+        // Port 1 defaults to the system's own controller when nothing is
+        // registered — desktop auto-connects the default pad, and consumers
+        // shouldn't have to name a system-specific device (MD's "Fighting Pad")
+        // through a generic enum just to get input. Explicit connectDevice
+        // still overrides (it fills connectedDevice[]).
+        if (name.empty() && p == 1 && def.device) name = def.device;
         auto portName = std::string("Controller Port ") + std::to_string(p);
         auto port = NodeUtil::findByName<ares::Node::Port>(g_state->root, portName.c_str());
 
