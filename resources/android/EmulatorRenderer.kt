@@ -101,6 +101,14 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     @Volatile var pendingRomBytes: ByteArray? = null
     @Volatile var pendingSavePrefix: String?  = null
 
+    // Sufami Turbo / BS-X slot carts staged for the next ROM load (index 0 =
+    // Slot A, 1 = Slot B). Applied on the render thread immediately before
+    // core.loadRom — NOT via a direct core.stageSlot: the native call no-ops
+    // before the core exists (g_state null) and would race loadRom's read of
+    // the same buffer if written from the bridge thread. Published to the
+    // render thread by the pendingRomBytes volatile write that follows.
+    private val pendingSlots = arrayOfNulls<ByteArray>(2)
+
     // Staged system declaration (plan 4b) — LoadSystem never boots a core;
     // these carry the declaration until a ROM arrives and triggers the boot.
     @Volatile var stagedSystemId: String = ""
@@ -343,6 +351,11 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
             val rom = pendingRomBytes
             if (systemStaged && rom != null) {
                 pendingRomBytes = null
+                // Insert any staged slot carts before the boot so the base
+                // materializes their nested ports (SuFami A/B, BS-X). Done here
+                // on the render thread — the one place the core is guaranteed
+                // live and single-owner of stagedSlot.
+                for (i in 0..1) pendingSlots[i]?.let { core.stageSlot(i, it); pendingSlots[i] = null }
                 when (core.loadRom(rom, pendingSavePrefix, stagedRegion, stagedPreferredRegions)) {
                     AresCore.LOAD_OK -> {
                         romLoaded = true
@@ -825,8 +838,13 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     /** Aim a light-gun at a normalized position (see [AresCore.aimAt]). Thread-safe. */
     fun aimAt(port: Int, x: Float, y: Float): String = core.aimAt(port, x, y)
 
-    /** Stage a Sufami Turbo slot ROM for the next load (see [AresCore.stageSlot]). */
-    fun stageSlot(index: Int, rom: ByteArray) = core.stageSlot(index, rom)
+    /**
+     * Stage a Sufami Turbo / BS-X slot ROM for the next load (see
+     * [AresCore.stageSlot]). Records the bytes; the render thread inserts them
+     * into the core immediately before the next ROM boot. Safe to call before
+     * the surface (and core) exist — no native call happens here.
+     */
+    fun stageSlot(index: Int, rom: ByteArray) { if (index in 0..1) pendingSlots[index] = rom }
 
     /** Test seam: pending accumulated axis delta (see [AresCore.getAxisAccum]). */
     fun getAxisAccum(port: Int, name: String): Int = core.getAxisAccum(port, name)

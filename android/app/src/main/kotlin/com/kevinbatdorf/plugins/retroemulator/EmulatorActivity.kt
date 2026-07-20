@@ -29,6 +29,8 @@ class EmulatorActivity : Activity() {
         const val EXTRA_ROM_PATH = "ROM_PATH"
         const val EXTRA_SYSTEM   = "SYSTEM"
         const val EXTRA_BIOS_PATH = "BIOS_PATH"
+        const val EXTRA_SLOT_A_PATH = "SLOT_A_PATH"
+        const val EXTRA_SLOT_B_PATH = "SLOT_B_PATH"
         const val EXTRA_REGION   = "REGION"
         const val EXTRA_SHADER   = "SHADER"
         const val EXTRA_OUTPUT   = "OUTPUT"
@@ -65,14 +67,21 @@ class EmulatorActivity : Activity() {
         // firmware-gated systems (gba) their dev-supplied dump.
         renderer.queueSystemLoad(system, intent.getStringExtra(EXTRA_BIOS_PATH) ?: "")
 
-        // Queue the ROM load (executes on GL thread after system is ready).
         val romFile = File(romPath)
         val saveDir = File(filesDir, "saves")
         saveDir.mkdirs()
         val savePrefix = File(saveDir, romFile.nameWithoutExtension).absolutePath
         val romBytes = romFile.readBytes()
-        renderer.queueRomLoad(romBytes, system, romPath, savePrefix)
 
+        // Stage Sufami Turbo slot carts (A=0, B=1). stageSlot only records the
+        // bytes; the renderer inserts them into the core on the render thread
+        // right before the boot, so ordering relative to the queued load — and
+        // waiting for the core to exist — is handled there.
+        intent.getStringExtra(EXTRA_SLOT_A_PATH)?.let { renderer.stageSlot(0, File(it).readBytes()) }
+        intent.getStringExtra(EXTRA_SLOT_B_PATH)?.let { renderer.stageSlot(1, File(it).readBytes()) }
+
+        // Queue the ROM load (executes on the render thread after the system is staged).
+        renderer.queueRomLoad(romBytes, system, romPath, savePrefix)
         Log.i(TAG, "ROM queued: $romPath (${romBytes.size} bytes, system=$system)")
 
         // Optional shader for on-device librashader verification. Applied off the

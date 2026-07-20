@@ -59,6 +59,40 @@ class SufamiTest {
     }
 
     @Test
+    fun sufamiDualCartBoots() {
+        // A+B dual-cart linking: two SD Gundam Generation carts staged into
+        // both nested SuFami slots. Closes outstanding #SuFami-slot-B.
+        //   /data/local/tmp/sufami-bios.sfc — Sufami Turbo (Japan) base BIOS
+        //   /data/local/tmp/sufami-a.st     — linkable cart in Slot A
+        //   /data/local/tmp/sufami-b.st     — linkable cart in Slot B
+        val bios  = File("/data/local/tmp/sufami-bios.sfc")
+        val slotA = File("/data/local/tmp/sufami-a.st")
+        val slotB = File("/data/local/tmp/sufami-b.st")
+        if (!bios.exists() || !slotA.exists() || !slotB.exists()) {
+            Log.w("SufamiTest", "no dual-cart media; skipping"); return
+        }
+
+        val core = AresCore()
+        try {
+            assert(core.init())
+            assert(core.loadSystem("sfc"))
+            core.stageSlot(0, slotA.readBytes())   // Slot A
+            core.stageSlot(1, slotB.readBytes())   // Slot B
+            assert(core.loadRom(bios.readBytes(), null) == AresCore.LOAD_OK) {
+                "base + both slots should load"
+            }
+            repeat(30) { core.tick() }
+            // Both nested SuFami slots must have materialized a connected
+            // cartridge — the dual-cart link path, not just Slot A.
+            assert(core.isSlotConnected(0)) { "slot A cartridge should be connected" }
+            assert(core.isSlotConnected(1)) { "slot B cartridge should be connected" }
+            assert(core.getFrameWidth() > 0) { "dual-cart base should render" }
+        } finally {
+            core.destroy()
+        }
+    }
+
+    @Test
     fun bsxMemoryCartBoots() {
         val bios = File("/data/local/tmp/bsx-bios.sfc")
         val bs = File("/data/local/tmp/satella.bs")
