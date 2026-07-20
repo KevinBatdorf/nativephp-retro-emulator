@@ -627,9 +627,10 @@ const char* ares_supported_systems(void) {
 
 // N64 renders through the vendored paraLLEl-RDP Vulkan renderer, which on iOS
 // runs on MoltenVK (Vulkan-over-Metal) statically linked into this framework.
-//   PARALLEL_RDP_UBERSHADER=1 — force the single ubershader. The specialized
-//     per-combiner compute pipelines are the path Adreno rejected; MoltenVK's
-//     SPIR-V→MSL translation is safest on the ubershader too.
+// Unlike Android/Adreno, MoltenVK compiles parallel-RDP's specialized
+// per-combiner pipelines fine (device-verified), so no ubershader force —
+// the library default (specialized, with ubershader fallback while they
+// compile asynchronously) is the fast path.
 //   ios_n64_init_vulkan_loader() (moltenvk_loader.cpp) seeds Granite's Vulkan
 //     loader from the linked-in MoltenVK — ares' own init_loader(nullptr)
 //     then early-returns success, so nothing is dlopen()'d and consuming apps
@@ -637,7 +638,6 @@ const char* ares_supported_systems(void) {
 extern "C" bool ios_n64_init_vulkan_loader();
 
 static void setupN64Vulkan() {
-    setenv("PARALLEL_RDP_UBERSHADER", "1", 1);
 #if TARGET_OS_SIMULATOR
     // The simulator's Metal driver (MTLSimDriver) backs MTLBuffers with XPC
     // shared memory and ABORTS (xpc_api_misuse) on the RDRAM host-pointer

@@ -8,7 +8,19 @@ import RetroEmulator
 /// for eyes-on review.
 final class N64DeviceRenderTests: XCTestCase {
 
+    /// The plugin's default path: no env override, parallel-RDP's specialized
+    /// pipelines with ubershader fallback while they compile.
     func testN64BootsAndRendersViaMoltenVK() throws {
+        try runRenderCheck(ubershader: nil)
+    }
+
+    /// Forced-ubershader still renders (the Android/Adreno mode) — proves the
+    /// slow-but-universal path stays viable on MoltenVK too.
+    func testN64RendersWithForcedUbershader() throws {
+        try runRenderCheck(ubershader: true)
+    }
+
+    private func runRenderCheck(ubershader: Bool?) throws {
         guard let romPath = Bundle(for: Self.self).path(forResource: "rdpqdemo", ofType: "z64") else {
             throw XCTSkip("rdpqdemo.z64 not staged in Tests/Resources — skipping")
         }
@@ -17,6 +29,13 @@ final class N64DeviceRenderTests: XCTestCase {
         defer { ares_destroy(ctx) }
 
         XCTAssertTrue(ares_load_system(ctx, "n64", nil, nil), "n64 must stage")
+
+        // The RDP reads the env at load_rom; tests share a process, so clear
+        // any leftover override before opting in. strtol: "1" = ubershader.
+        unsetenv("PARALLEL_RDP_UBERSHADER")
+        if let ubershader {
+            setenv("PARALLEL_RDP_UBERSHADER", ubershader ? "1" : "0", 1)
+        }
 
         let rom = try Data(contentsOf: URL(fileURLWithPath: romPath))
         let loaded = rom.withUnsafeBytes {
@@ -59,7 +78,7 @@ final class N64DeviceRenderTests: XCTestCase {
         // Attach the frame for the eyes-on gate.
         if sawContent, let img = Self.makeImage(from: buffer, width: Int(w), height: Int(h)) {
             let att = XCTAttachment(image: img)
-            att.name = "n64-rdpqdemo-frame"
+            att.name = (ubershader == true) ? "n64-rdpqdemo-frame-ubershader" : "n64-rdpqdemo-frame"
             att.lifetime = .keepAlways
             add(att)
         }
