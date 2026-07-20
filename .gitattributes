@@ -1,0 +1,18 @@
+# Keep dist tarballs (packagist installs) lean: a consumer needs only the PHP
+# runtime (src/, config, the manifest) and the native assets the NativePHP
+# plugin compiler reads (resources/, nativephp.json). The emulator C++ source,
+# build outputs, dev media, and per-platform scaffolds are build-time only —
+# shipping them bloats every consumer's Laravel bundle (see the demo's
+# cold-boot fan issue: a symlinked path-repo drags these into the app bundle).
+/ares            export-ignore
+/build           export-ignore
+/local           export-ignore
+/android         export-ignore
+/ios             export-ignore
+/native          export-ignore
+/scripts         export-ignore
+/tests           export-ignore
+/docs            export-ignore
+/.claude         export-ignore
+/.github         export-ignore
+.gitattributes   export-ignore

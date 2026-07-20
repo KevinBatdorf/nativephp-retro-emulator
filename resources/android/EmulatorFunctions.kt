@@ -1211,11 +1211,13 @@ object EmulatorFunctions {
     class GetInputDevices(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
             val pad = InputDevice.SOURCE_GAMEPAD or InputDevice.SOURCE_JOYSTICK
-            val devices = InputDevice.getDeviceIds()
-                .mapNotNull { InputDevice.getDevice(it) }
-                .filter { !it.isVirtual && (it.sources and pad) != 0 }
-                .map { it.name }
-                .distinct()
+            val devices = mutableListOf<String>()
+            for (id in InputDevice.getDeviceIds()) {
+                val dev = InputDevice.getDevice(id) ?: continue
+                if (dev.isVirtual) continue
+                if ((dev.sources and pad) == 0) continue
+                if (dev.name !in devices) devices.add(dev.name)
+            }
             return BridgeResponse.success(mapOf("devices" to devices))
         }
     }
