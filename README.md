@@ -153,3 +153,11 @@ and ship the presets you want with your app.
 `MemoryRead`, `MemoryChanged`, and `EmulatorError` (operational failures —
 missing ROM, failed save, bad cheat — carry an `EmulatorErrorCode`; programmer
 errors throw `EmulatorException` synchronously instead).
+
+## License
+
+This plugin's own code is **MIT** (see [`LICENSE`](LICENSE)). It bundles the
+ares emulator core and its dependencies, which are all permissive (ISC / MIT /
+BSD / Apache-2.0) or file-level copyleft (librashader, MPL-2.0) — none reaches
+your app's own license. Full attribution and per-component licenses are in
+[`LICENSING.md`](LICENSING.md).
