@@ -33,3 +33,9 @@ android/*.iml
 # Dev-harness only: prebuilt librashader copied from resources/ by
 # scripts/build_librashader_android.sh (the committed source of truth).
 android/app/src/main/jniLibs/
+
+# iOS test media staged locally, never committed
+ios/test/Tests/AresCoreTests/TestMedia/*
+ios/devharness/Tests/Resources/*
+!ios/test/Tests/AresCoreTests/TestMedia/README.md
+!ios/devharness/Tests/Resources/README.md

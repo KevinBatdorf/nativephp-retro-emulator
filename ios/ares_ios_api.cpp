@@ -13,11 +13,15 @@
 #include <atomic>
 #include <cctype>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <climits>
 #include <map>
 #include <mutex>
 #include <string>
 #include <unordered_map>
+
+#include <TargetConditionals.h>
 #include <vector>
 
 // ---------------------------------------------------------------------------
@@ -616,6 +620,31 @@ const char* ares_supported_systems(void) {
 // fresh system per game load with the region already known from the ROM
 // analysis (desktop-ui/emulator/emulator.cpp:40-60, super-famicom.cpp:125-126).
 
+// N64 renders through the vendored paraLLEl-RDP Vulkan renderer, which on iOS
+// runs on MoltenVK (Vulkan-over-Metal) statically linked into this framework.
+//   PARALLEL_RDP_UBERSHADER=1 — force the single ubershader. The specialized
+//     per-combiner compute pipelines are the path Adreno rejected; MoltenVK's
+//     SPIR-V→MSL translation is safest on the ubershader too.
+//   ios_n64_init_vulkan_loader() (moltenvk_loader.cpp) seeds Granite's Vulkan
+//     loader from the linked-in MoltenVK — ares' own init_loader(nullptr)
+//     then early-returns success, so nothing is dlopen()'d and consuming apps
+//     have nothing to embed or configure.
+extern "C" bool ios_n64_init_vulkan_loader();
+
+static void setupN64Vulkan() {
+    setenv("PARALLEL_RDP_UBERSHADER", "1", 1);
+#if TARGET_OS_SIMULATOR
+    // The simulator's Metal driver (MTLSimDriver) backs MTLBuffers with XPC
+    // shared memory and ABORTS (xpc_api_misuse) on the RDRAM host-pointer
+    // import — it never gets to return an error. Skip the import there;
+    // parallel-RDP falls back to its internal-copy RDRAM path (rdp_device.cpp
+    // "falling back to a slower path"). Real devices keep the fast import.
+    setenv("PARALLEL_RDP_ALLOW_EXTERNAL_HOST", "0", 1);
+#endif
+    static bool loaderReady = ios_n64_init_vulkan_loader();
+    if (!loaderReady) fprintf(stderr, "setupN64Vulkan: MoltenVK loader init failed\n");
+}
+
 bool ares_load_system(AresContext* ctx, const char* system_id, const char* bios_path) {
     if (!ctx || !system_id) return false;
 
@@ -624,6 +653,8 @@ bool ares_load_system(AresContext* ctx, const char* system_id, const char* bios_
         fprintf(stderr, "ares_load_system: unsupported system '%s'\n", system_id);
         return false;
     }
+
+    if (std::strcmp(system_id, "n64") == 0) setupN64Vulkan();
 
     // An optional dev-supplied BIOS travels with the staging (gba may override
     // its embedded open BIOS with a real dump); empty when none was given.

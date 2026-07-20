@@ -38,8 +38,19 @@ final class BootTests: XCTestCase {
     }
 
     func testLoadSystemFailsWithUnknownId() {
-        XCTAssertFalse(ares_load_system(ctx, "n64", nil),
+        // "saturn" has no ares core in this tree, so it is never registered —
+        // an id absent from the registry must be rejected. (n64 used to serve
+        // this role but is now a compiled, supported iOS system.)
+        XCTAssertFalse(ares_load_system(ctx, "saturn", nil),
                        "systems not compiled into this build must be rejected")
+    }
+
+    func testN64IsSupported() {
+        // N64 is compiled into the iOS build (paraLLEl-RDP on MoltenVK).
+        let ids = String(cString: ares_supported_systems()).components(separatedBy: ",")
+        XCTAssertTrue(ids.contains("n64"), "'n64' must be supported, got \(ids)")
+        XCTAssertTrue(ares_load_system(ctx, "n64", nil),
+                      "ares_load_system(\"n64\") must return true")
     }
 
     func testSupportedSystemsAreReported() {

@@ -223,6 +223,91 @@ target_link_libraries(gba_core PUBLIC ares_core)
 target_compile_definitions(gba_core PUBLIC PROFILE_PERFORMANCE BUILD_RELEASE CORE_GBA)
 
 # ---------------------------------------------------------------------------
+# n64_core — Nintendo 64 (unity build via n64.cpp) + vendored paraLLEl-RDP.
+#
+# Mirrors the Android n64_core target. The RDP renders through the vendored
+# Vulkan paraLLEl-RDP sources; on iOS there is no system Vulkan, so MoltenVK
+# is statically merged into the shipped framework (build_xcframework.sh) and
+# moltenvk_loader.cpp seeds Granite's loader from its ICD entrypoint — nothing
+# is dlopen()'d and consumers wire nothing. Frames leave the core via a CPU
+# host-buffer readback (n64/vulkan/vulkan.cpp mapScanoutRead), so the Metal
+# display path is unchanged. The Transfer Pak plays GB carts, so gb_core is
+# linked in.
+# ---------------------------------------------------------------------------
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_package(Threads REQUIRED)
+set(N64V "${ARES_ROOT}/ares/n64/vulkan/parallel-rdp")
+add_library(n64_core OBJECT
+    "${CMAKE_CURRENT_SOURCE_DIR}/moltenvk_loader.cpp"
+    "${ARES_ROOT}/ares/n64/n64.cpp"
+    "${PROC}/sm5k/sm5k.cpp"
+    "${ARES_ROOT}/nall/nall/gdb/server.cpp"
+    "${ARES_ROOT}/ares/n64/vulkan/vulkan.cpp"
+    "${N64V}/parallel-rdp/command_ring.cpp"
+    "${N64V}/parallel-rdp/rdp_device.cpp"
+    "${N64V}/parallel-rdp/rdp_dump_write.cpp"
+    "${N64V}/parallel-rdp/rdp_renderer.cpp"
+    "${N64V}/parallel-rdp/video_interface.cpp"
+    "${N64V}/vulkan/buffer.cpp"
+    "${N64V}/vulkan/buffer_pool.cpp"
+    "${N64V}/vulkan/command_buffer.cpp"
+    "${N64V}/vulkan/command_pool.cpp"
+    "${N64V}/vulkan/context.cpp"
+    "${N64V}/vulkan/cookie.cpp"
+    "${N64V}/vulkan/descriptor_set.cpp"
+    "${N64V}/vulkan/device.cpp"
+    "${N64V}/vulkan/event_manager.cpp"
+    "${N64V}/vulkan/fence.cpp"
+    "${N64V}/vulkan/fence_manager.cpp"
+    "${N64V}/vulkan/image.cpp"
+    "${N64V}/vulkan/indirect_layout.cpp"
+    "${N64V}/vulkan/memory_allocator.cpp"
+    "${N64V}/vulkan/pipeline_event.cpp"
+    "${N64V}/vulkan/query_pool.cpp"
+    "${N64V}/vulkan/render_pass.cpp"
+    "${N64V}/vulkan/sampler.cpp"
+    "${N64V}/vulkan/semaphore.cpp"
+    "${N64V}/vulkan/semaphore_manager.cpp"
+    "${N64V}/vulkan/shader.cpp"
+    "${N64V}/vulkan/texture/texture_format.cpp"
+    "${N64V}/util/arena_allocator.cpp"
+    "${N64V}/util/logging.cpp"
+    "${N64V}/util/thread_id.cpp"
+    "${N64V}/util/aligned_alloc.cpp"
+    "${N64V}/util/timer.cpp"
+    "${N64V}/util/timeline_trace_file.cpp"
+    "${N64V}/util/thread_name.cpp"
+    "${N64V}/util/environment.cpp"
+    "${N64V}/volk/volk.c"
+)
+target_include_directories(n64_core PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/stubs"
+    "${ARES_ROOT}/ares"
+    "${N64V}/parallel-rdp"
+    "${N64V}/volk"
+    "${N64V}/vulkan"
+    "${N64V}/vulkan-headers/include"
+    "${N64V}/util"
+)
+target_link_libraries(n64_core PUBLIC ares_core gb_core Threads::Threads)
+target_compile_definitions(n64_core PUBLIC
+    PROFILE_PERFORMANCE
+    BUILD_RELEASE
+    CORE_N64
+    VULKAN
+)
+target_compile_options(n64_core PRIVATE
+    "$<$<COMPILE_LANGUAGE:CXX>:-Wno-newline-eof>"
+    # nall/gdb/server.cpp is a standalone nall TU that expects the nall prelude
+    # (u8/u32/string) to already be in scope — the unity core .cpp files include
+    # nall.hpp themselves, but server.cpp does not. Android gets this via
+    # ares_iface's forced -include of cross_dso_vfs.hpp; iOS force-includes the
+    # prelude directly (CXX only — volk.c is C). Proven safe against the
+    # paraLLEl-RDP TUs, which get the same force-include on Android.
+    "$<$<COMPILE_LANGUAGE:CXX>:SHELL:-include ${ARES_ROOT}/nall/nall/nall.hpp>"
+)
+
+# ---------------------------------------------------------------------------
 # retro_emulator_ios — single self-contained static library for the xcframework.
 #
 # All object libraries are collected here so the xcframework slice is
@@ -238,6 +323,7 @@ add_library(retro_emulator_ios STATIC
     "${NATIVE_ROOT}/cores/core_gb.cpp"
     "${NATIVE_ROOT}/cores/core_md.cpp"
     "${NATIVE_ROOT}/cores/core_gba.cpp"
+    "${NATIVE_ROOT}/cores/core_n64.cpp"
     "${NATIVE_ROOT}/save_io.cpp"
     "${NATIVE_ROOT}/pak/sfc_pak.cpp"
     "${NATIVE_ROOT}/pak/multi_pak.cpp"
@@ -252,9 +338,14 @@ add_library(retro_emulator_ios STATIC
     $<TARGET_OBJECTS:gb_core>
     $<TARGET_OBJECTS:md_core>
     $<TARGET_OBJECTS:gba_core>
+    $<TARGET_OBJECTS:n64_core>
     $<TARGET_OBJECTS:ymfm>
 )
 target_include_directories(retro_emulator_ios PUBLIC
+    # stubs FIRST so core_n64.cpp (which pulls <n64/accuracy.hpp> via n64.hpp)
+    # sees the same interpreter-forced Accuracy as n64_core — identical
+    # constexpr values across TUs, no ODR mismatch.
+    "${CMAKE_CURRENT_SOURCE_DIR}/stubs"
     "${CMAKE_CURRENT_SOURCE_DIR}"
     "${ARES_ROOT}"
     "${ARES_ROOT}/ares"
@@ -262,6 +353,12 @@ target_include_directories(retro_emulator_ios PUBLIC
     "${NATIVE_ROOT}/pak"
     "${NATIVE_ROOT}/vendor/librashader"
     "${FIRMWARE_DIR}"
+    # core_n64.cpp includes <n64/n64.hpp>, which transitively pulls the
+    # paraLLEl-RDP Vulkan renderer headers (volk + vulkan-headers).
+    "${ARES_ROOT}/ares/n64/vulkan/parallel-rdp/volk"
+    "${ARES_ROOT}/ares/n64/vulkan/parallel-rdp/vulkan"
+    "${ARES_ROOT}/ares/n64/vulkan/parallel-rdp/vulkan-headers/include"
+    "${ARES_ROOT}/ares/n64/vulkan/parallel-rdp"
 )
 
 # The librashader Metal shim needs ARC for the __bridge casts.
@@ -271,4 +368,4 @@ set_source_files_properties(
 )
 # Propagate compile-time interface requirements from all dependencies.
 target_link_libraries(retro_emulator_ios
-    PRIVATE sfc_core fc_core gb_core md_core ymfm ares_core nall libco sljit)
+    PRIVATE sfc_core fc_core gb_core md_core gba_core n64_core ymfm ares_core nall libco sljit Threads::Threads)

@@ -1,0 +1,58 @@
+# Device test harness — the iOS twin of android/app's EmulatorActivity harness.
+#
+# Physical-device XCTest needs a host app ("Tool-hosted testing is unavailable
+# on device destinations"), so this wraps the plugin's test checks in a minimal
+# app + hosted test bundle. Regenerate the project with `xcodegen` (the
+# .xcodeproj is gitignored), then:
+#   xcodebuild test -project DevHarness.xcodeproj -scheme DevHarness \
+#     -destination 'platform=iOS,id=<udid>' -allowProvisioningUpdates
+# Stage test media (rdpqdemo.z64) in Tests/Resources/ — gitignored, like the
+# SwiftPM test package's Resources.
+name: DevHarness
+options:
+  bundleIdPrefix: com.kevinbatdorf.retroemulator
+settings:
+  base:
+    # Same team as the demo's NATIVEPHP_DEVELOPMENT_TEAM. Automatic signing
+    # reuses the cached Xcode-managed wildcard profile ("iOS Team Provisioning
+    # Profile: *", covers any app id on this team + this iPhone) — do NOT pass
+    # -allowProvisioningUpdates; the CLI has no Apple ID session to refresh with.
+    DEVELOPMENT_TEAM: PZU8VB9ACR
+    CODE_SIGN_STYLE: Automatic
+    IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+    GENERATE_INFOPLIST_FILE: YES
+targets:
+  DevHarness:
+    type: application
+    platform: iOS
+    sources: [App]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kevinbatdorf.retroemulator.devharness
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+  DeviceTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [Tests]
+    dependencies:
+      - target: DevHarness
+      - framework: ../../build/RetroEmulator.xcframework
+        embed: false
+      - sdk: Metal.framework
+      - sdk: MetalKit.framework
+      - sdk: IOSurface.framework
+      - sdk: QuartzCore.framework
+      - sdk: CoreGraphics.framework
+    settings:
+      base:
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/DevHarness.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)DevHarness
+        BUNDLE_LOADER: $(TEST_HOST)
+        OTHER_LDFLAGS: -lc++
+schemes:
+  DevHarness:
+    build:
+      targets:
+        DevHarness: all
+        DeviceTests: [test]
+    test:
+      targets: [DeviceTests]
