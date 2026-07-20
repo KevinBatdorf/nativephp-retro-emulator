@@ -1,4 +1,5 @@
 import Foundation
+import GameController
 
 /// iOS-side `Emulator.*` bridge functions for the NativePHP Retro Emulator plugin.
 ///
@@ -1048,6 +1049,18 @@ enum EmulatorFunctions {
                 system("n64", "Nintendo 64",               stable: true),
             ]
             return BridgeResponse.success(data: ["systems": systems])
+        }
+    }
+
+    /// Names of hardware controllers iOS currently reports as connected —
+    /// paired MFi/Bluetooth gamepads (DualSense, Xbox, etc.). The on-screen
+    /// overlay works whether or not this is empty.
+    class GetInputDevices: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            let devices = GCController.controllers().map { controller in
+                controller.vendorName ?? "Controller"
+            }
+            return BridgeResponse.success(data: ["devices": devices])
         }
     }
 }

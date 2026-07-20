@@ -93,6 +93,7 @@ describe('Plugin Manifest', function () {
             'Emulator.GetRegion',
             'Emulator.GetPorts',
             'Emulator.GetSystems',
+            'Emulator.GetInputDevices',
         ];
 
         foreach ($expected as $name) {
@@ -452,6 +453,19 @@ describe('Bridge response parsing', function () {
         expect($systems[0]['id'])->toBe('sfc');
         expect($systems[1]['id'])->toBe('gba');
         expect($systems[1]['supported'])->toBeTrue();
+    });
+
+    it('inputDevices parses controller names from native response', function () {
+        $GLOBALS['__nativephp_mock']['Emulator.GetInputDevices'] = json_encode([
+            'devices' => ['Retroid Pocket Gamepad', 'DualSense Wireless Controller'],
+        ]);
+        $devices = Emulator::inputDevices();
+        expect($devices)->toBe(['Retroid Pocket Gamepad', 'DualSense Wireless Controller']);
+    });
+
+    it('inputDevices returns empty array when none connected', function () {
+        $GLOBALS['__nativephp_mock']['Emulator.GetInputDevices'] = json_encode(['devices' => []]);
+        expect(Emulator::inputDevices())->toBe([]);
     });
 
     it('surface returns Emulator instance after successful native call', function () {

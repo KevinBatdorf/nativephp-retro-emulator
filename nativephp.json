@@ -273,6 +273,12 @@
             "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.GetSystems",
             "ios": "EmulatorFunctions.GetSystems",
             "description": "Return all supported systems as rich objects"
+        },
+        {
+            "name": "Emulator.GetInputDevices",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.GetInputDevices",
+            "ios": "EmulatorFunctions.GetInputDevices",
+            "description": "Return names of connected hardware controllers (gamepads)"
         }
     ],
     "events": [

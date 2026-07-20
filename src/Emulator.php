@@ -660,4 +660,28 @@ class Emulator
 
         return [];
     }
+
+    /**
+     * Hardware controllers the OS currently reports as connected — the Thor's
+     * built-in pad, paired Bluetooth gamepads, etc. A consumer can show the
+     * player which real controllers are recognized (the on-screen overlay
+     * works regardless). Names are the platform's device names; empty when
+     * none are connected (on-screen controls only). No surface required.
+     *
+     * @return array<int, string>
+     */
+    public static function inputDevices(): array
+    {
+        if (function_exists('nativephp_call')) {
+            $result = nativephp_call('Emulator.GetInputDevices', '{}');
+
+            if ($result) {
+                $decoded = json_decode($result, true);
+
+                return $decoded['devices'] ?? [];
+            }
+        }
+
+        return [];
+    }
 }

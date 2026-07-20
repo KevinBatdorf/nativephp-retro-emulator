@@ -3,6 +3,7 @@ package com.kevinbatdorf.plugins.retroemulator
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.view.InputDevice
 import androidx.fragment.app.FragmentActivity
 import com.nativephp.mobile.bridge.BridgeFunction
 import com.nativephp.mobile.bridge.BridgeResponse
@@ -1199,5 +1200,23 @@ object EmulatorFunctions {
                 "id" to id, "name" to name,
                 "stable" to stable, "supported" to (id in compiled),
             )
+    }
+
+    /**
+     * Names of hardware controllers the OS currently reports — the Thor's
+     * built-in pad, paired Bluetooth gamepads, etc. Filtered to devices that
+     * report gamepad/joystick sources; keyboards and the virtual device are
+     * excluded. The on-screen overlay works whether or not this is empty.
+     */
+    class GetInputDevices(private val activity: FragmentActivity) : BridgeFunction {
+        override fun execute(parameters: Map<String, Any>): Map<String, Any> {
+            val pad = InputDevice.SOURCE_GAMEPAD or InputDevice.SOURCE_JOYSTICK
+            val devices = InputDevice.getDeviceIds()
+                .mapNotNull { InputDevice.getDevice(it) }
+                .filter { !it.isVirtual && (it.sources and pad) != 0 }
+                .map { it.name }
+                .distinct()
+            return BridgeResponse.success(mapOf("devices" to devices))
+        }
     }
 }
