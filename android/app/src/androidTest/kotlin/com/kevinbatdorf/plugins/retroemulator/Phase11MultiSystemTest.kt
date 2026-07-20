@@ -89,8 +89,8 @@ class Phase11MultiSystemTest {
         val core = AresCore()
         try {
             assert(core.init())
-            // "ps1" is a valid ares id but not compiled into this build.
-            assert(!core.loadSystem("ps1")) { "ps1 is not compiled — loadSystem must fail" }
+            // "pce" is a valid ares id but not compiled into this build.
+            assert(!core.loadSystem("pce")) { "pce is not compiled — loadSystem must fail" }
         } finally {
             core.destroy()
         }

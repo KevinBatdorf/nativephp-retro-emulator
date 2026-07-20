@@ -9,7 +9,7 @@ import Foundation
 ///
 /// Threading:
 ///  - Bridge functions run on an arbitrary NativePHP bridge thread.
-///  - `ctx`-critical ares operations are serialised inside `EmulatorRenderer` (`emuLock`).
+///  - `ctx`-critical ares operations are serialized inside `EmulatorRenderer` (`emuLock`).
 ///  - Events are dispatched to PHP on the main thread via `NativeElementBridge`.
 enum EmulatorFunctions {
 
@@ -255,7 +255,7 @@ enum EmulatorFunctions {
         }
     }
 
-    /// Initialise the ares core for a system. Supported systems are the ones
+    /// Initialize the ares core for a system. Supported systems are the ones
     /// compiled into the native library — reported by GetSystems with
     /// `supported: true`. System firmware (SFC ipl.rom + boards.bml, GB boot
     /// ROM, MD TMSS) is embedded; no biosPath is needed for these systems.

@@ -8,17 +8,9 @@ namespace KevinBatdorf\RetroEmulator;
  */
 enum InputCapture: string
 {
-    /**
-     * The emulator receives gamepad input only while its view holds focus
-     * (default). Leaves the pad free to drive the app's own focusable UI —
-     * menus, buttons — when those are focused.
-     */
+    /** Pad drives the emulator only while its view holds focus (default), freeing it for the app's own focusable UI otherwise. */
     case Focus = 'focus';
 
-    /**
-     * The emulator grabs hardware gamepad/joystick events at the window,
-     * regardless of focus; touch and other input still reach the app's UI.
-     * Use when the pad should always drive the game.
-     */
+    /** Pad drives the emulator regardless of focus; touch and other input still reach the app's UI. */
     case Global = 'global';
 }

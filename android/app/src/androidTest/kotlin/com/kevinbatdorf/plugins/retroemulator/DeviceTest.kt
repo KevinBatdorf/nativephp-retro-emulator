@@ -91,17 +91,17 @@ class DeviceTest {
             assert(core.getButtonBit(2, "Pause") == (1 shl 3)) { "scope Pause bit" }
             assert(core.getButtonBit(2, "A") == -1) { "scope has no A button" }
 
-            // aimAt feeds the delta from the centre shadow cursor (128,120) to the
+            // aimAt feeds the delta from the center shadow cursor (128,120) to the
             // target; no tick between aims, so the accumulator holds and telescopes.
-            assert(core.aimAt(2, 0.5f, 0.5f).isEmpty()) { "aim centre" }
-            assert(core.getAxisAccum(2, "X") == 0) { "centre → no X delta" }
-            assert(core.getAxisAccum(2, "Y") == 0) { "centre → no Y delta" }
+            assert(core.aimAt(2, 0.5f, 0.5f).isEmpty()) { "aim center" }
+            assert(core.getAxisAccum(2, "X") == 0) { "center → no X delta" }
+            assert(core.getAxisAccum(2, "Y") == 0) { "center → no Y delta" }
 
             assert(core.aimAt(2, 1.0f, 1.0f).isEmpty()) { "aim bottom-right" }
             assert(core.getAxisAccum(2, "X") == 128) { "delta to x=256 from 128" }
             assert(core.getAxisAccum(2, "Y") == 120) { "delta to y=240 from 120" }
 
-            assert(core.aimAt(2, 0.5f, 0.5f).isEmpty()) { "aim back to centre" }
+            assert(core.aimAt(2, 0.5f, 0.5f).isEmpty()) { "aim back to center" }
             assert(core.getAxisAccum(2, "X") == 0) { "128 + (-128) telescopes to 0" }
             assert(core.getAxisAccum(2, "Y") == 0) { "120 + (-120) telescopes to 0" }
 

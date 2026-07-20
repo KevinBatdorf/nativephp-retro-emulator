@@ -62,7 +62,7 @@ class EmulatorInput(private val core: AresCore) {
 
     /**
      * Process a key event from a connected gamepad. Returns true if the event
-     * was consumed (i.e., maps to a recognised SNES button).
+     * was consumed (i.e., maps to a recognized SNES button).
      */
     fun onKeyEvent(event: KeyEvent): Boolean {
         val bit = keycodeToBit(event.keyCode) ?: return false

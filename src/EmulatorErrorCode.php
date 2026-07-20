@@ -3,14 +3,12 @@
 namespace KevinBatdorf\RetroEmulator;
 
 /**
- * Every error code the native layer can raise, grouped by the channel it
- * travels (see the docblocks below). Backed by the exact wire strings native
- * emits; drift-tested against the native source like the button enums.
- *
- * The channel is chosen by category so consistency is by construction:
- *  - Programmer errors surface synchronously as an EmulatorException.
- *  - Operational outcomes surface asynchronously as an EmulatorError event.
- *  - Query failures return a value (or throw on misuse).
+ * Error codes the native layer can raise, as the exact wire strings it emits
+ * (drift-tested against the native source, like the button enums). Grouped by
+ * how each reaches the caller:
+ *  - Programmer errors throw synchronously as an EmulatorException.
+ *  - Operational outcomes arrive as an EmulatorError event, never thrown.
+ *  - Query failures return a value, or throw on misuse.
  */
 enum EmulatorErrorCode: string
 {
@@ -43,12 +41,11 @@ enum EmulatorErrorCode: string
     case ScreenshotFailed = 'SCREENSHOT_FAILED';
 
     /**
-     * Whether the wrapper raises this synchronously as an EmulatorException.
-     * True for programmer errors and read/write misuse; false for operational
-     * outcomes (they flow as an EmulatorError event) and SCREENSHOT_FAILED (a
-     * null return). Driving the boundary off the code — not off "any error
-     * response" — keeps operational failures off the throw path even on a
-     * platform still returning them as a bridge error.
+     * Whether the wrapper throws this as an EmulatorException. True for
+     * programmer errors and read/write misuse; false for operational outcomes
+     * (an EmulatorError event) and SCREENSHOT_FAILED (null return). Keying off
+     * the code keeps operational failures off the throw path even if a platform
+     * still returns them as a bridge error.
      */
     public function throwsAsException(): bool
     {

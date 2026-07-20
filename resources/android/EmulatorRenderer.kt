@@ -1003,7 +1003,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
 
     /**
      * Merge per-system emulation toggles onto the GL thread. Unknown keys are
-     * ignored; recognised ones update the persisted map and apply live (a no-op
+     * ignored; recognized ones update the persisted map and apply live (a no-op
      * on cores that don't declare the node, and reapplied on the next boot).
      */
     fun queueCoreOptions(options: Map<String, Boolean>) {

@@ -38,13 +38,13 @@
             "name": "Emulator.Boot",
             "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.Boot",
             "ios": "EmulatorFunctions.Boot",
-            "description": "Bind to the named surface declared in the component tree; native creates the rendering surface"
+            "description": "Internal — invoked by Emulator::surface() to bind the named surface and create its rendering surface; not called directly"
         },
         {
             "name": "Emulator.LoadSystem",
             "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.LoadSystem",
             "ios": "EmulatorFunctions.LoadSystem",
-            "description": "Initialise ares core for a system with system-level config"
+            "description": "Initialize ares core for a system with system-level config"
         },
         {
             "name": "Emulator.LoadRom",
@@ -56,7 +56,7 @@
             "name": "Emulator.StageSlot",
             "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.StageSlot",
             "ios": "EmulatorFunctions.StageSlot",
-            "description": "Stage a Sufami Turbo slot ROM for the next slotted LoadRom"
+            "description": "Internal — invoked by Emulator::loadRom() to stage a SuFami Turbo slot ROM before boot; not called directly"
         },
         {
             "name": "Emulator.Pause",

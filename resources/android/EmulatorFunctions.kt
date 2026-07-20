@@ -430,7 +430,6 @@ object EmulatorFunctions {
         }
     }
 
-    /** Pause emulation. */
     class Pause(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
             val (entry, err) = entry(parameters)
@@ -440,7 +439,6 @@ object EmulatorFunctions {
         }
     }
 
-    /** Resume emulation. */
     class Resume(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
             val (entry, err) = entry(parameters)
@@ -460,7 +458,6 @@ object EmulatorFunctions {
         }
     }
 
-    /** Save state to slot. */
     class StateSave(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
             val (entry, err) = entry(parameters)
@@ -488,7 +485,6 @@ object EmulatorFunctions {
         }
     }
 
-    /** Load state from slot. */
     class StateLoad(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
             val (entry, err) = entry(parameters)
@@ -682,7 +678,6 @@ object EmulatorFunctions {
         }
     }
 
-    /** Clear all memory watches. */
     class ClearMemoryWatches(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
             val (entry, err) = entry(parameters)

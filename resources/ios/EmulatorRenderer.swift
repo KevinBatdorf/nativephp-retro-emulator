@@ -26,7 +26,7 @@ protocol EmulatorEventListener: AnyObject {
 ///
 /// Threading: `ares_tick` runs on the emulation loop thread while bridge calls
 /// (memory, state, screenshot) arrive on an arbitrary bridge thread. All `ctx`
-/// access is serialised through `emuLock` — the iOS equivalent of Android posting
+/// access is serialized through `emuLock` — the iOS equivalent of Android posting
 /// GL-critical work onto the GL thread.
 final class EmulatorRenderer: UIView {
 
@@ -181,7 +181,7 @@ final class EmulatorRenderer: UIView {
     }
 
     /// Write battery-backed memory to disk (see ares_flush_saves). Safe from
-    /// any thread — serialised on emuLock like every other ctx access.
+    /// any thread — serialized on emuLock like every other ctx access.
     func flushSaves() {
         emuLock.lock()
         _ = ares_flush_saves(ctx)
@@ -226,12 +226,12 @@ final class EmulatorRenderer: UIView {
 
     /// Apply a librashader `.slangp` preset by path; nil clears (passthrough).
     /// Returns false when the preset fails to load. Safe from any thread —
-    /// the chain swap is serialised inside the Metal renderer.
+    /// the chain swap is serialized inside the Metal renderer.
     func syncSetShader(path: String?) -> Bool {
         metalRenderer.setShader(path)
     }
 
-    /// Merge per-system emulation toggles — recognised keys update the
+    /// Merge per-system emulation toggles — recognized keys update the
     /// persisted map and apply live (a no-op on cores without the node, and
     /// reapplied on the next boot). Applies immediately when a core is loaded.
     func setCoreOptions(_ options: [String: Bool]) {
@@ -339,7 +339,7 @@ final class EmulatorRenderer: UIView {
 
     // MARK: - Rewind / run-ahead
 
-    /// Enable/disable rewind capture (see ares_configure_rewind). Serialised on emuLock.
+    /// Enable/disable rewind capture (see ares_configure_rewind). Serialized on emuLock.
     func configureRewind(enabled: Bool, bufferSeconds: Int) {
         emuLock.lock()
         ares_configure_rewind(ctx, enabled, Int32(bufferSeconds))
@@ -353,7 +353,7 @@ final class EmulatorRenderer: UIView {
         return Int(ares_toggle_rewind(ctx))
     }
 
-    /// Enable/disable one-frame run-ahead (see ares_set_run_ahead). Serialised on emuLock.
+    /// Enable/disable one-frame run-ahead (see ares_set_run_ahead). Serialized on emuLock.
     func setRunAhead(enabled: Bool) {
         emuLock.lock()
         ares_set_run_ahead(ctx, enabled)
@@ -361,7 +361,7 @@ final class EmulatorRenderer: UIView {
     }
 
     /// Enable/disable dynamic rate control (see ares_set_dynamic_rate_control).
-    /// Serialised on emuLock.
+    /// Serialized on emuLock.
     func setDynamicRateControl(enabled: Bool) {
         emuLock.lock()
         ares_set_dynamic_rate_control(ctx, enabled)
@@ -371,7 +371,7 @@ final class EmulatorRenderer: UIView {
     // MARK: - Cheats
 
     /// Register (or replace) a cheat code. Returns false when no valid
-    /// ADDR:VALUE pair parses. Serialised on emuLock.
+    /// ADDR:VALUE pair parses. Serialized on emuLock.
     func addCheat(code: String) -> Bool {
         emuLock.lock()
         defer { emuLock.unlock() }

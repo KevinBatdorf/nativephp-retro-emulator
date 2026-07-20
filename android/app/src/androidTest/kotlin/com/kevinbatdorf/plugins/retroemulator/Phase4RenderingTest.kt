@@ -53,7 +53,6 @@ class Phase4RenderingTest {
 
     @Test
     fun coreInitialisesWithoutCrash() {
-        // Smoke-test that the .so loads, init returns true, and destroy is clean.
         val core = AresCore()
         assert(core.init()) { "nativeInit() must return true" }
         assert(core.version().isNotEmpty()) { "version must be non-empty" }

@@ -18,7 +18,7 @@ class Config
     /**
      * @param  bool|null  $overscan  Trims the overscan border (trims by default);
      *                               no effect on systems with no overscan region.
-     * @param  bool|null  $colorBleed  Composite colour-bleed filter; no effect on
+     * @param  bool|null  $colorBleed  Composite color-bleed filter; no effect on
      *                                 systems without composite video (handhelds).
      * @param  InputCapture|null  $inputCapture  Resolved when the surface is
      *                                           created; not changeable at runtime.

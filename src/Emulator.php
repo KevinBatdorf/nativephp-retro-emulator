@@ -13,9 +13,8 @@ class Emulator
     private string $surface = 'main';
 
     /**
-     * Config keys that reach the core through the AV setters, not the staged
-     * system config. inputCapture is here too: it is resolved when the surface
-     * is created, so loadSystem has nowhere to route it.
+     * Config keys fanned out to the AV setters instead of the staged system
+     * config — including inputCapture, which the surface resolves at creation.
      */
     private const PRESENTATION_KEYS = [
         'luminance', 'saturation', 'gamma', 'colorBleed', 'overscan',
@@ -118,16 +117,12 @@ class Emulator
     }
 
     /**
-     * Start emulation with ROM at the given path.
-     * Fire-and-forget — status goes to 'loading'; EmulatorStarted fires on first frame.
-     * Call again without reinitialising the system to swap ROMs.
+     * Boot a ROM. Fire-and-forget — status goes to 'loading'; EmulatorStarted
+     * fires on the first frame. Call again to swap ROMs without reinitialising
+     * the system.
      *
-     * @param  string|null  $savePath  Battery-save file prefix; null keeps the
-     *                                 default per-surface location in app storage.
-     */
-    /**
-     * Boot a ROM. Pass a path for a normal cartridge, or a slotted-media spec for
-     * a base cartridge with inserted slots (SuFami Turbo):
+     * Pass a path for a normal cartridge, or a slotted-media spec for a base
+     * cartridge with inserted slots (SuFami Turbo):
      *
      *   $emu->loadRom('/roms/game.sfc');
      *   $emu->loadRom(['base' => '/roms/sufami.sfc', 'slotA' => '/roms/game.st']);
@@ -136,6 +131,8 @@ class Emulator
      * before boot so the slot game runs directly (not the base's menu).
      *
      * @param  string|array{base: string, slotA?: string, slotB?: string}  $rom
+     * @param  string|null  $savePath  Battery-save file prefix; null keeps the
+     *                                 default per-surface location in app storage.
      */
     public function loadRom(string|array $rom, ?string $savePath = null): static
     {
@@ -324,16 +321,7 @@ class Emulator
      * Merge GLOBAL display settings — presentation knobs that mean the same
      * thing on every system. Omitted options keep their current values and
      * persist across ROM/system swaps. Overscan borders are trimmed by default;
-     * overscan: true shows the full canvas. Presentation follows ares desktop's
-     * Video settings: output VideoOutput::Scale (best-fit, default), Integer
-     * (largest whole multiple), IntegerFixed (exactly fixedScale×), or Stretch;
-     * aspectCorrection AspectCorrection::Standard (default), None (square
-     * pixels), or Anamorphic (force 4:3).
-     *
-     * Per-system emulation toggles (Color Emulation, Deep Black Boost,
-     * Interframe Blending) are not here — they only exist on the cores that
-     * declare them, so they live on the per-system config classes and
-     * setSystemOptions().
+     * overscan: true shows the full canvas.
      */
     public function setVideo(
         ?int $luminance = null,
@@ -437,17 +425,34 @@ class Emulator
      * the handle (press/release/setButtons/setAxis/aimAt/remap). The registration
      * persists across loadRom.
      *
-     * A device that fans out to several players — the Super Multitap — returns an
-     * array of Controllers, one per player:
-     * `[$p2, $p3, $p4, $p5] = $emu->connectDevice(2, Device::SuperMultitap);`
-     * A normal controller returns a single Controller.
+     * Returns one Controller, for $port. A multitap connects here too (you get
+     * its base port); use {@see connectMultitap()} for a handle per player.
      *
      * An unsupported device, a bad port, or no staged system is a programmer
      * error and throws EmulatorException synchronously.
-     *
-     * @return Controller|Controller[]
      */
-    public function connectDevice(int $port, Device|string $device): Controller|array
+    public function connectDevice(int $port, Device|string $device): Controller
+    {
+        $this->call('Emulator.ConnectDevice', [
+            'surface' => $this->surface,
+            'port' => $port,
+            'device' => $device instanceof Device ? $device->value : $device,
+        ]);
+
+        return new Controller($this->surface, $port);
+    }
+
+    /**
+     * Connect a multitap on $port and return one {@see Controller} per player it
+     * fans out to (Super Multitap → four). For single-player devices use
+     * {@see connectDevice()}.
+     *
+     * Same error contract as connectDevice(): a bad port, unsupported device, or
+     * no staged system throws EmulatorException synchronously.
+     *
+     * @return Controller[]
+     */
+    public function connectMultitap(int $port, Device|string $device): array
     {
         $result = $this->call('Emulator.ConnectDevice', [
             'surface' => $this->surface,
@@ -456,9 +461,8 @@ class Emulator
         ]);
 
         $ports = $result['ports'] ?? [$port];
-        $handles = array_map(fn (int $p) => new Controller($this->surface, $p), $ports);
 
-        return count($handles) === 1 ? $handles[0] : $handles;
+        return array_map(fn (int $p) => new Controller($this->surface, $p), $ports);
     }
 
     /**

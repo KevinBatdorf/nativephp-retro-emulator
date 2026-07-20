@@ -170,7 +170,7 @@ describe('Emulator class', function () {
             'watchMemory', 'unwatchMemory', 'clearMemoryWatches',
             'setVolume', 'setBalance', 'setVideo', 'configure', 'setSystemOptions',
             'fastForward', 'toggleRewind', 'setSpeed',
-            'connectDevice', 'getDevice', 'setRumble',
+            'connectDevice', 'connectMultitap', 'getDevice', 'setRumble',
             'setShader',
             'addCheat', 'removeCheat', 'clearCheats',
             'screenshot', 'status', 'ports', 'region',
@@ -742,11 +742,11 @@ describe('Typed layer', function () {
         expect($call['payload']['device'])->toBe('Mouse');
     });
 
-    it('connectDevice returns four Controllers for a multitap', function () {
+    it('connectMultitap returns four Controllers for a multitap', function () {
         $GLOBALS['__nativephp_mock']['Emulator.ConnectDevice'] =
             '{"status":"connected","port":2,"device":"Super Multitap","ports":[2,3,4,5]}';
 
-        $players = Emulator::surface()->connectDevice(2, Device::SuperMultitap);
+        $players = Emulator::surface()->connectMultitap(2, Device::SuperMultitap);
 
         expect($players)->toBeArray()->toHaveCount(4);
         expect(array_map(fn ($c) => $c->port, $players))->toBe([2, 3, 4, 5]);

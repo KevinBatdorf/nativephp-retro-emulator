@@ -31,7 +31,7 @@ class AresCore {
         System.loadLibrary("retro_emulator")
     }
 
-    /** Initialise the ares platform singleton. Returns false if already initialised. */
+    /** Initialize the ares platform singleton. Returns false if already initialized. */
     fun init(): Boolean = nativeInit()
 
     /** Tear down the ares platform singleton and free all emulator state. */
@@ -93,7 +93,7 @@ class AresCore {
     fun loadSystem(systemId: String, biosPath: String? = null): Boolean =
         nativeLoadSystem(systemId, biosPath ?: "")
 
-    /** Comma-separated ares system IDs compiled into this build (e.g. "fc,sfc,gb,md"). */
+    /** Comma-separated ares system IDs compiled into this build (e.g. "fc,gb,gba,gbc,md,n64,sfc"). */
     fun supportedSystems(): String = nativeGetSupportedSystems()
 
     /** Comma-separated ROM file extensions (no dots) valid for [systemId]. */
@@ -374,7 +374,6 @@ class AresCore {
     /** Remove a cheat by its exact code string. Returns false if it wasn't active. */
     fun removeCheat(code: String): Boolean = nativeRemoveCheat(code)
 
-    /** Deactivate all cheats. */
     fun clearCheats() = nativeClearCheats()
 
     /** Region of the loaded ROM (e.g. "NTSC", "PAL"). Empty if no ROM is loaded. */

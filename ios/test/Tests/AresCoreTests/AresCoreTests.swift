@@ -6,7 +6,7 @@ import RetroEmulator
 /// These tests verify that the static library links correctly and that the
 /// basic lifecycle API is callable without crashing.  No ROM is required;
 /// every assertion that depends on emulation state uses the expected fallback
-/// values for an uninitialised context.
+/// values for an uninitialized context.
 final class AresCoreTests: XCTestCase {
 
     // MARK: - Lifecycle
@@ -43,7 +43,7 @@ final class AresCoreTests: XCTestCase {
 
     func testTickDoesNotCrashWithoutSystem() {
         let ctx = ares_create()!
-        // Calling tick multiple times on an un-initialised context must not crash.
+        // Calling tick multiple times on an un-initialized context must not crash.
         for _ in 0..<5 { _ = ares_tick(ctx) }
         ares_destroy(ctx)
     }

@@ -104,7 +104,7 @@ struct AresContext {
     std::unordered_map<std::string, int32_t> axisAccum[kMaxPorts];
 
     // Light-gun shadow cursor per port, mirroring ares' internal cursor (starts
-    // centre-screen, same clamp as super-scope.cpp:52-56) so aimAt() can feed the
+    // center-screen, same clamp as super-scope.cpp:52-56) so aimAt() can feed the
     // relative delta to reach an absolute normalized position. Reset on connect.
     static constexpr int32_t kGunW = 256, kGunH = 240;
     int32_t lightgunX[kMaxPorts];
@@ -1076,7 +1076,7 @@ const char* ares_connect_device(AresContext* ctx, const char* system_id,
         ctx->connectedDevice[port - 1] = name;
     }
     {
-        // Reset the light-gun shadow cursor to centre, matching ares' fresh
+        // Reset the light-gun shadow cursor to center, matching ares' fresh
         // device (super-scope.hpp init). Telescoping deltas keep it in sync even
         // if aimAt runs before the deferred allocate.
         std::lock_guard<std::mutex> lock(ctx->axisMutex);

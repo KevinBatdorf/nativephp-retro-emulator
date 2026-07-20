@@ -122,7 +122,7 @@ struct EmulatorState {
     std::unordered_map<std::string, int32_t> axisAccum[kMaxPorts];
 
     // Light-gun shadow cursor per port, mirroring ares' internal cursor (starts
-    // centre-screen, same clamp as super-scope.cpp:52-56) so aimAt() can feed the
+    // center-screen, same clamp as super-scope.cpp:52-56) so aimAt() can feed the
     // relative delta to reach an absolute normalized position. Reset on connect.
     static constexpr int32_t kGunW = 256, kGunH = 240;
     int32_t lightgunX[kMaxPorts];
@@ -602,7 +602,7 @@ extern "C" {
  * dlopen every bundled core module. Each module's SystemRegistry::Registrar
  * runs inside dlopen, so the registry ends up holding exactly the systems the
  * host app shipped — the copy-assets hook decides that set, not this code.
- * Absent modules are simply skipped; ids the registry never sees stay
+ * Absent modules are skipped; ids the registry never sees stay
  * UNSUPPORTED_SYSTEM at the bridge.
  */
 static void loadCoreModules()
@@ -633,7 +633,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeInit(
         g_state    = new EmulatorState{};
         g_platform = new AndroidPlatform{};
         ares::platform = g_platform;
-        LOGI("ares platform initialised — version: %s", ares::Version.data());
+        LOGI("ares platform initialized — version: %s", ares::Version.data());
     }
     // NB: the Vulkan renderer (g_vk) is deliberately NOT created here. Its
     // lifecycle follows the SURFACE, not the ares platform — stopEmulation()
@@ -1397,7 +1397,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeConnectDevice(
         g_state->connectedDevice[port - 1] = name;
     }
     {
-        // Reset the light-gun shadow cursor to centre, matching ares' fresh
+        // Reset the light-gun shadow cursor to center, matching ares' fresh
         // device (super-scope.hpp init). Telescoping deltas keep it in sync even
         // if aimAt runs before the deferred allocate.
         std::lock_guard<std::mutex> lock(g_state->axisMutex);
@@ -1679,7 +1679,6 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeRemoveCheat(
     return removed ? JNI_TRUE : JNI_FALSE;
 }
 
-/** Deactivate all cheats. */
 JNIEXPORT void JNICALL
 Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeClearCheats(JNIEnv*, jobject)
 {
@@ -1925,7 +1924,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeFlushSaves(
 
 // Phase 11 — supported systems ------------------------------------------------
 
-/** Comma-separated ids of the systems compiled into this build (e.g. "fc,sfc,gb,md"). */
+/** Comma-separated ids of the systems compiled into this build (e.g. "fc,gb,gba,gbc,md,n64,sfc"). */
 JNIEXPORT jstring JNICALL
 Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetSupportedSystems(
     JNIEnv* env, jobject)

@@ -1,4 +1,4 @@
-// In-memory pak construction for the fc / gb / md ares cores.
+// In-memory pak construction for every cartridge core except SFC.
 //
 // Header analysis is delegated to mia's medium analyzers (see mia_shim.hpp);
 // this file mirrors each medium's load() body — pak attributes + ROM slicing

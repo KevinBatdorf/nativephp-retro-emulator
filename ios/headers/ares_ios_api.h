@@ -25,19 +25,19 @@ void ares_reset(AresContext* ctx);
 
 // System / ROM loading --------------------------------------------------------
 
-// STAGE a system declaration by ares id ("fc", "sfc", "gb", "md") — no core
-// boots until ares_load_rom arrives with a ROM (every boot is ROM-first so
-// the region variant is always right).  Re-staging over a running core is
-// legal; the running game continues until the next ares_load_rom.  System
-// firmware (SFC ipl.rom + boards.bml, GB boot ROM, MD TMSS) is embedded in
-// the library — no assets required.  Returns false for ids not compiled into
-// this build.
+// STAGE a system declaration by ares id ("fc", "sfc", "gb", "gba", "md", "n64")
+// — no core boots until ares_load_rom arrives with a ROM (every boot is
+// ROM-first so the region variant is always right).  Re-staging over a running
+// core is legal; the running game continues until the next ares_load_rom.
+// System firmware (SFC ipl.rom + boards.bml, GB/GBC boot ROM, MD TMSS, GBA open
+// BIOS, N64 PIF) is embedded in the library — no assets required.  Returns
+// false for ids not compiled into this build.
 // bios_path: optional real BIOS dump to override gba's embedded open BIOS;
 // NULL/empty otherwise (all systems boot on embedded firmware).
 bool ares_load_system(AresContext* ctx, const char* system_id, const char* bios_path);
 
 // Comma-separated ids of the systems compiled into this build, e.g.
-// "fc,sfc,gb,md".  Static storage — do not free.
+// "fc,gb,gba,gbc,md,n64,sfc".  Static storage — do not free.
 const char* ares_supported_systems(void);
 
 // Comma-separated ROM file extensions (no dots) valid for a system id —

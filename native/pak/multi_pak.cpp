@@ -167,7 +167,7 @@ static auto assembleGameBoyAdvance(Markup::Node document, string& manifest,
 }
 
 // --- Nintendo 64 — mirrors mia/medium/nintendo-64.cpp load() ----------------
-// N64 drives runtime behaviour off pak ATTRIBUTES (cic seed, per-port paks,
+// N64 drives runtime behavior off pak ATTRIBUTES (cic seed, per-port paks,
 // region), not just files — so replicate load()'s setAttribute calls.
 static auto assembleNintendo64(Markup::Node document, string& manifest,
                                std::vector<u8>& rom) -> std::shared_ptr<vfs::directory> {

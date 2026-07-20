@@ -9,7 +9,7 @@ use KevinBatdorf\RetroEmulator\VideoOutput;
 class GbConfig extends SystemConfig
 {
     /**
-     * colorEmulation matches CGB colours to a real Game Boy Color screen (no
+     * colorEmulation matches CGB colors to a real Game Boy Color screen (no
      * effect on original Game Boy). interframeBlending emulates handheld-LCD
      * ghosting so flicker-transparency effects read as translucent. Both default
      * off; enable to opt in.
