@@ -21,6 +21,7 @@
 #include <sstream>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 #include <TargetConditionals.h>
 #include <vector>
@@ -119,6 +120,13 @@ struct AresContext {
     // Held absolute deflection (analog stick): applied on EVERY poll until
     // changed, unlike axisAccum's consume-once relative deltas (mouse/gun).
     std::unordered_map<std::string, int32_t> axisHold[kMaxPorts];
+
+    // Hold latch — the axis twin of unsampledPress/deferredRelease: a tap on
+    // an overlay d-pad mapped to the stick sets full deflection then 0 within
+    // ms, and zeroing before the first poll would lose the nudge entirely.
+    // Guarded by axisMutex like the maps above.
+    std::unordered_set<std::string> axisHoldUnsampled[kMaxPorts];
+    std::unordered_map<std::string, int32_t> axisHoldPending[kMaxPorts];
 
     // Light-gun shadow cursor per port, mirroring ares' internal cursor (starts
     // center-screen, same clamp as super-scope.cpp:52-56) so aimAt() can feed the
@@ -345,11 +353,23 @@ struct IosPlatform : ares::Platform {
             for (auto& cached : g_ctx->axisCache) {
                 if (cached.node == axis) {
                     std::lock_guard<std::mutex> lock(g_ctx->axisMutex);
-                    auto& acc = g_ctx->axisAccum[cached.port - 1][cached.name];
-                    auto& hold = g_ctx->axisHold[cached.port - 1];
+                    int i = cached.port - 1;
+                    auto& acc = g_ctx->axisAccum[i][cached.name];
+                    auto& hold = g_ctx->axisHold[i];
                     auto held = hold.find(cached.name);
                     axis->setValue((held != hold.end() ? held->second : 0) + acc);
                     acc = 0;   // consume: a relative delta applies once per poll
+                    // Hold latch: deflection sampled once — apply a zero that
+                    // raced in before the first sample (see ares_set_axis).
+                    auto un = g_ctx->axisHoldUnsampled[i].find(cached.name);
+                    if (un != g_ctx->axisHoldUnsampled[i].end()) {
+                        g_ctx->axisHoldUnsampled[i].erase(un);
+                        auto p = g_ctx->axisHoldPending[i].find(cached.name);
+                        if (p != g_ctx->axisHoldPending[i].end()) {
+                            hold[cached.name] = p->second;
+                            g_ctx->axisHoldPending[i].erase(p);
+                        }
+                    }
                     return;
                 }
             }
@@ -764,6 +784,8 @@ static void unloadCore(AresContext* ctx)
     {
         std::lock_guard<std::mutex> lock(ctx->axisMutex);
         for (auto& m : ctx->axisHold) m.clear();
+        for (auto& s : ctx->axisHoldUnsampled) s.clear();
+        for (auto& m : ctx->axisHoldPending) m.clear();
     }
     ctx->audioStreams.clear();
     {
@@ -1244,7 +1266,18 @@ const char* ares_set_axis(AresContext* ctx, int port, const char* name, int valu
     if (hold) {
         // Absolute stick deflection, applied every poll until changed;
         // 0 releases. The on-screen-stick path (relative deltas can't hold).
-        ctx->axisHold[port - 1][axisName] = value;
+        int i = port - 1;
+        if (value != 0) {
+            ctx->axisHold[i][axisName] = value;
+            ctx->axisHoldUnsampled[i].insert(axisName);
+            ctx->axisHoldPending[i].erase(axisName);   // re-deflect cancels a queued zero
+        } else if (ctx->axisHoldUnsampled[i].count(axisName)) {
+            // Deflection not yet sampled — defer the zero one poll so a quick
+            // tap-nudge isn't lost (the button press latch's axis twin).
+            ctx->axisHoldPending[i][axisName] = 0;
+        } else {
+            ctx->axisHold[i][axisName] = 0;
+        }
     } else {
         ctx->axisAccum[port - 1][axisName] += value;
     }
