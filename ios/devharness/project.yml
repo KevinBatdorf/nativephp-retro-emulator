@@ -30,6 +30,19 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kevinbatdorf.retroemulator.devharness
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
+  DemoUITests:
+    # Drives the INSTALLED demo app (com.kevin.oceanwaveshine) on the phone —
+    # rotation + screenshot capture, since a physical iPhone has no CLI
+    # screencap. Screenshots land as xcresult attachments.
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    dependencies:
+      - target: DevHarness
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kevinbatdorf.retroemulator.demouitests
+
   DeviceTests:
     type: bundle.unit-test
     platform: iOS
@@ -56,3 +69,10 @@ schemes:
         DeviceTests: [test]
     test:
       targets: [DeviceTests]
+  DemoUI:
+    build:
+      targets:
+        DevHarness: all
+        DemoUITests: [test]
+    test:
+      targets: [DemoUITests]
