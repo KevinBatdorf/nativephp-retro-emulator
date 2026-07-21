@@ -1210,12 +1210,16 @@ object EmulatorFunctions {
      */
     class GetInputDevices(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
-            val pad = InputDevice.SOURCE_GAMEPAD or InputDevice.SOURCE_JOYSTICK
             val devices = mutableListOf<String>()
             for (id in InputDevice.getDeviceIds()) {
                 val dev = InputDevice.getDevice(id) ?: continue
                 if (dev.isVirtual) continue
-                if ((dev.sources and pad) == 0) continue
+                // Exact source-mask matches — a plain `and != 0` also passes
+                // gpio-keys/touchscreens because SOURCE_GAMEPAD shares its
+                // class bit with every button-class source.
+                val gamepad = (dev.sources and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD
+                val joystick = (dev.sources and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
+                if (!gamepad && !joystick) continue
                 if (dev.name !in devices) devices.add(dev.name)
             }
             return BridgeResponse.success(mapOf("devices" to devices))
