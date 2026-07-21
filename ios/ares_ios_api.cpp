@@ -84,6 +84,15 @@ struct AresContext {
     std::atomic<uint32_t> hwMask[kMaxPorts] {};
     std::atomic<uint32_t> swMask[kMaxPorts] {};
 
+    // Software press latch. A touch tap's press+release often arrive <5ms
+    // apart — between two input polls — and the pulse would be lost entirely.
+    //   unsampledPress  — sw bits pressed but not yet seen by Platform::input.
+    //   deferredRelease — released while still unsampled; the release applies
+    //                     right after the bit's first sample, so every press
+    //                     is visible for at least one poll (real-pad tap).
+    std::atomic<uint32_t> unsampledPress[kMaxPorts] {};
+    std::atomic<uint32_t> deferredRelease[kMaxPorts] {};
+
     // Cached mapping from an ares button node → (1-based port, bit). Built on
     // the emulation thread when a device is (re)connected. `bit` is the slot the
     // node reads; `defaultBit` is its unremapped value, kept so a remap
@@ -320,6 +329,13 @@ struct IosPlatform : ares::Platform {
                     uint32_t mask = g_ctx->hwMask[i].load(std::memory_order_relaxed)
                                   | g_ctx->swMask[i].load(std::memory_order_relaxed);
                     btn->setValue(mask & cached.bit);
+                    // Press latch: this bit has now been sampled once; apply a
+                    // release that raced in before the press was ever seen.
+                    if (g_ctx->unsampledPress[i].load(std::memory_order_relaxed) & cached.bit) {
+                        g_ctx->unsampledPress[i].fetch_and(~cached.bit, std::memory_order_relaxed);
+                        if (g_ctx->deferredRelease[i].fetch_and(~cached.bit, std::memory_order_relaxed) & cached.bit)
+                            g_ctx->swMask[i].fetch_and(~cached.bit, std::memory_order_relaxed);
+                    }
                     return;
                 }
             }
@@ -481,6 +497,15 @@ static void applyInputRemap() {
 // Game Boy) always cache their controls on the system node. Otherwise every
 // registered device is (re)allocated on its hot-swappable port; empty ports
 // get nothing.
+// The device a physical port effectively carries: the explicit registration,
+// or — port 1 only — the system's own default pad (the auto-connect rule).
+// Every read path (GetPorts, press, descriptors) must use this, or they
+// disagree with what the live core actually has plugged in.
+static std::string effectiveDeviceName(const SystemRegistry::SystemDef& def, int physical, std::string name) {
+    if (name.empty() && physical == 1 && def.device) return def.device;
+    return name;
+}
+
 static void applyConnectedDevices() {
     if (!g_ctx || !g_ctx->system || !g_ctx->root) return;
     auto& def = *g_ctx->system;
@@ -507,7 +532,7 @@ static void applyConnectedDevices() {
         // registered — desktop auto-connects the default pad, and consumers
         // shouldn't have to name a system-specific device (MD's "Fighting Pad")
         // through a generic enum just to get input. Explicit connect overrides.
-        if (name.empty() && p == 1 && def.device) name = def.device;
+        name = effectiveDeviceName(def, p, name);
         auto portName = std::string("Controller Port ") + std::to_string(p);
         auto port = NodeUtil::findByName<ares::Node::Port>(g_ctx->root, portName.c_str());
 
@@ -554,7 +579,7 @@ static bool connectedDescriptor(int port, DeviceDescriptor& out) {
         std::lock_guard<std::mutex> lock(g_ctx->deviceMutex);
         int logical = 1;
         for (int p = 1; p <= def.ports && logical <= AresContext::kMaxPorts; p++) {
-            auto& dev = g_ctx->connectedDevice[p - 1];
+            auto dev = effectiveDeviceName(def, p, g_ctx->connectedDevice[p - 1]);
             int block = portBlock(dev);
             for (int i = 0; i < block && logical <= AresContext::kMaxPorts; i++, logical++) {
                 if (logical == port) { name = isMultitap(dev) ? std::string("Gamepad") : dev; }
@@ -733,6 +758,8 @@ static void unloadCore(AresContext* ctx)
     // Held axis deflections drop for the same reason.
     for (int i = 0; i < AresContext::kMaxPorts; i++) {
         ctx->swMask[i].store(0, std::memory_order_relaxed);
+        ctx->unsampledPress[i].store(0, std::memory_order_relaxed);
+        ctx->deferredRelease[i].store(0, std::memory_order_relaxed);
     }
     {
         std::lock_guard<std::mutex> lock(ctx->axisMutex);
@@ -1187,8 +1214,19 @@ const char* ares_press_button(AresContext* ctx, int port,
     if (!connectedDescriptor(port, desc) || !bitForButtonName(desc, btnName, bit))
         return statusRet(std::string("UNKNOWN_BUTTON:") + btnName);
 
-    if (down) ctx->swMask[port - 1].fetch_or(bit, std::memory_order_relaxed);
-    else      ctx->swMask[port - 1].fetch_and(~bit, std::memory_order_relaxed);
+    int i = port - 1;
+    if (down) {
+        ctx->swMask[i].fetch_or(bit, std::memory_order_relaxed);
+        ctx->unsampledPress[i].fetch_or(bit, std::memory_order_relaxed);
+        // A re-press cancels any release still queued from the previous tap.
+        ctx->deferredRelease[i].fetch_and(~bit, std::memory_order_relaxed);
+    } else if (ctx->unsampledPress[i].load(std::memory_order_relaxed) & bit) {
+        // Press not yet sampled by the core — defer the release one poll so
+        // the tap isn't lost (see the latch in Platform::input).
+        ctx->deferredRelease[i].fetch_or(bit, std::memory_order_relaxed);
+    } else {
+        ctx->swMask[i].fetch_and(~bit, std::memory_order_relaxed);
+    }
     return statusRet("");
 }
 
@@ -1444,6 +1482,7 @@ static std::string buildPortsJson(AresContext* ctx) {
             std::lock_guard<std::mutex> lock(ctx->deviceMutex);
             name = ctx->connectedDevice[p - 1];
         }
+        name = effectiveDeviceName(def, p, name);   // report what's really plugged in
         if (isMultitap(name)) {   // fans out to gamepad logical ports
             DeviceDescriptor gp; gp.buttons = def.buttons;
             int block = portBlock(name);
