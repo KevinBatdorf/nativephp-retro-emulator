@@ -129,18 +129,8 @@ struct EmulatorState {
         std::string name;
     };
     std::vector<CachedAxis> axisCache;
-    std::mutex axisMutex;   // guards axisAccum/axisHold + lightgun cursor
+    std::mutex axisMutex;   // guards axisAccum + lightgun cursor
     std::unordered_map<std::string, int32_t> axisAccum[kMaxPorts];
-    // Held absolute deflection (analog stick): applied on EVERY poll until
-    // changed, unlike axisAccum's consume-once relative deltas (mouse/gun).
-    std::unordered_map<std::string, int32_t> axisHold[kMaxPorts];
-
-    // Hold latch — the axis twin of unsampledPress/deferredRelease: a tap on
-    // an overlay d-pad mapped to the stick sets full deflection then 0 within
-    // ms, and zeroing before the first poll would lose the nudge entirely.
-    // Guarded by axisMutex like the maps above.
-    std::unordered_set<std::string> axisHoldUnsampled[kMaxPorts];
-    std::unordered_map<std::string, int32_t> axisHoldPending[kMaxPorts];
 
     // Light-gun shadow cursor per port, mirroring ares' internal cursor (starts
     // center-screen, same clamp as super-scope.cpp:52-56) so aimAt() can feed the
@@ -182,10 +172,6 @@ struct EmulatorState {
     // empty disables persistence.
     std::string savePrefix;
 
-    // Pre-load system options staged by LoadSystem (config key → wire value),
-    // consumed via SystemDef::applyOptions right before every boot.
-    std::map<std::string, std::string> systemOptions;
-
     // Dev-supplied firmware image (LoadSystem biosPath), staged with the
     // system; handed to makeSystemPak on every boot. Empty = none given.
     std::vector<uint8_t> biosBytes;
@@ -224,7 +210,7 @@ struct EmulatorState {
     std::atomic<bool> fastForwardActive {false};
 
     // Rumble — cores publish motor state via Platform::input() on rumble
-    // nodes (SFC Rumble Gamepad, GB MBC5 carts, N64 Rumble Pak). Packed
+    // nodes (SFC Rumble Gamepad, GB MBC5 carts). Packed
     // strong<<16|weak; the host polls per frame and drives its vibrator.
     std::atomic<bool> rumbleEnabled {false};
     std::atomic<uint32_t> rumbleState {0};
@@ -394,23 +380,9 @@ struct AndroidPlatform : ares::Platform {
             for (auto& cached : g_state->axisCache) {
                 if (cached.node == axis) {
                     std::lock_guard<std::mutex> lock(g_state->axisMutex);
-                    int i = cached.port - 1;
-                    auto& acc = g_state->axisAccum[i][cached.name];
-                    auto& hold = g_state->axisHold[i];
-                    auto held = hold.find(cached.name);
-                    axis->setValue((held != hold.end() ? held->second : 0) + acc);
+                    auto& acc = g_state->axisAccum[cached.port - 1][cached.name];
+                    axis->setValue(acc);
                     acc = 0;   // consume: a relative delta applies once per poll
-                    // Hold latch: deflection sampled once — apply a zero that
-                    // raced in before the first sample (see nativeSetAxis).
-                    auto un = g_state->axisHoldUnsampled[i].find(cached.name);
-                    if (un != g_state->axisHoldUnsampled[i].end()) {
-                        g_state->axisHoldUnsampled[i].erase(un);
-                        auto p = g_state->axisHoldPending[i].find(cached.name);
-                        if (p != g_state->axisHoldPending[i].end()) {
-                            hold[cached.name] = p->second;
-                            g_state->axisHoldPending[i].erase(p);
-                        }
-                    }
                     return;
                 }
             }
@@ -499,7 +471,7 @@ static bool resolveDevice(const SystemRegistry::SystemDef& def,
                           const std::string& name, DeviceDescriptor& out) {
     if (def.device && name == def.device) {          // the system's default pad
         out.buttons = def.buttons;
-        out.axes = def.axes;   // N64's default pad IS the stick controller
+        out.axes.clear();      // no shipped default pad has analog axes
         return true;
     }
     auto sit = deviceTable().find(def.id);
@@ -673,7 +645,7 @@ static void loadCoreModules()
     attempted = true;
 
     static const char* kCoreIds[] = {
-        "fc", "sfc", "gb", "gba", "md", "n64",
+        "fc", "sfc", "gb", "gba", "md",
     };
     for (auto* id : kCoreIds) {
         char name[64];
@@ -841,36 +813,16 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeScreenshotRGBA(
 
 JNIEXPORT jboolean JNICALL
 Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadSystem(
-    JNIEnv* env, jobject, jstring systemIdStr, jstring biosPathStr, jstring optionsStr)
+    JNIEnv* env, jobject, jstring systemIdStr, jstring biosPathStr)
 {
     if (!g_state) return JNI_FALSE;
 
     auto systemId = jstringToString(env, systemIdStr);
     auto* def = SystemRegistry::find(systemId);
 
-    // Stage pre-load system options ("key=value" per line) for applyOptions.
-    g_state->systemOptions.clear();
-    {
-        std::istringstream lines(jstringToString(env, optionsStr));
-        std::string line;
-        while (std::getline(lines, line)) {
-            auto eq = line.find('=');
-            if (eq == std::string::npos || eq == 0) continue;
-            g_state->systemOptions[line.substr(0, eq)] = line.substr(eq + 1);
-        }
-    }
     if (!def) {
         LOGE("unsupported system: %s", systemId.c_str());
         return JNI_FALSE;
-    }
-
-    // Adreno's shader compiler rejects parallel-RDP's specialized per-combiner
-    // compute shaders (vkCreateComputePipelines → VK_ERROR_UNKNOWN), but it
-    // compiles the single ubershader fine — force that path. Read by
-    // parallel-RDP at RDP init (loadRom). TODO: gate on driver_id == Qualcomm
-    // so faster GPUs keep the specialized shaders.
-    if (systemId == "n64") {
-        setenv("PARALLEL_RDP_UBERSHADER", "1", 1);
     }
 
     // An optional dev-supplied BIOS travels with the staging (gba may override
@@ -923,17 +875,10 @@ static void unloadCore()
     g_state->axisCache.clear();
     // connectedDevice[] intentionally survives (registrations persist across a
     // reboot); the swMask does not — a device teardown drops held buttons.
-    // Held axis deflections drop for the same reason.
     for (int i = 0; i < EmulatorState::kMaxPorts; i++) {
         g_state->swMask[i].store(0, std::memory_order_relaxed);
         g_state->unsampledPress[i].store(0, std::memory_order_relaxed);
         g_state->deferredRelease[i].store(0, std::memory_order_relaxed);
-    }
-    {
-        std::lock_guard<std::mutex> lock(g_state->axisMutex);
-        for (auto& m : g_state->axisHold) m.clear();
-        for (auto& s : g_state->axisHoldUnsampled) s.clear();
-        for (auto& m : g_state->axisHoldPending) m.clear();
     }
     g_state->audioStreams.clear();
     {
@@ -998,9 +943,6 @@ static int bootWithPak(SystemRegistry::CartridgePak built,
     if (g_state->systemLoaded) unloadCore();
 
     g_state->systemPak = def->makeSystemPak(*def, g_state->biosBytes);
-    // Pre-load options (currently n64) must land before load(), like desktop's
-    // option() calls before Nintendo64::load (nintendo-64.cpp:107-118).
-    if (def->applyOptions) def->applyOptions(g_state->systemOptions);
     if (!def->load(g_state->root, *def, loadName)) {
         LOGE("ares load failed: %s", loadName.c_str());
         unloadCore();
@@ -1566,7 +1508,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativePressButton(
  */
 JNIEXPORT jstring JNICALL
 Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetAxis(
-    JNIEnv* env, jobject, jint port, jstring nameStr, jint value, jboolean hold)
+    JNIEnv* env, jobject, jint port, jstring nameStr, jint value)
 {
     auto ret = [&](const char* s) { return env->NewStringUTF(s); };
     if (!g_state || !g_state->system) return ret("SYSTEM_NOT_LOADED");
@@ -1579,24 +1521,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetAxis(
         return ret("INVALID_PARAMETERS");
 
     std::lock_guard<std::mutex> lock(g_state->axisMutex);
-    if (hold) {
-        // Absolute stick deflection, applied every poll until changed;
-        // 0 releases. The on-screen-stick path (relative deltas can't hold).
-        int i = port - 1;
-        if (value != 0) {
-            g_state->axisHold[i][name] = value;
-            g_state->axisHoldUnsampled[i].insert(name);
-            g_state->axisHoldPending[i].erase(name);   // re-deflect cancels a queued zero
-        } else if (g_state->axisHoldUnsampled[i].count(name)) {
-            // Deflection not yet sampled — defer the zero one poll so a quick
-            // tap-nudge isn't lost (the button press latch's axis twin).
-            g_state->axisHoldPending[i][name] = 0;
-        } else {
-            g_state->axisHold[i][name] = 0;
-        }
-    } else {
-        g_state->axisAccum[port - 1][name] += value;
-    }
+    g_state->axisAccum[port - 1][name] += value;
     return ret("");
 }
 
@@ -2038,7 +1963,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeFlushSaves(
 
 // Phase 11 — supported systems ------------------------------------------------
 
-/** Comma-separated ids of the systems compiled into this build (e.g. "fc,gb,gba,gbc,md,n64,sfc"). */
+/** Comma-separated ids of the systems compiled into this build (e.g. "fc,gb,gba,gbc,md,sfc"). */
 JNIEXPORT jstring JNICALL
 Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetSupportedSystems(
     JNIEnv* env, jobject)

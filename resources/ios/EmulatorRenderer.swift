@@ -75,12 +75,9 @@ final class EmulatorRenderer: UIView {
     /// until the next `loadRom`. System firmware is embedded in the native
     /// library — no assets are required; `biosPath` optionally overrides gba's
     /// embedded open BIOS with a real dump for accuracy.
-    /// - Parameter systemOptions: pre-load options as "key=value" lines (n64
-    ///   quality, recompiler, …), applied natively right before boot like
-    ///   desktop's option() calls. Empty = the core's reference defaults.
-    func loadSystem(_ system: String, biosPath: String? = nil, systemOptions: String = "") -> Bool {
+    func loadSystem(_ system: String, biosPath: String? = nil) -> Bool {
         emuLock.lock()
-        let ok = ares_load_system(ctx, system, biosPath ?? "", systemOptions)
+        let ok = ares_load_system(ctx, system, biosPath ?? "")
         emuLock.unlock()
         if ok { loadedSystem = system }
         return ok
@@ -476,12 +473,11 @@ final class EmulatorRenderer: UIView {
         return String(cString: ares_press_button(ctx, Int32(port), name, down))
     }
 
-    /// Accumulate a relative axis delta (mouse / light-gun X/Y), or with
-    /// hold=true set an absolute stick deflection applied every poll (0 releases).
-    func setAxis(port: Int, name: String, value: Int, hold: Bool = false) -> String {
+    /// Accumulate a relative axis delta (mouse / light-gun X/Y).
+    func setAxis(port: Int, name: String, value: Int) -> String {
         emuLock.lock()
         defer { emuLock.unlock() }
-        return String(cString: ares_set_axis(ctx, Int32(port), name, Int32(value), hold))
+        return String(cString: ares_set_axis(ctx, Int32(port), name, Int32(value)))
     }
 
     /// Aim a light-gun at an absolute normalized (0..1) screen position.

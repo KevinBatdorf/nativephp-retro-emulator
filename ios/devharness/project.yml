@@ -1,13 +1,10 @@
-# Device test harness — the iOS twin of android/app's EmulatorActivity harness.
-#
-# Physical-device XCTest needs a host app ("Tool-hosted testing is unavailable
-# on device destinations"), so this wraps the plugin's test checks in a minimal
-# app + hosted test bundle. Regenerate the project with `xcodegen` (the
-# .xcodeproj is gitignored), then:
-#   xcodebuild test -project DevHarness.xcodeproj -scheme DevHarness \
-#     -destination 'platform=iOS,id=<udid>' -allowProvisioningUpdates
-# Stage test media (rdpqdemo.z64) in Tests/Resources/ — gitignored, like the
-# SwiftPM test package's Resources.
+# Device harness — a minimal host app whose UI-test bundle drives the INSTALLED
+# demo on a physical iPhone (a phone has no CLI screencap). Physical-device
+# XCTest needs a host app: "Tool-hosted testing is unavailable on device
+# destinations". Regenerate the project with `xcodegen` (the .xcodeproj is
+# gitignored), then:
+#   xcodebuild test -project DevHarness.xcodeproj -scheme DemoUI \
+#     -destination 'platform=iOS,id=<udid>'
 name: DevHarness
 options:
   bundleIdPrefix: com.kevinbatdorf.retroemulator
@@ -42,33 +39,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kevinbatdorf.retroemulator.demouitests
-
-  DeviceTests:
-    type: bundle.unit-test
-    platform: iOS
-    sources: [Tests]
-    dependencies:
-      - target: DevHarness
-      - framework: ../../build/RetroEmulator.xcframework
-        embed: false
-      - sdk: Metal.framework
-      - sdk: MetalKit.framework
-      - sdk: IOSurface.framework
-      - sdk: QuartzCore.framework
-      - sdk: CoreGraphics.framework
-    settings:
-      base:
-        TEST_HOST: $(BUILT_PRODUCTS_DIR)/DevHarness.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)DevHarness
-        BUNDLE_LOADER: $(TEST_HOST)
-        OTHER_LDFLAGS: -lc++
 schemes:
-  DevHarness:
-    build:
-      targets:
-        DevHarness: all
-        DeviceTests: [test]
-    test:
-      targets: [DeviceTests]
   DemoUI:
     build:
       targets:

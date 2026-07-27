@@ -34,15 +34,6 @@ object EmulatorFunctions {
     // core doesn't declare it (see native/core_options.hpp).
     private val CORE_TOGGLE_KEYS = listOf("colorEmulation", "deepBlackBoost", "interframeBlending", "showIcons")
 
-    // Pre-load option keys (applied before boot, not runtime toggles) — the
-    // n64 set desktop passes before Nintendo64::load. Booleans arrive as
-    // Boolean and serialize as true/false; the rest are wire strings.
-    private val SYSTEM_OPTION_KEYS = listOf(
-        "quality", "supersampling", "disableVideoInterfaceProcessing",
-        "weaveDeinterlacing", "homebrewMode", "recompiler",
-        "expansionPak", "controllerPakBanks",
-    )
-
     private data class SurfaceEntry(
         val renderer: EmulatorRenderer,
         val activity: FragmentActivity,
@@ -349,13 +340,7 @@ object EmulatorFunctions {
                 .toMap()
             if (coreToggles.isNotEmpty()) renderer.queueCoreOptions(coreToggles)
 
-            // Pre-load options (n64: quality, recompiler, …) travel as
-            // "key=value" lines and apply natively right before boot; absent
-            // keys fall back to desktop's defaults in the core.
-            val systemOptions = SYSTEM_OPTION_KEYS
-                .mapNotNull { key -> config[key]?.let { "$key=$it" } }
-                .joinToString("\n")
-            renderer.queueSystemLoad(system, config["biosPath"] as? String, systemOptions)
+            renderer.queueSystemLoad(system, config["biosPath"] as? String)
 
             Log.d(TAG, "LoadSystem: staged system=$system")
             return BridgeResponse.success(mapOf("status" to "staged", "system" to system))
@@ -897,8 +882,8 @@ object EmulatorFunctions {
 
     /**
      * Gate rumble forwarding: while enabled, motor state published by the
-     * emulated hardware (SFC Rumble Gamepad, GB MBC5 rumble carts, N64
-     * Rumble Pak) drives the device vibrator. The response reports whether
+     * emulated hardware (SFC Rumble Gamepad, GB MBC5 rumble carts) drives
+     * the device vibrator. The response reports whether
      * this device can rumble at all.
      */
     class SetRumble(private val activity: FragmentActivity) : BridgeFunction {
@@ -1059,11 +1044,7 @@ object EmulatorFunctions {
         }
     }
 
-    /**
-     * Accumulate a relative axis delta (mouse / light-gun X/Y), or with
-     * hold=true set an absolute deflection applied every poll until changed
-     * (analog stick; 0 releases).
-     */
+    /** Accumulate a relative axis delta (mouse / light-gun X/Y). */
     class SetAxis(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
             val (entry, err) = entry(parameters)
@@ -1072,9 +1053,8 @@ object EmulatorFunctions {
             val axis = parameters["axis"] as? String
                 ?: return BridgeResponse.error("INVALID_PARAMETERS", "axis is required")
             val value = (parameters["value"] as? Number)?.toInt() ?: 0
-            val hold = parameters["hold"] as? Boolean ?: false
             return statusResponse(
-                entry!!.renderer.setAxis(port, axis, value, hold),
+                entry!!.renderer.setAxis(port, axis, value),
                 mapOf("status" to "ok", "axis" to axis, "value" to value))
         }
     }
@@ -1190,7 +1170,6 @@ object EmulatorFunctions {
                 system("gbc", "Game Boy Color",            stable = true,  compiled),
                 system("gba", "Game Boy Advance",          stable = true,  compiled),
                 system("md",  "Sega Mega Drive / Genesis", stable = true,  compiled),
-                system("n64", "Nintendo 64",               stable = true,  compiled),
             )
             return BridgeResponse.success(mapOf("systems" to systems))
         }

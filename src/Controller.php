@@ -82,25 +82,6 @@ class Controller
     }
 
     /**
-     * Hold an analog axis at an absolute deflection until changed — the
-     * analog-stick model (N64 X-Axis/Y-Axis, full range ±32767), unlike
-     * setAxis' consumed-once relative deltas. holdAxis($axis, 0) releases.
-     * On-screen stick controls call this on press/release.
-     */
-    public function holdAxis(string $axis, int $value): static
-    {
-        $this->call('Emulator.SetAxis', [
-            'surface' => $this->surface,
-            'port' => $this->port,
-            'axis' => $axis,
-            'value' => $value,
-            'hold' => true,
-        ]);
-
-        return $this;
-    }
-
-    /**
      * Aim a light-gun (Super Scope / Justifier) at an absolute position on the
      * emulated screen, given as normalized 0..1 coordinates (0,0 = top-left,
      * 1,1 = bottom-right). The hardware is relative-only, so the plugin tracks a

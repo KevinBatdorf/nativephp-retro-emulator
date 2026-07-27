@@ -27,30 +27,21 @@ final class BootTests: XCTestCase {
     // MARK: - System load
 
     func testLoadSystemSucceeds() {
-        XCTAssertTrue(ares_load_system(ctx, "sfc", nil, nil),
+        XCTAssertTrue(ares_load_system(ctx, "sfc", nil),
                       "ares_load_system(\"sfc\") must return true")
     }
 
     func testLoadSystemIsIdempotent() {
-        XCTAssertTrue(ares_load_system(ctx, "sfc", nil, nil))
+        XCTAssertTrue(ares_load_system(ctx, "sfc", nil))
         // Second call should be a no-op and return true.
-        XCTAssertTrue(ares_load_system(ctx, "sfc", nil, nil))
+        XCTAssertTrue(ares_load_system(ctx, "sfc", nil))
     }
 
     func testLoadSystemFailsWithUnknownId() {
         // "saturn" has no ares core in this tree, so it is never registered —
-        // an id absent from the registry must be rejected. (n64 used to serve
-        // this role but is now a compiled, supported iOS system.)
-        XCTAssertFalse(ares_load_system(ctx, "saturn", nil, nil),
+        // an id absent from the registry must be rejected.
+        XCTAssertFalse(ares_load_system(ctx, "saturn", nil),
                        "systems not compiled into this build must be rejected")
-    }
-
-    func testN64IsSupported() {
-        // N64 is compiled into the iOS build (paraLLEl-RDP on MoltenVK).
-        let ids = String(cString: ares_supported_systems()).components(separatedBy: ",")
-        XCTAssertTrue(ids.contains("n64"), "'n64' must be supported, got \(ids)")
-        XCTAssertTrue(ares_load_system(ctx, "n64", nil, nil),
-                      "ares_load_system(\"n64\") must return true")
     }
 
     func testSupportedSystemsAreReported() {
@@ -67,7 +58,7 @@ final class BootTests: XCTestCase {
         // load/teardown in one process mirrors the Android Phase 11 test.
         for id in ["fc", "sfc", "gb", "md"] {
             let localCtx = ares_create()
-            XCTAssertTrue(ares_load_system(localCtx, id, nil, nil), "\(id): loadSystem failed")
+            XCTAssertTrue(ares_load_system(localCtx, id, nil), "\(id): loadSystem failed")
             let json = String(cString: ares_get_ports_json(localCtx))
             XCTAssertTrue(json.contains("buttons"), "\(id): unexpected ports JSON \(json)")
             ares_destroy(localCtx)
@@ -79,7 +70,7 @@ final class BootTests: XCTestCase {
     // MARK: - ROM load
 
     func testLoadRomSucceedsWithSyntheticLoRom() {
-        XCTAssertTrue(ares_load_system(ctx, "sfc", nil, nil))
+        XCTAssertTrue(ares_load_system(ctx, "sfc", nil))
 
         let rom = Self.makeMinimalLoRom()
         let ok  = rom.withUnsafeBytes {
@@ -97,7 +88,7 @@ final class BootTests: XCTestCase {
     }
 
     func testLoadRomFailsWithTooSmallData() {
-        XCTAssertTrue(ares_load_system(ctx, "sfc", nil, nil))
+        XCTAssertTrue(ares_load_system(ctx, "sfc", nil))
 
         let tiny = Data(count: 100)
         let ok   = tiny.withUnsafeBytes {
@@ -183,7 +174,7 @@ final class BootTests: XCTestCase {
         // — staging must leave the hint at 0. Expected value follows the core
         // formula at the pinned submodule (sfc/ppu/ppu.cpp:47, NTSC 262 lines).
         XCTAssertEqual(ares_get_refresh_rate_hint(ctx), 0.0)
-        XCTAssertTrue(ares_load_system(ctx, "sfc", nil, nil))
+        XCTAssertTrue(ares_load_system(ctx, "sfc", nil))
         XCTAssertEqual(ares_get_refresh_rate_hint(ctx), 0.0,
                        "staging must not boot a core")
         boot()
@@ -197,7 +188,7 @@ final class BootTests: XCTestCase {
         // ($02 = Europe → PAL, sfc_pak region detection); PAL SFC refresh =
         // cpuFrequency(PAL colorburst · 4.8) / (1364 · 312) ≈ 50.0070
         // (sfc/ppu/ppu.cpp, 312-line PAL frame).
-        XCTAssertTrue(ares_load_system(ctx, "sfc", nil, nil))
+        XCTAssertTrue(ares_load_system(ctx, "sfc", nil))
         let rom = Self.makeMinimalLoRom(region: .pal)
         let ok = rom.withUnsafeBytes {
             ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil, nil, nil) == 1
@@ -211,7 +202,7 @@ final class BootTests: XCTestCase {
     func testRegionOverrideWinsOverAnalysis() {
         // Explicit region override (dev knows best — junk homebrew headers):
         // an NTSC-headered ROM forced to PAL must boot PAL.
-        XCTAssertTrue(ares_load_system(ctx, "sfc", nil, nil))
+        XCTAssertTrue(ares_load_system(ctx, "sfc", nil))
         let rom = Self.makeMinimalLoRom()
         let ok = rom.withUnsafeBytes {
             ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil, "PAL", nil) == 1
@@ -224,7 +215,7 @@ final class BootTests: XCTestCase {
     // MARK: - Ports JSON
 
     func testGetPortsJsonAfterSystemLoad() {
-        XCTAssertTrue(ares_load_system(ctx, "sfc", nil, nil))
+        XCTAssertTrue(ares_load_system(ctx, "sfc", nil))
         let json = String(cString: ares_get_ports_json(ctx))
         XCTAssertTrue(json.contains("buttons"), "ports JSON must list buttons")
     }
@@ -233,7 +224,7 @@ final class BootTests: XCTestCase {
 
     private func boot() {
         let rom = Self.makeMinimalLoRom()
-        XCTAssertTrue(ares_load_system(ctx, "sfc", nil, nil))
+        XCTAssertTrue(ares_load_system(ctx, "sfc", nil))
         let ok = rom.withUnsafeBytes {
             ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil, nil, nil) == 1
         }
@@ -251,7 +242,7 @@ final class BootTests: XCTestCase {
         let pattern = Data(repeating: 0xAB, count: 8192)
         try pattern.write(to: URL(fileURLWithPath: savePath))
 
-        XCTAssertTrue(ares_load_system(ctx, "sfc", nil, nil))
+        XCTAssertTrue(ares_load_system(ctx, "sfc", nil))
         let rom = Self.makeMinimalLoRom(withSram: true)
         let ok = rom.withUnsafeBytes {
             ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, prefix, nil, nil) == 1
@@ -268,7 +259,7 @@ final class BootTests: XCTestCase {
     }
 
     func testFlushWithoutPrefixReturnsFalse() {
-        XCTAssertTrue(ares_load_system(ctx, "sfc", nil, nil))
+        XCTAssertTrue(ares_load_system(ctx, "sfc", nil))
         let rom = Self.makeMinimalLoRom()
         _ = rom.withUnsafeBytes {
             ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil, nil, nil) == 1

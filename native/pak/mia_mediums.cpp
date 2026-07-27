@@ -26,7 +26,6 @@ auto Medium::manifestDatabase(string) -> string { return {}; }
 #include <mia/medium/game-boy.cpp>
 #include <mia/medium/mega-drive.cpp>
 #include <mia/medium/game-boy-advance.cpp>
-#include <mia/medium/nintendo-64.cpp>
 
 } // namespace mia
 
@@ -54,9 +53,5 @@ auto analyzeGameBoyAdvance(std::vector<u8>& rom) -> string {
     return medium.analyze(rom);
 }
 
-auto analyzeNintendo64(std::vector<u8>& rom) -> string {
-    mia::Nintendo64 medium;
-    return medium.analyze(rom);
-}
 
 } // namespace MiaAnalyzers

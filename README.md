@@ -105,7 +105,6 @@ we consider not yet production-ready. Per-system game compatibility:
 | Game Boy / Game Boy Color | `gb` / `gbc` | ✅ | |
 | Game Boy Advance | `gba` | ✅ | Boots on an embedded open BIOS; supply a real one via `biosPath` for accuracy |
 | Mega Drive / Genesis | `md` | ✅ | |
-| Nintendo 64 | `n64` | ✅ | Renders through Vulkan paraLLEl-RDP; Android today, iOS pending MoltenVK |
 
 Other ares systems appear in `Emulator::systems()` with `supported: false` —
 they aren't compiled into the shipped binaries.
@@ -133,9 +132,6 @@ while active. See the [ares docs](https://ares-emu.net/docs) for details.
   Game Genie decoders do this per system.
 - `loadCheatsFile($path)` reads desktop ares' `.cheats.bml` list format, so
   lists are interchangeable with desktop.
-- **N64 cheats are blocked upstream** — the N64 core does not call the cheat
-  hook ([ares#1633](https://github.com/ares-emulator/ares/issues/1633));
-  `addCheat` reports an honest error there when N64 lands.
 
 ## Shaders
 

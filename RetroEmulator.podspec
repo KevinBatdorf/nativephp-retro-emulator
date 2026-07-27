@@ -10,13 +10,13 @@ Pod::Spec.new do |s|
   # formality CocoaPods requires but never fetches for a :path pod.
   s.source       = { :git => 'https://github.com/kevinbatdorf/nativephp-retro-emulator.git', :tag => s.version }
 
-  # The prebuilt native core (ares + parallel-RDP + statically merged MoltenVK
-  # + librashader). Built by scripts/build_xcframework.sh. This is the delivery
+  # The prebuilt native core (ares + statically merged librashader). Built by
+  # scripts/build_xcframework.sh. This is the delivery
   # NativePHP Mobile's plugin pod-injection can't express (name/version only,
   # no vendored_frameworks) — hence the local podspec.
   s.vendored_frameworks = 'build/RetroEmulator.xcframework'
 
-  # System frameworks MoltenVK (inside the xcframework) needs at link time.
+  # System frameworks the Metal renderer + librashader need at link time.
   s.frameworks   = 'Metal', 'MetalKit', 'IOSurface', 'QuartzCore', 'CoreGraphics'
   s.libraries    = 'c++'
 end

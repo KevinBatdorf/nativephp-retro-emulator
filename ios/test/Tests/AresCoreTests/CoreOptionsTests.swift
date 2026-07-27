@@ -23,7 +23,7 @@ final class CoreOptionsTests: XCTestCase {
     }
 
     func testDeepBlackBoostTogglesOnSnesAndIsAbsentElsewhere() {
-        XCTAssertTrue(ares_load_system(ctx, "sfc", nil, nil))
+        XCTAssertTrue(ares_load_system(ctx, "sfc", nil))
         let rom = BootTests.makeMinimalLoRom()
         let ok = rom.withUnsafeBytes {
             ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil, nil, nil) == 1

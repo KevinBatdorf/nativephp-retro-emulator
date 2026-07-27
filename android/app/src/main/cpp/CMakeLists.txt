@@ -251,79 +251,6 @@ target_compile_definitions(md_core PUBLIC
 )
 
 # ---------------------------------------------------------------------------
-# n64_core — Nintendo 64 system (unity build via n64.cpp)
-#   sm5k    — CIC microcontroller
-#   cpu/rsp recompilers are #included by the unity; the RDP renders through the
-#   vendored paraLLEl-RDP Vulkan sources (compiled as their own TUs, loaded via
-#   volk at runtime). The Transfer Pak plays GB carts, so gb_core is linked in.
-# ---------------------------------------------------------------------------
-set(THREADS_PREFER_PTHREAD_FLAG ON)
-find_package(Threads REQUIRED)
-set(N64V "${ARES_ROOT}/ares/n64/vulkan/parallel-rdp")
-add_library(n64_core STATIC
-    "${ARES_ROOT}/ares/n64/n64.cpp"
-    "${PROC}/sm5k/sm5k.cpp"
-    "${ARES_ROOT}/nall/nall/gdb/server.cpp"   # N64 CPU references the nall GDB debug server
-    "${ARES_ROOT}/ares/n64/vulkan/vulkan.cpp"
-    "${N64V}/parallel-rdp/command_ring.cpp"
-    "${N64V}/parallel-rdp/rdp_device.cpp"
-    "${N64V}/parallel-rdp/rdp_dump_write.cpp"
-    "${N64V}/parallel-rdp/rdp_renderer.cpp"
-    "${N64V}/parallel-rdp/video_interface.cpp"
-    "${N64V}/vulkan/buffer.cpp"
-    "${N64V}/vulkan/buffer_pool.cpp"
-    "${N64V}/vulkan/command_buffer.cpp"
-    "${N64V}/vulkan/command_pool.cpp"
-    "${N64V}/vulkan/context.cpp"
-    "${N64V}/vulkan/cookie.cpp"
-    "${N64V}/vulkan/descriptor_set.cpp"
-    "${N64V}/vulkan/device.cpp"
-    "${N64V}/vulkan/event_manager.cpp"
-    "${N64V}/vulkan/fence.cpp"
-    "${N64V}/vulkan/fence_manager.cpp"
-    "${N64V}/vulkan/image.cpp"
-    "${N64V}/vulkan/indirect_layout.cpp"
-    "${N64V}/vulkan/memory_allocator.cpp"
-    "${N64V}/vulkan/pipeline_event.cpp"
-    "${N64V}/vulkan/query_pool.cpp"
-    "${N64V}/vulkan/render_pass.cpp"
-    "${N64V}/vulkan/sampler.cpp"
-    "${N64V}/vulkan/semaphore.cpp"
-    "${N64V}/vulkan/semaphore_manager.cpp"
-    "${N64V}/vulkan/shader.cpp"
-    "${N64V}/vulkan/texture/texture_format.cpp"
-    "${N64V}/util/arena_allocator.cpp"
-    "${N64V}/util/logging.cpp"
-    "${N64V}/util/thread_id.cpp"
-    "${N64V}/util/aligned_alloc.cpp"
-    "${N64V}/util/timer.cpp"
-    "${N64V}/util/timeline_trace_file.cpp"
-    "${N64V}/util/thread_name.cpp"
-    "${N64V}/util/environment.cpp"
-    "${N64V}/volk/volk.c"
-)
-target_include_directories(n64_core PUBLIC
-    "${CMAKE_CURRENT_SOURCE_DIR}/stubs"
-    "${ARES_ROOT}/ares"
-    "${N64V}/parallel-rdp"
-    "${N64V}/volk"
-    "${N64V}/vulkan"
-    "${N64V}/vulkan-headers/include"
-    "${N64V}/util"
-)
-target_link_libraries(n64_core PUBLIC ares_iface gb_core Threads::Threads)
-target_link_libraries(n64_core PRIVATE dl log)
-target_compile_definitions(n64_core PUBLIC
-    PROFILE_PERFORMANCE
-    BUILD_RELEASE
-    CORE_N64
-    VULKAN
-)
-target_compile_options(n64_core PRIVATE
-    "$<$<COMPILE_LANGUAGE:CXX>:-Wno-newline-eof>"
-)
-
-# ---------------------------------------------------------------------------
 # librashader — prebuilt Vulkan slang-shader runtime (Rust cdylib).
 #
 # NOT compiled here: it ships as a prebuilt .so (see
@@ -423,7 +350,6 @@ retro_core_module(fc)
 retro_core_module(gb)
 retro_core_module(md)
 retro_core_module(gba)
-retro_core_module(n64)
 
 # ---------------------------------------------------------------------------
 # retro_emulator — JNI frontend + Vulkan renderer. Links no core: nativeInit

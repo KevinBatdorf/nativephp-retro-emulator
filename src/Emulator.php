@@ -389,7 +389,7 @@ class Emulator
     }
 
     /**
-     * Merge system-specific options (e.g. ['expansionPak' => true] for N64).
+     * Merge system-specific options (e.g. ['deepBlackBoost' => true] for SNES).
      *
      * @param  array<string, mixed>  $options
      */
@@ -477,8 +477,8 @@ class Emulator
 
     /**
      * Gate rumble forwarding: while enabled, motor state published by the
-     * emulated hardware (SFC Rumble Gamepad, GB MBC5 rumble carts, N64
-     * Rumble Pak) drives the device vibrator/haptics. The bridge response
+     * emulated hardware (SFC Rumble Gamepad, GB MBC5 rumble carts) drives
+     * the device vibrator/haptics. The bridge response
      * reports hasVibrator so apps can hide their rumble toggle on devices
      * without a motor.
      */

@@ -98,7 +98,6 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     // Pending commands posted from the main thread and consumed on the GL thread.
     @Volatile var pendingSystemId: String?    = null
     @Volatile var pendingBiosPath: String?    = null
-    @Volatile var pendingSystemOptions: String = ""
     @Volatile var pendingRomBytes: ByteArray? = null
     @Volatile var pendingSavePrefix: String?  = null
 
@@ -341,7 +340,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
                 // Consume on success too: a stale request left behind would
                 // silently re-stage on the frame after a stop.
                 pendingSystemId = null
-                systemStaged = core.loadSystem(systemId, pendingBiosPath, pendingSystemOptions)
+                systemStaged = core.loadSystem(systemId, pendingBiosPath)
                 if (!systemStaged) Log.e(TAG, "loadSystem($systemId) failed")
             }
 
@@ -609,10 +608,9 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
      * legal and leaves the running game untouched until the next ROM load.
      * @param systemId ares system ID — one of [AresCore.supportedSystems].
      */
-    fun queueSystemLoad(systemId: String, biosPath: String? = null, systemOptions: String = "") {
+    fun queueSystemLoad(systemId: String, biosPath: String? = null) {
         stagedSystemId = systemId
         pendingBiosPath = biosPath
-        pendingSystemOptions = systemOptions
         pendingSystemId = systemId
         requestRender()
     }
@@ -875,7 +873,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
         core.pressButton(port, name, down)
 
     /** Accumulate a relative axis delta on a port (see [AresCore.setAxis]). Thread-safe. */
-    fun setAxis(port: Int, name: String, value: Int, hold: Boolean = false): String = core.setAxis(port, name, value, hold)
+    fun setAxis(port: Int, name: String, value: Int): String = core.setAxis(port, name, value)
 
     /** Aim a light-gun at a normalized position (see [AresCore.aimAt]). Thread-safe. */
     fun aimAt(port: Int, x: Float, y: Float): String = core.aimAt(port, x, y)

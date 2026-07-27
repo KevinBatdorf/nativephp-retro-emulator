@@ -11,7 +11,6 @@ namespace MiaAnalyzers {
   auto analyzeGameBoy(std::vector<u8>& rom) -> string;
   auto analyzeMegaDrive(std::vector<u8>& rom) -> string;
   auto analyzeGameBoyAdvance(std::vector<u8>& rom) -> string;
-  auto analyzeNintendo64(std::vector<u8>& rom) -> string;
 }
 
 namespace MultiPak {
@@ -166,32 +165,6 @@ static auto assembleGameBoyAdvance(Markup::Node document, string& manifest,
     return pak;
 }
 
-// --- Nintendo 64 — mirrors mia/medium/nintendo-64.cpp load() ----------------
-// N64 drives runtime behavior off pak ATTRIBUTES (cic seed, per-port paks,
-// region), not just files — so replicate load()'s setAttribute calls.
-static auto assembleNintendo64(Markup::Node document, string& manifest,
-                               std::vector<u8>& rom) -> std::shared_ptr<vfs::directory> {
-    auto pak = std::make_shared<vfs::directory>();
-    pak->setAttribute("id",     document["game/id"].string());
-    pak->setAttribute("title",  document["game/title"].string());
-    pak->setAttribute("region", document["game/region"].string());
-    for(int i = 0; i < 4; i++) {
-        pak->setAttribute(string{"port", i + 1, "/cpak"}, (bool)document[{"game/controllers/port", i + 1, "/cpak"}]);
-        pak->setAttribute(string{"port", i + 1, "/rpak"}, (bool)document[{"game/controllers/port", i + 1, "/rpak"}]);
-        pak->setAttribute(string{"port", i + 1, "/tpak"}, (bool)document[{"game/controllers/port", i + 1, "/tpak"}]);
-    }
-    pak->setAttribute("cic", document["game/board/cic"].string());
-    pak->setAttribute("dd",  (bool)document["game/dd"]);
-    pak->append("manifest.bml", manifest);
-    pak->append("program.rom",  rom);
-
-    if(auto node = document["game/board/memory(type=RAM,content=Save)"])    appendMemory(pak, node);
-    if(auto node = document["game/board/memory(type=EEPROM,content=Save)"]) appendMemory(pak, node);
-    if(auto node = document["game/board/memory(type=Flash,content=Save)"])  appendMemory(pak, node);
-    if(auto node = document["game/board/memory(type=RTC,content=Save)"])    appendMemory(pak, node);
-    return pak;
-}
-
 auto makeSystemPak(const std::string& systemId,
                    const std::vector<u8>& bios) -> std::shared_ptr<vfs::directory> {
     auto pak = std::make_shared<vfs::directory>();
@@ -210,12 +183,6 @@ auto makeSystemPak(const std::string& systemId,
         if(!bios.empty()) pak->append("bios.rom", bios);
         else pak->append("bios.rom", std::span<const u8>(
             EmbeddedFirmware::GbaBios, EmbeddedFirmware::GbaBiosSize));
-    } else if(systemId == "n64") {
-        // PIF boot ROM per region; ares picks one by the game's region at load.
-        pak->append("pif.ntsc.rom", std::span<const u8>(
-            EmbeddedFirmware::N64PifNtsc, EmbeddedFirmware::N64PifNtscSize));
-        pak->append("pif.pal.rom", std::span<const u8>(
-            EmbeddedFirmware::N64PifPal, EmbeddedFirmware::N64PifPalSize));
     }
     // fc: no system files required.
     return pak;
@@ -236,7 +203,6 @@ auto makeCartridgePak(const std::string& systemId,
     else if(systemId == "gbc") manifest = MiaAnalyzers::analyzeGameBoy(data);
     else if(systemId == "md")  manifest = MiaAnalyzers::analyzeMegaDrive(data);
     else if(systemId == "gba") manifest = MiaAnalyzers::analyzeGameBoyAdvance(data);
-    else if(systemId == "n64") manifest = MiaAnalyzers::analyzeNintendo64(data);
     else {
         result.error = "unknown system: " + systemId;
         return result;
@@ -253,7 +219,6 @@ auto makeCartridgePak(const std::string& systemId,
     else if(systemId == "gbc") result.pak = assembleGameBoy(document, manifest, data);
     else if(systemId == "md")  result.pak = assembleMegaDrive(document, manifest, data);
     else if(systemId == "gba") result.pak = assembleGameBoyAdvance(document, manifest, data);
-    else if(systemId == "n64") result.pak = assembleNintendo64(document, manifest, data);
 
     result.title  = std::string(document["game/title"].string().data());
     result.region = std::string(document["game/region"].string().data());

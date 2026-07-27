@@ -263,14 +263,6 @@ enum EmulatorFunctions {
     /// config keys: biosPath (String?), autoSave, speed, runAhead, rewind,
     /// rewindBufferSeconds, dynamicRateControl.
     class LoadSystem: BridgeFunction {
-        // Pre-load option keys (applied before boot, not runtime toggles) —
-        // the n64 set desktop passes before Nintendo64::load.
-        static let systemOptionKeys = [
-            "quality", "supersampling", "disableVideoInterfaceProcessing",
-            "weaveDeinterlacing", "homebrewMode", "recompiler",
-            "expansionPak", "controllerPakBanks",
-        ]
-
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
 
@@ -310,21 +302,8 @@ enum EmulatorFunctions {
             let toggles = coreToggles(from: config)
             if !toggles.isEmpty { renderer.setCoreOptions(toggles) }
 
-            // Pre-load options (n64: quality, recompiler, …) travel as
-            // "key=value" lines and apply natively right before boot; absent
-            // keys fall back to desktop's defaults in the core. Booleans must
-            // read "true"/"false" — nall's boolean() is equals("true"), and a
-            // JSON Bool stringifies as 1/0 via NSNumber.
-            let systemOptions = Self.systemOptionKeys
-                .compactMap { key -> String? in
-                    guard let raw = config[key] else { return nil }
-                    if let b = raw as? Bool { return "\(key)=\(b ? "true" : "false")" }
-                    return "\(key)=\(raw)"
-                }
-                .joined(separator: "\n")
             guard renderer.loadSystem(system,
-                                      biosPath: config["biosPath"] as? String,
-                                      systemOptions: systemOptions) else {
+                                      biosPath: config["biosPath"] as? String) else {
                 return BridgeResponse.error(code: "LOAD_FAILED", message: "ares_load_system failed for '\(system)'")
             }
 
@@ -841,9 +820,8 @@ enum EmulatorFunctions {
                 return BridgeResponse.error(code: "INVALID_PARAMETERS", message: "axis is required")
             }
             let value = int(parameters["value"]) ?? 0
-            let hold = parameters["hold"] as? Bool ?? false
             return statusResponse(
-                renderer.setAxis(port: port, name: axis, value: value, hold: hold),
+                renderer.setAxis(port: port, name: axis, value: value),
                 success: ["status": "ok", "axis": axis, "value": value])
         }
     }
@@ -866,8 +844,8 @@ enum EmulatorFunctions {
     }
 
     /// Gate rumble forwarding: while enabled, motor state published by the
-    /// emulated hardware (SFC Rumble Gamepad, GB MBC5 rumble carts, N64
-    /// Rumble Pak) drives CoreHaptics. The response reports whether this
+    /// emulated hardware (SFC Rumble Gamepad, GB MBC5 rumble carts) drives
+    /// CoreHaptics. The response reports whether this
     /// device supports haptics at all.
     class SetRumble: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
@@ -1046,7 +1024,6 @@ enum EmulatorFunctions {
                 system("gbc", "Game Boy Color",            stable: true),
                 system("gba", "Game Boy Advance",          stable: true),
                 system("md",  "Sega Mega Drive / Genesis", stable: true),
-                system("n64", "Nintendo 64",               stable: true),
             ]
             return BridgeResponse.success(data: ["systems": systems])
         }

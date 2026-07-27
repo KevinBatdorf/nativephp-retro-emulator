@@ -48,56 +48,6 @@ cmake_build() {
     BUILT_LIB="$build_dir/libretro_emulator_ios.a"
 }
 
-# make_moltenvk_obj SLICE_ID OUT_OBJ — partial-link the vendored MoltenVK
-# static lib for a slice into ONE relocatable object whose only exported
-# symbol is the ICD entrypoint vk_icdGetInstanceProcAddr. Localizing the
-# standard vk* functions is what makes static MoltenVK coexist with volk,
-# which defines identically-named global function-pointer VARIABLES (volk.c)
-# that would otherwise collide at app link. ios/moltenvk_loader.cpp seeds
-# Granite's loader from the ICD entrypoint at runtime.
-make_moltenvk_obj() {
-    local slice="$1" out="$2"
-    local src="$IOS_SRC/vendor/moltenvk/$slice/libMoltenVK.a"
-    if [[ ! -f "$src" ]]; then
-        echo "error: $src not found — vendored MoltenVK static lib missing" >&2
-        exit 1
-    fi
-
-    local sdk platform sdk_ver
-    if [[ "$slice" == *simulator* ]]; then
-        sdk="$SIM_SDK"; platform="ios-simulator"
-        sdk_ver="$(xcrun --sdk iphonesimulator --show-sdk-version)"
-    else
-        sdk="$DEVICE_SDK"; platform="ios"
-        sdk_ver="$(xcrun --sdk iphoneos --show-sdk-version)"
-    fi
-
-    local workdir exports
-    workdir="$(dirname "$out")"
-    mkdir -p "$workdir"
-    exports="$workdir/mvk_exports.txt"
-    printf '_vk_icdGetInstanceProcAddr\n' > "$exports"
-
-    # The vendored archive may be fat (simulator: arm64 + x86_64); ld -r is
-    # single-arch, so localize per arch and lipo the results back together.
-    local -a objs=()
-    local arch
-    for arch in $(lipo -archs "$src"); do
-        ld -r -arch "$arch" \
-           -platform_version "$platform" "$DEPLOYMENT_TARGET" "$sdk_ver" \
-           -syslibroot "$sdk" \
-           -all_load "$src" \
-           -exported_symbols_list "$exports" \
-           -o "$workdir/mvk-$arch.o"
-        objs+=("$workdir/mvk-$arch.o")
-    done
-    if [[ ${#objs[@]} -eq 1 ]]; then
-        cp "${objs[0]}" "$out"
-    else
-        lipo -create "${objs[@]}" -output "$out"
-    fi
-}
-
 # make_xcframework OUTPUT -library <.a> -headers <dir> [-library ... -headers ...]
 # Assembles an xcframework of STATIC FRAMEWORKS — CocoaPods' vendored_frameworks
 # needs RetroEmulator.framework per slice (a bare .a + Headers doesn't link);
@@ -156,12 +106,7 @@ make_xcframework() {
             exit 1
         fi
 
-        # MoltenVK rides inside the framework binary the same way librashader
-        # does — consumers get N64's Vulkan implementation with zero wiring.
-        local mvk_obj="$BUILD_ROOT/moltenvk/$slice_id/moltenvk.o"
-        make_moltenvk_obj "$slice_id" "$mvk_obj"
-
-        libtool -static -o "$fw_dir/RetroEmulator" "$lib_path" "$lrs_a" "$mvk_obj"
+        libtool -static -o "$fw_dir/RetroEmulator" "$lib_path" "$lrs_a"
 
         cp -r "$hdr_path/." "$fw_dir/Headers/"
         # The framework module map supersedes the plain one shipped in headers/.

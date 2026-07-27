@@ -115,18 +115,10 @@ struct AresContext {
         std::string name;
     };
     std::vector<CachedAxis> axisCache;
-    std::mutex axisMutex;   // guards axisAccum/axisHold + lightgun cursor
+    std::mutex axisMutex;   // guards axisAccum + lightgun cursor
     std::unordered_map<std::string, int32_t> axisAccum[kMaxPorts];
     // Held absolute deflection (analog stick): applied on EVERY poll until
     // changed, unlike axisAccum's consume-once relative deltas (mouse/gun).
-    std::unordered_map<std::string, int32_t> axisHold[kMaxPorts];
-
-    // Hold latch — the axis twin of unsampledPress/deferredRelease: a tap on
-    // an overlay d-pad mapped to the stick sets full deflection then 0 within
-    // ms, and zeroing before the first poll would lose the nudge entirely.
-    // Guarded by axisMutex like the maps above.
-    std::unordered_set<std::string> axisHoldUnsampled[kMaxPorts];
-    std::unordered_map<std::string, int32_t> axisHoldPending[kMaxPorts];
 
     // Light-gun shadow cursor per port, mirroring ares' internal cursor (starts
     // center-screen, same clamp as super-scope.cpp:52-56) so aimAt() can feed the
@@ -169,10 +161,6 @@ struct AresContext {
     // system; handed to makeSystemPak on every boot. Empty = none given.
     std::vector<uint8_t> biosBytes;
 
-    // Pre-load system options staged by loadSystem (config key → wire value),
-    // consumed via SystemDef::applyOptions right before every boot.
-    std::map<std::string, std::string> systemOptions;
-
     // Cheats — every ctx access is serialized by the Swift-side emuLock, so
     // the emulation loop never reads these while a bridge call mutates them.
     // `cheats` keeps per-code pairs so ares_remove_cheat(code) works;
@@ -204,7 +192,7 @@ struct AresContext {
     std::atomic<bool> fastForwardActive {false};
 
     // Rumble — cores publish motor state via Platform::input() on rumble
-    // nodes (SFC Rumble Gamepad, GB MBC5 carts, N64 Rumble Pak). Packed
+    // nodes (SFC Rumble Gamepad, GB MBC5 carts). Packed
     // strong<<16|weak; the host polls per frame and drives its haptics.
     std::atomic<bool> rumbleEnabled {false};
     std::atomic<uint32_t> rumbleState {0};
@@ -353,23 +341,9 @@ struct IosPlatform : ares::Platform {
             for (auto& cached : g_ctx->axisCache) {
                 if (cached.node == axis) {
                     std::lock_guard<std::mutex> lock(g_ctx->axisMutex);
-                    int i = cached.port - 1;
-                    auto& acc = g_ctx->axisAccum[i][cached.name];
-                    auto& hold = g_ctx->axisHold[i];
-                    auto held = hold.find(cached.name);
-                    axis->setValue((held != hold.end() ? held->second : 0) + acc);
+                    auto& acc = g_ctx->axisAccum[cached.port - 1][cached.name];
+                    axis->setValue(acc);
                     acc = 0;   // consume: a relative delta applies once per poll
-                    // Hold latch: deflection sampled once — apply a zero that
-                    // raced in before the first sample (see ares_set_axis).
-                    auto un = g_ctx->axisHoldUnsampled[i].find(cached.name);
-                    if (un != g_ctx->axisHoldUnsampled[i].end()) {
-                        g_ctx->axisHoldUnsampled[i].erase(un);
-                        auto p = g_ctx->axisHoldPending[i].find(cached.name);
-                        if (p != g_ctx->axisHoldPending[i].end()) {
-                            hold[cached.name] = p->second;
-                            g_ctx->axisHoldPending[i].erase(p);
-                        }
-                    }
                     return;
                 }
             }
@@ -433,7 +407,7 @@ static bool resolveDevice(const SystemRegistry::SystemDef& def,
                           const std::string& name, DeviceDescriptor& out) {
     if (def.device && name == def.device) {          // the system's default pad
         out.buttons = def.buttons;
-        out.axes = def.axes;   // N64's default pad IS the stick controller
+        out.axes.clear();      // no shipped default pad has analog axes
         return true;
     }
     auto sit = deviceTable().find(def.id);
@@ -680,53 +654,13 @@ const char* ares_supported_systems(void) {
 // fresh system per game load with the region already known from the ROM
 // analysis (desktop-ui/emulator/emulator.cpp:40-60, super-famicom.cpp:125-126).
 
-// N64 renders through the vendored paraLLEl-RDP Vulkan renderer, which on iOS
-// runs on MoltenVK (Vulkan-over-Metal) statically linked into this framework.
-// Unlike Android/Adreno, MoltenVK compiles parallel-RDP's specialized
-// per-combiner pipelines fine (device-verified), so no ubershader force —
-// the library default (specialized, with ubershader fallback while they
-// compile asynchronously) is the fast path.
-//   ios_n64_init_vulkan_loader() (moltenvk_loader.cpp) seeds Granite's Vulkan
-//     loader from the linked-in MoltenVK — ares' own init_loader(nullptr)
-//     then early-returns success, so nothing is dlopen()'d and consuming apps
-//     have nothing to embed or configure.
-extern "C" bool ios_n64_init_vulkan_loader();
-
-static void setupN64Vulkan() {
-#if TARGET_OS_SIMULATOR
-    // The simulator's Metal driver (MTLSimDriver) backs MTLBuffers with XPC
-    // shared memory and ABORTS (xpc_api_misuse) on the RDRAM host-pointer
-    // import — it never gets to return an error. Skip the import there;
-    // parallel-RDP falls back to its internal-copy RDRAM path (rdp_device.cpp
-    // "falling back to a slower path"). Real devices keep the fast import.
-    setenv("PARALLEL_RDP_ALLOW_EXTERNAL_HOST", "0", 1);
-#endif
-    static bool loaderReady = ios_n64_init_vulkan_loader();
-    if (!loaderReady) fprintf(stderr, "setupN64Vulkan: MoltenVK loader init failed\n");
-}
-
-bool ares_load_system(AresContext* ctx, const char* system_id, const char* bios_path,
-                      const char* options) {
+bool ares_load_system(AresContext* ctx, const char* system_id, const char* bios_path) {
     if (!ctx || !system_id) return false;
 
     auto* def = SystemRegistry::find(system_id);
     if (!def) {
         fprintf(stderr, "ares_load_system: unsupported system '%s'\n", system_id);
         return false;
-    }
-
-    if (std::strcmp(system_id, "n64") == 0) setupN64Vulkan();
-
-    // Stage pre-load system options ("key=value" per line) for applyOptions.
-    ctx->systemOptions.clear();
-    if (options && options[0]) {
-        std::istringstream lines(options);
-        std::string line;
-        while (std::getline(lines, line)) {
-            auto eq = line.find('=');
-            if (eq == std::string::npos || eq == 0) continue;
-            ctx->systemOptions[line.substr(0, eq)] = line.substr(eq + 1);
-        }
     }
 
     // An optional dev-supplied BIOS travels with the staging (gba may override
@@ -781,12 +715,6 @@ static void unloadCore(AresContext* ctx)
         ctx->unsampledPress[i].store(0, std::memory_order_relaxed);
         ctx->deferredRelease[i].store(0, std::memory_order_relaxed);
     }
-    {
-        std::lock_guard<std::mutex> lock(ctx->axisMutex);
-        for (auto& m : ctx->axisHold) m.clear();
-        for (auto& s : ctx->axisHoldUnsampled) s.clear();
-        for (auto& m : ctx->axisHoldPending) m.clear();
-    }
     ctx->audioStreams.clear();
     {
         std::lock_guard<std::mutex> lock(ctx->audioMutex);
@@ -823,9 +751,6 @@ static int bootWithPak(AresContext* ctx, SystemRegistry::CartridgePak built,
     if (ctx->systemLoaded) unloadCore(ctx);
 
     ctx->systemPak = def->makeSystemPak(*def, ctx->biosBytes);
-    // Pre-load options (currently n64) must land before load(), like desktop's
-    // option() calls before Nintendo64::load (nintendo-64.cpp:107-118).
-    if (def->applyOptions) def->applyOptions(ctx->systemOptions);
     if (!def->load(ctx->root, *def, loadName)) {
         fprintf(stderr, "ares_load_rom: ares load failed: %s\n", loadName.c_str());
         unloadCore(ctx);
@@ -1252,7 +1177,7 @@ const char* ares_press_button(AresContext* ctx, int port,
     return statusRet("");
 }
 
-const char* ares_set_axis(AresContext* ctx, int port, const char* name, int value, bool hold) {
+const char* ares_set_axis(AresContext* ctx, int port, const char* name, int value) {
     if (!ctx || !ctx->system) return statusRet("SYSTEM_NOT_LOADED");
     if (port < 1 || port > AresContext::kMaxPorts) return statusRet("INVALID_PARAMETERS");
 
@@ -1263,24 +1188,7 @@ const char* ares_set_axis(AresContext* ctx, int port, const char* name, int valu
         return statusRet("INVALID_PARAMETERS");
 
     std::lock_guard<std::mutex> lock(ctx->axisMutex);
-    if (hold) {
-        // Absolute stick deflection, applied every poll until changed;
-        // 0 releases. The on-screen-stick path (relative deltas can't hold).
-        int i = port - 1;
-        if (value != 0) {
-            ctx->axisHold[i][axisName] = value;
-            ctx->axisHoldUnsampled[i].insert(axisName);
-            ctx->axisHoldPending[i].erase(axisName);   // re-deflect cancels a queued zero
-        } else if (ctx->axisHoldUnsampled[i].count(axisName)) {
-            // Deflection not yet sampled — defer the zero one poll so a quick
-            // tap-nudge isn't lost (the button press latch's axis twin).
-            ctx->axisHoldPending[i][axisName] = 0;
-        } else {
-            ctx->axisHold[i][axisName] = 0;
-        }
-    } else {
-        ctx->axisAccum[port - 1][axisName] += value;
-    }
+    ctx->axisAccum[port - 1][axisName] += value;
     return statusRet("");
 }
 

@@ -17,9 +17,7 @@ satisfies their attribution terms for binary redistribution.
 | Component | Role | License | Notice file |
 |---|---|---|---|
 | [ares](https://ares-emu.net) | emulator core | ISC | `ares/LICENSE` |
-| parallel-RDP | N64 GPU renderer | MIT | `ares/ares/n64/vulkan/parallel-rdp/LICENSE` |
 | librashader | shader runtime | MPL-2.0 | `ares/LICENSE` (librashader section) |
-| MoltenVK | Vulkan → Metal (iOS) | Apache-2.0 | `ios/vendor/MoltenVK-LICENSE.txt` |
 | sljit · libchdr · ymfm · xxHash | ares dependencies | BSD | `ares/LICENSE` |
 | zlib · LZMA SDK · qoi | ares dependencies | zlib · public-domain · MIT | `ares/LICENSE` |
 | [Cult-of-GBA BIOS](https://github.com/Cult-of-GBA/BIOS) | embedded GBA BIOS | MIT | `native/firmware/LICENSE-cult-of-gba` |

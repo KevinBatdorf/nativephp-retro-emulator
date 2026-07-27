@@ -5,7 +5,6 @@ use KevinBatdorf\RetroEmulator\Buttons\FcButton;
 use KevinBatdorf\RetroEmulator\Buttons\GbaButton;
 use KevinBatdorf\RetroEmulator\Buttons\GbButton;
 use KevinBatdorf\RetroEmulator\Buttons\MdButton;
-use KevinBatdorf\RetroEmulator\Buttons\N64Button;
 use KevinBatdorf\RetroEmulator\Buttons\SfcButton;
 use KevinBatdorf\RetroEmulator\Components\Emulator as EmulatorComponent;
 use KevinBatdorf\RetroEmulator\Config\Config;
@@ -612,7 +611,6 @@ describe('Typed layer', function () {
         ['gbc', GbButton::class],
         ['md', MdButton::class],
         ['gba', GbaButton::class],
-        ['n64', N64Button::class],
     ]);
 
     it('system enum matches the ids GetSystems reports', function () {
@@ -670,34 +668,6 @@ describe('Typed layer', function () {
             'colorEmulation' => true,
             'interframeBlending' => true,
         ]);
-    });
-
-    it('N64Config carries the pre-load options as wire values', function () {
-        $config = new \KevinBatdorf\RetroEmulator\Config\N64Config(
-            quality: \KevinBatdorf\RetroEmulator\N64Quality::Hd,
-            supersampling: true,
-            disableVideoInterfaceProcessing: true,
-            weaveDeinterlacing: false,
-            homebrewMode: true,
-            recompiler: false,
-            expansionPak: false,
-            controllerPakBanks: \KevinBatdorf\RetroEmulator\ControllerPakBanks::Datel1Meg,
-        );
-
-        expect($config->toArray())->toBe([
-            'quality' => 'HD',
-            'supersampling' => true,
-            'disableVideoInterfaceProcessing' => true,
-            'weaveDeinterlacing' => false,
-            'homebrewMode' => true,
-            'recompiler' => false,
-            'expansionPak' => false,
-            'controllerPakBanks' => '128KiB (Datel 1Meg)',
-        ]);
-    });
-
-    it('N64Config omits unset options so native defaults stay authoritative', function () {
-        expect((new \KevinBatdorf\RetroEmulator\Config\N64Config)->toArray())->toBe([]);
     });
 
     it('the global Config serializes shared knobs as wire values', function () {
