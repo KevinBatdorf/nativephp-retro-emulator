@@ -52,6 +52,16 @@ enum EmulatorFunctions {
             : "[RetroEmulator] Surface unregister skipped — '\(name)' owned by a newer instance")
     }
 
+    /// The renderer driving `name`, for sibling elements that feed input straight
+    /// into the core. Nil until the emulator surface mounts, so an overlay laid
+    /// out beside it simply drops presses until there is a core to receive them.
+    static func renderer(named name: String) -> EmulatorRenderer? {
+        registryLock.lock()
+        defer { registryLock.unlock() }
+
+        return surfaces[name]
+    }
+
     /// Apply a `<native:emulator>` element's declarative setup — the same
     /// staging → boot path Emulator::loadSystem() / loadRom() drive imperatively,
     /// routed through the real bridge functions so behavior is identical by

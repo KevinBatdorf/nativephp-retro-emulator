@@ -86,6 +86,14 @@ object EmulatorFunctions {
     }
 
     /**
+     * The renderer driving [name], for sibling elements that feed input straight
+     * into the core. Null until the emulator surface mounts, so an overlay laid
+     * out beside it simply drops presses until there is a core to receive them.
+     */
+    @JvmStatic
+    fun rendererFor(name: String): EmulatorRenderer? = surfaces[name]?.renderer
+
+    /**
      * Apply a `<native:emulator>` element's declarative setup — the same
      * staging → boot path Emulator::loadSystem() / loadRom() drive imperatively,
      * routed through the real bridge appliers so behavior is identical by

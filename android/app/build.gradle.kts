@@ -76,9 +76,11 @@ dependencies {
     androidTestImplementation("androidx.test:core:1.6.1")
 }
 
-// EmulatorFunctions.kt depends on host-app NativePHP types and only compiles
-// inside a host build — exclude it from the plugin's own test app.
+// These depend on host-app NativePHP types (and Compose) and only compile
+// inside a host build — exclude them from the plugin's own test app.
+// DpadResolver.kt stays in, so its behaviour is testable on device.
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
     exclude("**/EmulatorFunctions.kt")
     exclude("**/EmulatorSurface.kt")
+    exclude("**/DpadSurface.kt")
 }

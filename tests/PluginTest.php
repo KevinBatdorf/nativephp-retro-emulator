@@ -143,6 +143,27 @@ describe('Plugin Manifest', function () {
         expect($emulator['android_renderer'])->toBe('com.kevinbatdorf.plugins.retroemulator.EmulatorSurface');
         expect($emulator['ios_renderer'])->toBe('EmulatorSurfaceView');
     });
+
+    it('declares the dpad component', function () {
+        $components = $this->manifest['components'] ?? [];
+
+        expect(array_column($components, 'type'))->toContain('dpad');
+
+        $dpad = current(array_filter($components, fn ($c) => $c['type'] === 'dpad'));
+        expect($dpad['element'])->toBe('KevinBatdorf\\RetroEmulator\\Elements\\Dpad');
+        expect($dpad['blade'])->toBe('KevinBatdorf\\RetroEmulator\\Components\\Dpad');
+        expect($dpad['android_renderer'])->toBe('com.kevinbatdorf.plugins.retroemulator.DpadSurface');
+        expect($dpad['ios_renderer'])->toBe('DpadSurfaceView');
+    });
+
+    it('ships a renderer for every declared component on both platforms', function () {
+        foreach ($this->manifest['components'] ?? [] as $component) {
+            $android = str($component['android_renderer'])->afterLast('.')->toString();
+
+            expect(file_exists(__DIR__."/../resources/android/{$android}.kt"))->toBeTrue();
+            expect(file_exists(__DIR__."/../resources/ios/{$component['ios_renderer']}.swift"))->toBeTrue();
+        }
+    });
 });
 
 describe('Service provider', function () {

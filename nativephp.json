@@ -31,6 +31,13 @@
             "blade": "KevinBatdorf\\RetroEmulator\\Components\\Emulator",
             "android_renderer": "com.kevinbatdorf.plugins.retroemulator.EmulatorSurface",
             "ios_renderer": "EmulatorSurfaceView"
+        },
+        {
+            "type": "dpad",
+            "element": "KevinBatdorf\\RetroEmulator\\Elements\\Dpad",
+            "blade": "KevinBatdorf\\RetroEmulator\\Components\\Dpad",
+            "android_renderer": "com.kevinbatdorf.plugins.retroemulator.DpadSurface",
+            "ios_renderer": "DpadSurfaceView"
         }
     ],
     "bridge_functions": [
