@@ -220,6 +220,9 @@ class AresCore {
      */
     fun getInputState(port: Int): Int = nativeGetInputState(port)
 
+    /** Comma-joined names of the buttons held on [port], hardware or software. */
+    fun getPressedButtons(port: Int): String = nativeGetPressedButtons(port)
+
     /**
      * Merge a per-port controller remap. Each `emulated[i]` core button (named
      * as [getPortsJson] reports) is set to read the positional slot named by
@@ -427,6 +430,8 @@ class AresCore {
 
     private external fun nativeSetInputState(port: Int, buttons: Int)
     private external fun nativeGetInputState(port: Int): Int
+
+    private external fun nativeGetPressedButtons(port: Int): String
     private external fun nativeSetInputMapping(
         port: Int, emulated: Array<String>, source: Array<String>,
     ): String

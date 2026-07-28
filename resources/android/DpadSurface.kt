@@ -5,10 +5,12 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -35,6 +37,8 @@ import com.nativephp.mobile.ui.nativerender.NativeUINode
  */
 object DpadSurface {
 
+    private val DIRECTIONS_BY_BUTTON = DpadDirection.values().associateBy { it.button }
+
     @Composable
     fun Render(node: NativeUINode, modifier: Modifier) {
         val surface = node.props.getString("surface", "main")
@@ -46,6 +50,7 @@ object DpadSurface {
         val activeColor = Color(node.props.getColor("active_color", 0xE6FFFFFF.toInt()))
 
         var held by remember { mutableStateOf(emptySet<DpadDirection>()) }
+        var fromCore by remember { mutableStateOf(emptySet<DpadDirection>()) }
 
         // A press outlives the composition it started in (navigation, rotation),
         // and the core would hold that button forever.
@@ -53,6 +58,22 @@ object DpadSurface {
             onDispose {
                 apply(surface, port, emptySet(), held)
                 held = emptySet()
+            }
+        }
+
+        // Mirror what the core is actually holding so a hardware pad lights the
+        // on-screen one too. Two atomic loads per frame, and it skips the
+        // recomposition unless the set changed.
+        LaunchedEffect(surface, port) {
+            while (true) {
+                withFrameNanos { }
+                val renderer = EmulatorFunctions.rendererFor(surface)
+                val next = renderer?.pressedButtons(port)
+                    ?.split(',')
+                    ?.mapNotNull { name -> DIRECTIONS_BY_BUTTON[name] }
+                    ?.toSet()
+                    ?: emptySet()
+                if (next != fromCore) fromCore = next
             }
         }
 
@@ -89,7 +110,7 @@ object DpadSurface {
                 }
             },
         ) {
-            drawPad(held, baseColor, activeColor)
+            drawPad(held + fromCore, baseColor, activeColor)
         }
     }
 
@@ -159,7 +180,32 @@ object DpadSurface {
                 DpadDirection.Right ->
                     Offset(centerX + arm / 2f, centerY - arm / 2f) to Size(armLength, arm)
             }
-            drawRoundRect(activeColor, topLeft = offset, size = armSize, cornerRadius = radius)
+            drawPath(armPath(direction, offset, armSize, radius), activeColor)
         }
+    }
+
+    /**
+     * An arm's highlight, rounded on its outer tip and square where it meets the
+     * hub. Rounding all four corners detaches the lit arm from the cross.
+     */
+    private fun armPath(
+        direction: DpadDirection,
+        offset: Offset,
+        size: Size,
+        radius: CornerRadius,
+    ): Path {
+        val zero = CornerRadius.Zero
+        val rect = RoundRect(
+            left = offset.x,
+            top = offset.y,
+            right = offset.x + size.width,
+            bottom = offset.y + size.height,
+            topLeftCornerRadius = if (direction == DpadDirection.Down || direction == DpadDirection.Right) zero else radius,
+            topRightCornerRadius = if (direction == DpadDirection.Down || direction == DpadDirection.Left) zero else radius,
+            bottomRightCornerRadius = if (direction == DpadDirection.Up || direction == DpadDirection.Left) zero else radius,
+            bottomLeftCornerRadius = if (direction == DpadDirection.Up || direction == DpadDirection.Right) zero else radius,
+        )
+
+        return Path().apply { addRoundRect(rect) }
     }
 }

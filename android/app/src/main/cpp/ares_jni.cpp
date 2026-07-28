@@ -1266,6 +1266,37 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetInputState(
 
 // Defined below with the other input helpers; used by the remap validation.
 static bool connectedDescriptor(int port, DeviceDescriptor& out);
+static std::vector<std::string> orderedButtons(const DeviceDescriptor& desc);
+
+/**
+ * Names of the buttons currently held on a port, comma-joined, from either a
+ * hardware pad or a software press. Resolved against the port's device because
+ * a bitmask alone means nothing to a caller that does not know the system's
+ * button map. Empty when nothing is held.
+ */
+JNIEXPORT jstring JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetPressedButtons(
+    JNIEnv* env, jobject, jint port)
+{
+    if (!g_state || !g_state->system || port < 1 || port > EmulatorState::kMaxPorts)
+        return env->NewStringUTF("");
+
+    DeviceDescriptor desc;
+    if (!connectedDescriptor(port, desc)) return env->NewStringUTF("");
+
+    int i = port - 1;
+    uint32_t mask = g_state->hwMask[i].load(std::memory_order_relaxed)
+                  | g_state->swMask[i].load(std::memory_order_relaxed);
+
+    std::string out;
+    for (auto& name : orderedButtons(desc)) {
+        uint32_t bit;
+        if (!bitForButtonName(desc, name, bit) || !(mask & bit)) continue;
+        if (!out.empty()) out += ",";
+        out += name;
+    }
+    return env->NewStringUTF(out.c_str());
+}
 
 /**
  * Merge a per-port controller remap. `emulated[i]` is a core button (as named

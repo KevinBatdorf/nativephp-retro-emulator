@@ -84,7 +84,7 @@ private struct DpadPad: View {
         let isVertical = direction == .up || direction == .down
         let offset = (arm + armLength) / 2
 
-        RoundedRectangle(cornerRadius: radius)
+        ArmShape(direction: direction, radius: radius)
             .fill(activeColor)
             .frame(
                 width: isVertical ? arm : armLength,
@@ -118,6 +118,58 @@ private struct DpadPad: View {
         }
         for direction in held.subtracting(next) {
             _ = renderer.pressButton(port: port, name: direction.rawValue, down: false)
+        }
+    }
+}
+
+/// An arm's highlight, rounded on its outer tip and square where it meets the
+/// hub. Rounding all four corners detaches the lit arm from the cross.
+/// Hand-rolled because UnevenRoundedRectangle needs iOS 16.
+private struct ArmShape: Shape {
+    let direction: DpadDirection
+    let radius: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let r = min(radius, min(rect.width, rect.height) / 2)
+        let (tl, tr, br, bl) = cornerRadii(r)
+        var path = Path()
+
+        path.move(to: CGPoint(x: rect.minX + tl, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX - tr, y: rect.minY))
+        if tr > 0 {
+            path.addQuadCurve(
+                to: CGPoint(x: rect.maxX, y: rect.minY + tr),
+                control: CGPoint(x: rect.maxX, y: rect.minY))
+        }
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - br))
+        if br > 0 {
+            path.addQuadCurve(
+                to: CGPoint(x: rect.maxX - br, y: rect.maxY),
+                control: CGPoint(x: rect.maxX, y: rect.maxY))
+        }
+        path.addLine(to: CGPoint(x: rect.minX + bl, y: rect.maxY))
+        if bl > 0 {
+            path.addQuadCurve(
+                to: CGPoint(x: rect.minX, y: rect.maxY - bl),
+                control: CGPoint(x: rect.minX, y: rect.maxY))
+        }
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + tl))
+        if tl > 0 {
+            path.addQuadCurve(
+                to: CGPoint(x: rect.minX + tl, y: rect.minY),
+                control: CGPoint(x: rect.minX, y: rect.minY))
+        }
+        path.closeSubpath()
+
+        return path
+    }
+
+    private func cornerRadii(_ r: CGFloat) -> (CGFloat, CGFloat, CGFloat, CGFloat) {
+        switch direction {
+        case .up: return (r, r, 0, 0)
+        case .down: return (0, 0, r, r)
+        case .left: return (r, 0, 0, r)
+        case .right: return (0, r, r, 0)
         }
     }
 }

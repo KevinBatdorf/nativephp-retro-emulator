@@ -868,6 +868,9 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     /** Logical ports a physical port's device occupies (see [AresCore.devicePorts]). */
     fun devicePorts(port: Int): IntArray = core.devicePorts(stagedSystemId, port)
 
+    /** Buttons held on a port, from any source (see [AresCore.getPressedButtons]). */
+    fun pressedButtons(port: Int): String = core.getPressedButtons(port)
+
     /** Set/clear a software button on a port (see [AresCore.pressButton]). Thread-safe. */
     fun pressButton(port: Int, name: String, down: Boolean): String =
         core.pressButton(port, name, down)
