@@ -1130,6 +1130,21 @@ object EmulatorFunctions {
         }
     }
 
+    /** Buttons held on a port, by name — see Controller::pressed(). */
+    class GetPressedButtons(private val activity: FragmentActivity) : BridgeFunction {
+        override fun execute(parameters: Map<String, Any>): Map<String, Any> {
+            val (entry, err) = entry(parameters)
+            if (err != null) return err
+            val port = (parameters["port"] as? Number)?.toInt() ?: 1
+
+            val pressed = entry!!.renderer.pressedButtons(port)
+                .split(',')
+                .filter { it.isNotEmpty() }
+
+            return BridgeResponse.success(mapOf("port" to port, "buttons" to pressed))
+        }
+    }
+
     /**
      * Return controller ports and available button names for the loaded system.
      * Parsed from the JSON built during [AresCore.loadSystem].

@@ -1439,6 +1439,28 @@ static std::string buildPortsJson(AresContext* ctx) {
     return json + "]";
 }
 
+/** Buttons held on a port, comma-joined. Mirrors the Android JNI function. */
+const char* ares_get_pressed_buttons(AresContext* ctx, int port) {
+    static thread_local std::string out;
+    out.clear();
+    if (!ctx || !ctx->system || port < 1 || port > AresContext::kMaxPorts) return out.c_str();
+
+    DeviceDescriptor desc;
+    if (!connectedDescriptor(port, desc)) return out.c_str();
+
+    int i = port - 1;
+    uint32_t mask = ctx->hwMask[i].load(std::memory_order_relaxed)
+                  | ctx->swMask[i].load(std::memory_order_relaxed);
+
+    for (auto& name : orderedButtons(desc)) {
+        uint32_t bit;
+        if (!bitForButtonName(desc, name, bit) || !(mask & bit)) continue;
+        if (!out.empty()) out += ",";
+        out += name;
+    }
+    return out.c_str();
+}
+
 const char* ares_get_ports_json(AresContext* ctx) {
     // Registry data + registrations — available from staging on, no booted
     // core required. Thread-local storage, same contract as the other strings.

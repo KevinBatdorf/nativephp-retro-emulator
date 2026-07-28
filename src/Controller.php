@@ -35,6 +35,26 @@ class Controller
         return $this;
     }
 
+    /**
+     * Buttons currently held on this port, by name — from a hardware controller
+     * or a software press alike. Use it to light on-screen controls from what the
+     * core actually holds; a touch handler alone never sees the hardware pad.
+     *
+     * @return list<string>
+     */
+    public function pressed(): array
+    {
+        $result = $this->call('Emulator.GetPressedButtons', [
+            'surface' => $this->surface,
+            'port' => $this->port,
+        ]);
+
+        return array_values(array_filter(
+            $result['buttons'] ?? [],
+            fn ($button) => is_string($button) && $button !== '',
+        ));
+    }
+
     /** Release a single button; other held buttons stay held. */
     public function release(\BackedEnum|string $button): static
     {

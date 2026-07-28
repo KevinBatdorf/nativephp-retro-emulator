@@ -255,6 +255,8 @@ void ares_clear_cheats(AresContext* ctx);
 
 const char* ares_get_region(AresContext* ctx);     // "NTSC", "PAL", or ""
 const char* ares_get_ports_json(AresContext* ctx); // JSON array of port objects
+// Comma-joined names of the buttons held on a port (hardware or software).
+const char* ares_get_pressed_buttons(AresContext* ctx, int port);
 
 #ifdef __cplusplus
 }

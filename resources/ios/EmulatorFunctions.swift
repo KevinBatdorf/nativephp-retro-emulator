@@ -1010,6 +1010,19 @@ enum EmulatorFunctions {
     }
 
     /// Return controller ports and available button names for the loaded system.
+    /// Buttons held on a port, by name — see Controller::pressed().
+    class GetPressedButtons: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
+            let port = (parameters["port"] as? Int) ?? 1
+            let pressed = renderer.pressedButtons(port: port)
+                .split(separator: ",")
+                .map(String.init)
+
+            return BridgeResponse.success(data: ["port": port, "buttons": pressed])
+        }
+    }
+
     class GetPorts: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }

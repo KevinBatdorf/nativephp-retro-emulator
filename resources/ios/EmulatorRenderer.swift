@@ -467,6 +467,13 @@ final class EmulatorRenderer: UIView {
 
     /// Set or clear one software button on a logical port, resolved against the
     /// connected device. Returns "" or a category-A error code.
+    /// Buttons held on a port, from any source. See `ares_get_pressed_buttons`.
+    func pressedButtons(port: Int) -> String {
+        emuLock.lock()
+        defer { emuLock.unlock() }
+        return String(cString: ares_get_pressed_buttons(ctx, Int32(port)))
+    }
+
     func pressButton(port: Int, name: String, down: Bool) -> String {
         emuLock.lock()
         defer { emuLock.unlock() }

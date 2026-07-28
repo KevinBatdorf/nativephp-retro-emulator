@@ -93,6 +93,7 @@ describe('Plugin Manifest', function () {
             'Emulator.GetPorts',
             'Emulator.GetSystems',
             'Emulator.GetInputDevices',
+            'Emulator.GetPressedButtons',
         ];
 
         foreach ($expected as $name) {
@@ -792,6 +793,26 @@ describe('Typed layer', function () {
         $call = collect($GLOBALS['__nativephp_calls'])->firstWhere('function', 'Emulator.PressButton');
         expect($call['payload']['port'])->toBe(1);
         expect($call['payload']['button'])->toBe('A');
+    });
+
+    it('the handle reports the buttons held on its port', function () {
+        $GLOBALS['__nativephp_mock']['Emulator.GetPressedButtons'] = json_encode([
+            'port' => 1, 'buttons' => ['Up', 'A'],
+        ]);
+
+        $pressed = Emulator::surface()->getDevice(1)->pressed();
+
+        expect($pressed)->toBe(['Up', 'A']);
+        $call = collect($GLOBALS['__nativephp_calls'])->firstWhere('function', 'Emulator.GetPressedButtons');
+        expect($call['payload']['port'])->toBe(1);
+    });
+
+    it('the handle reports an empty list when nothing is held', function () {
+        $GLOBALS['__nativephp_mock']['Emulator.GetPressedButtons'] = json_encode([
+            'port' => 1, 'buttons' => [],
+        ]);
+
+        expect(Emulator::surface()->getDevice(1)->pressed())->toBe([]);
     });
 
     it('the handle sets an atomic button snapshot', function () {

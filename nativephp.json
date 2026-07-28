@@ -282,6 +282,12 @@
             "description": "Return all supported systems as rich objects"
         },
         {
+            "name": "Emulator.GetPressedButtons",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.GetPressedButtons",
+            "ios": "EmulatorFunctions.GetPressedButtons",
+            "description": "Return buttons currently held on a port, by name"
+        },
+        {
             "name": "Emulator.GetInputDevices",
             "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.GetInputDevices",
             "ios": "EmulatorFunctions.GetInputDevices",
