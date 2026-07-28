@@ -15,8 +15,8 @@ class Dpad extends Component
     public function __construct(
         public string $surface = 'main',
         public int $port = 1,
-        public ?float $deadZone = null,
-        public ?float $diagonalStrength = null,
+        public ?float $threshold = null,
+        public ?float $diagonalRatio = null,
         public ?string $color = null,
         public ?string $activeColor = null,
     ) {}
@@ -29,11 +29,11 @@ class Dpad extends Component
                 'port' => $this->port,
             ];
 
-            if ($this->deadZone !== null) {
-                $attrs['deadZone'] = $this->deadZone;
+            if ($this->threshold !== null) {
+                $attrs['threshold'] = $this->threshold;
             }
-            if ($this->diagonalStrength !== null) {
-                $attrs['diagonalStrength'] = $this->diagonalStrength;
+            if ($this->diagonalRatio !== null) {
+                $attrs['diagonalRatio'] = $this->diagonalRatio;
             }
             if ($this->color !== null) {
                 $attrs['color'] = $this->color;

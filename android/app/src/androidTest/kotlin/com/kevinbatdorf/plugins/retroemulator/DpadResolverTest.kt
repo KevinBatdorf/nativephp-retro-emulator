@@ -8,10 +8,10 @@ import org.junit.runner.RunWith
 /**
  * Position→direction resolution for the on-screen d-pad.
  *
- * The properties that decide whether the pad feels right: diagonals are
- * reachable at all, a direction survives the finger sliding off the pad, and
- * the centre is quiet. Coordinates are normalized offsets from the pad centre
- * with +y downward.
+ * The properties that decide whether the pad feels right: a second direction
+ * engages without waiting for the finger to rotate, a direction survives the
+ * finger sliding off the pad, and the centre is quiet. Coordinates are
+ * normalized offsets from the pad centre with +y downward.
  */
 @RunWith(AndroidJUnit4::class)
 class DpadResolverTest {
@@ -24,13 +24,13 @@ class DpadResolverTest {
     }
 
     @Test
-    fun insideTheDeadZoneIsNeutral() {
-        assertEquals(emptySet<DpadDirection>(), resolve(0.05f, 0.05f))
+    fun insideTheCentreSquareIsNeutral() {
+        assertEquals(emptySet<DpadDirection>(), resolve(0.3f, 0.3f))
     }
 
     @Test
-    fun justOutsideTheDeadZoneRegisters() {
-        assertEquals(setOf(DpadDirection.Right), resolve(0.2f, 0f))
+    fun justPastTheThresholdRegisters() {
+        assertEquals(setOf(DpadDirection.Right), resolve(0.34f, 0f))
     }
 
     @Test
@@ -50,10 +50,23 @@ class DpadResolverTest {
         assertEquals(setOf(DpadDirection.Down, DpadDirection.Left), resolve(-1f, 1f))
     }
 
-    /** Four independent buttons can't express this; it's the whole point. */
+    /**
+     * Holding Down and sliding right: Right must engage on crossing the vertical
+     * threshold, not after the finger has rotated far enough to leave Down's
+     * angular zone. An angle-based resolver held at the pad's rim needs nx ≈ 0.47
+     * here and so feels slow to catch the turn.
+     */
     @Test
-    fun aDiagonalIsReachableFromAnImperfectCorner() {
-        assertEquals(setOf(DpadDirection.Up, DpadDirection.Right), resolve(0.8f, -0.6f))
+    fun slidingRightWhileHoldingDownEngagesRightOnCrossingTheThreshold() {
+        assertEquals(setOf(DpadDirection.Down), resolve(0.3f, 1f))
+        assertEquals(setOf(DpadDirection.Down, DpadDirection.Right), resolve(0.34f, 1f))
+    }
+
+    /** The turn costs the same travel wherever on the arm the thumb sits. */
+    @Test
+    fun theEngagePointDoesNotDriftWithDistanceFromCentre() {
+        assertEquals(setOf(DpadDirection.Down, DpadDirection.Right), resolve(0.34f, 0.5f))
+        assertEquals(setOf(DpadDirection.Down, DpadDirection.Right), resolve(0.34f, 2f))
     }
 
     /** Sliding off the pad mid-jump must not drop the direction. */
@@ -65,22 +78,42 @@ class DpadResolverTest {
 
     @Test
     fun aShakyThumbAimingUpStaysCardinal() {
-        assertEquals(setOf(DpadDirection.Up), resolve(0.15f, -1f))
+        assertEquals(setOf(DpadDirection.Up), resolve(0.2f, -1f))
     }
 
     @Test
-    fun diagonalStrengthOneGivesEveryAnchorAnEqualSlice() {
-        // ~27° above the +x axis sits inside the diagonal's slice only while
-        // diagonals aren't penalised.
-        val equal = DpadResolver.resolve(0.9f, -0.45f, diagonalStrength = 1f)
-        assertEquals(setOf(DpadDirection.Up, DpadDirection.Right), equal)
-
-        val penalised = DpadResolver.resolve(0.9f, -0.45f, diagonalStrength = 2f)
-        assertEquals(setOf(DpadDirection.Right), penalised)
+    fun aRaisedThresholdDemandsMoreTravel() {
+        assertEquals(emptySet<DpadDirection>(), DpadResolver.resolve(0.4f, 0f, threshold = 0.5f))
+        assertEquals(setOf(DpadDirection.Right), DpadResolver.resolve(0.6f, 0f, threshold = 0.5f))
     }
 
     @Test
-    fun aLargerDeadZoneSwallowsASmallOffset() {
-        assertEquals(emptySet<DpadDirection>(), DpadResolver.resolve(0.2f, 0f, deadZone = 0.5f))
+    fun aDiagonalRatioDropsTheWeakerAxis() {
+        // Down dominates: with a 0.8 ratio Right has to get much closer to it.
+        assertEquals(
+            setOf(DpadDirection.Down),
+            DpadResolver.resolve(0.4f, 1f, diagonalRatio = 0.8f),
+        )
+        assertEquals(
+            setOf(DpadDirection.Down, DpadDirection.Right),
+            DpadResolver.resolve(0.9f, 1f, diagonalRatio = 0.8f),
+        )
+    }
+
+    @Test
+    fun aDiagonalRatioOfZeroLeavesBothAxesAlone() {
+        assertEquals(
+            setOf(DpadDirection.Down, DpadDirection.Right),
+            DpadResolver.resolve(0.4f, 1f, diagonalRatio = 0f),
+        )
+    }
+
+    /** A ratio only ever suppresses; it cannot invent a direction. */
+    @Test
+    fun aDiagonalRatioNeverEngagesAnAxisUnderTheThreshold() {
+        assertEquals(
+            setOf(DpadDirection.Down),
+            DpadResolver.resolve(0.2f, 1f, diagonalRatio = 0.9f),
+        )
     }
 }

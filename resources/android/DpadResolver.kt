@@ -1,9 +1,6 @@
 package com.kevinbatdorf.plugins.retroemulator
 
-import kotlin.math.PI
 import kotlin.math.abs
-import kotlin.math.atan2
-import kotlin.math.hypot
 
 /** One of the four d-pad directions, named as the cores' button nodes are. */
 enum class DpadDirection(val button: String) {
@@ -16,10 +13,13 @@ enum class DpadDirection(val button: String) {
 /**
  * Turns a finger position into the 1–2 directions a physical d-pad would report.
  *
- * A d-pad is one input area doing continuous position→direction resolution, not
- * four independent buttons: four buttons can never report a diagonal, and every
- * shipped overlay (RetroArch's OVERLAY_TYPE_DPAD_AREA, Dolphin's single d-pad
- * drawable, Lemuroid's CrossDial) resolves one position instead.
+ * One input area, not four buttons, which could never report a diagonal.
+ *
+ * Axes are tested independently, as Dolphin's overlay does (InputOverlay.kt:
+ * `bounds.top + height / 3 > y` and its three siblings). Choosing one zone by
+ * angle instead — RetroArch's `abs_y > slope_high * abs_x`, Lemuroid's anchor
+ * distances — makes a second direction cost rotation, so a thumb already deep
+ * on an arm must travel further to catch a turn.
  *
  * Positions are normalized offsets from the pad centre, +y pointing down the
  * screen, and are deliberately *not* clamped: a finger that slides past the
@@ -27,58 +27,44 @@ enum class DpadDirection(val button: String) {
  */
 object DpadResolver {
 
-    /** Below this distance from centre the pad reads neutral. */
-    const val DEFAULT_DEAD_ZONE = 0.1f
+    /**
+     * How far off centre an axis must travel before its direction engages, as a
+     * fraction of the pad's half-extent. Doubles as the dead zone — a finger in
+     * the centre square crosses nothing and reads neutral. Dolphin's outer
+     * thirds put this at 1/3.
+     */
+    const val DEFAULT_THRESHOLD = 0.33f
 
     /**
-     * How much harder a diagonal is to hit than a cardinal. 1.0 gives all eight
-     * anchors an equal 45° slice; above 1.0 narrows the diagonals, so aiming
-     * straight up doesn't creep into Up+Right on a shaky thumb.
+     * How hard the weaker axis must compete before a diagonal forms: it is
+     * dropped while its offset is under this fraction of the stronger axis. 0
+     * gives free diagonals the instant both axes cross (Dolphin); raising it
+     * keeps cardinals clean when a thumb drifts, the job RetroArch's
+     * diagonal-sensitivity slopes do. 1 would demand a perfect 45°.
      */
-    const val DEFAULT_DIAGONAL_STRENGTH = 1.25f
-
-    /** Anchors counter-clockwise from Right, alternating cardinal / diagonal. */
-    private val ANCHORS: List<Set<DpadDirection>> = listOf(
-        setOf(DpadDirection.Right),
-        setOf(DpadDirection.Up, DpadDirection.Right),
-        setOf(DpadDirection.Up),
-        setOf(DpadDirection.Up, DpadDirection.Left),
-        setOf(DpadDirection.Left),
-        setOf(DpadDirection.Down, DpadDirection.Left),
-        setOf(DpadDirection.Down),
-        setOf(DpadDirection.Down, DpadDirection.Right),
-    )
+    const val DEFAULT_DIAGONAL_RATIO = 0f
 
     fun resolve(
         nx: Float,
         ny: Float,
-        deadZone: Float = DEFAULT_DEAD_ZONE,
-        diagonalStrength: Float = DEFAULT_DIAGONAL_STRENGTH,
+        threshold: Float = DEFAULT_THRESHOLD,
+        diagonalRatio: Float = DEFAULT_DIAGONAL_RATIO,
     ): Set<DpadDirection> {
-        if (hypot(nx, ny) < deadZone) return emptySet()
+        val ax = abs(nx)
+        val ay = abs(ny)
 
-        // Screen y grows downward; flip it so a positive angle means up.
-        val angle = atan2(-ny.toDouble(), nx.toDouble())
-        val step = PI / 4
+        var horizontal = ax > threshold
+        var vertical = ay > threshold
 
-        var best = 0
-        var bestScore = Double.MAX_VALUE
-        for (i in ANCHORS.indices) {
-            val spread = abs(angleDelta(angle, i * step))
-            val score = if (i % 2 == 1) spread * diagonalStrength else spread
-            if (score < bestScore) {
-                bestScore = score
-                best = i
-            }
+        if (horizontal && vertical && diagonalRatio > 0f) {
+            if (ay < diagonalRatio * ax) vertical = false
+            else if (ax < diagonalRatio * ay) horizontal = false
         }
-        return ANCHORS[best]
-    }
 
-    /** Shortest signed distance between two angles, in (-PI, PI]. */
-    private fun angleDelta(a: Double, b: Double): Double {
-        var d = (a - b) % (2 * PI)
-        if (d > PI) d -= 2 * PI
-        if (d < -PI) d += 2 * PI
-        return d
+        val directions = mutableSetOf<DpadDirection>()
+        if (vertical) directions.add(if (ny < 0f) DpadDirection.Up else DpadDirection.Down)
+        if (horizontal) directions.add(if (nx < 0f) DpadDirection.Left else DpadDirection.Right)
+
+        return directions
     }
 }

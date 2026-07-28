@@ -10,71 +10,59 @@ enum DpadDirection: String, CaseIterable {
 
 /// Turns a finger position into the 1–2 directions a physical d-pad would report.
 ///
-/// A d-pad is one input area doing continuous position→direction resolution, not
-/// four independent buttons: four buttons can never report a diagonal, and every
-/// shipped overlay (RetroArch's OVERLAY_TYPE_DPAD_AREA, Dolphin's single d-pad
-/// drawable, Lemuroid's CrossDial) resolves one position instead.
+/// One input area, not four buttons, which could never report a diagonal.
+///
+/// Axes are tested independently, as Dolphin's overlay does (InputOverlay.kt:
+/// `bounds.top + height / 3 > y` and its three siblings). Choosing one zone by
+/// angle instead — RetroArch's `abs_y > slope_high * abs_x`, Lemuroid's anchor
+/// distances — makes a second direction cost rotation, so a thumb already deep
+/// on an arm must travel further to catch a turn.
 ///
 /// Positions are normalized offsets from the pad centre, +y pointing down the
 /// screen, and are deliberately *not* clamped: a finger that slides past the
 /// pad's edge keeps holding its direction rather than dropping input mid-jump.
 ///
-/// Kept in lockstep with Android's `DpadResolver.kt` — the same anchors, the same
-/// weighting — so the pad feels identical on both platforms.
+/// Kept in lockstep with Android's `DpadResolver.kt` so the pad feels identical
+/// on both platforms.
 enum DpadResolver {
 
-    /// Below this distance from centre the pad reads neutral.
-    static let defaultDeadZone: Float = 0.1
+    /// How far off centre an axis must travel before its direction engages, as a
+    /// fraction of the pad's half-extent. Doubles as the dead zone — a finger in
+    /// the centre square crosses nothing and reads neutral. Dolphin's outer
+    /// thirds put this at 1/3.
+    static let defaultThreshold: Float = 0.33
 
-    /// How much harder a diagonal is to hit than a cardinal. 1.0 gives all eight
-    /// anchors an equal 45° slice; above 1.0 narrows the diagonals, so aiming
-    /// straight up doesn't creep into Up+Right on a shaky thumb.
-    static let defaultDiagonalStrength: Float = 1.25
-
-    /// Anchors counter-clockwise from Right, alternating cardinal / diagonal.
-    private static let anchors: [Set<DpadDirection>] = [
-        [.right],
-        [.up, .right],
-        [.up],
-        [.up, .left],
-        [.left],
-        [.down, .left],
-        [.down],
-        [.down, .right],
-    ]
+    /// How hard the weaker axis must compete before a diagonal forms: it is
+    /// dropped while its offset is under this fraction of the stronger axis. 0
+    /// gives free diagonals the instant both axes cross (Dolphin); raising it
+    /// keeps cardinals clean when a thumb drifts, the job RetroArch's
+    /// diagonal-sensitivity slopes do. 1 would demand a perfect 45°.
+    static let defaultDiagonalRatio: Float = 0
 
     static func resolve(
         nx: Float,
         ny: Float,
-        deadZone: Float = defaultDeadZone,
-        diagonalStrength: Float = defaultDiagonalStrength
+        threshold: Float = defaultThreshold,
+        diagonalRatio: Float = defaultDiagonalRatio
     ) -> Set<DpadDirection> {
-        if hypot(nx, ny) < deadZone { return [] }
+        let ax = abs(nx)
+        let ay = abs(ny)
 
-        // Screen y grows downward; flip it so a positive angle means up.
-        let angle = atan2(Double(-ny), Double(nx))
-        let step = Double.pi / 4
+        var horizontal = ax > threshold
+        var vertical = ay > threshold
 
-        var best = 0
-        var bestScore = Double.greatestFiniteMagnitude
-        for i in anchors.indices {
-            let spread = abs(angleDelta(angle, Double(i) * step))
-            let score = i % 2 == 1 ? spread * Double(diagonalStrength) : spread
-            if score < bestScore {
-                bestScore = score
-                best = i
+        if horizontal, vertical, diagonalRatio > 0 {
+            if ay < diagonalRatio * ax {
+                vertical = false
+            } else if ax < diagonalRatio * ay {
+                horizontal = false
             }
         }
 
-        return anchors[best]
-    }
+        var directions: Set<DpadDirection> = []
+        if vertical { directions.insert(ny < 0 ? .up : .down) }
+        if horizontal { directions.insert(nx < 0 ? .left : .right) }
 
-    /// Shortest signed distance between two angles, in (-pi, pi].
-    private static func angleDelta(_ a: Double, _ b: Double) -> Double {
-        var d = (a - b).truncatingRemainder(dividingBy: 2 * .pi)
-        if d > .pi { d -= 2 * .pi }
-        if d < -.pi { d += 2 * .pi }
-
-        return d
+        return directions
     }
 }

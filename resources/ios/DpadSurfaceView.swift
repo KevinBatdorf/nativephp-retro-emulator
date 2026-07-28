@@ -15,9 +15,9 @@ struct DpadSurfaceView: View {
         DpadPad(
             surface: node.props.getString("surface", default: "main"),
             port: node.props.getInt("port", default: 1),
-            deadZone: node.props.getFloat("dead_zone", default: DpadResolver.defaultDeadZone),
-            diagonalStrength: node.props.getFloat(
-                "diagonal_strength", default: DpadResolver.defaultDiagonalStrength),
+            threshold: node.props.getFloat("threshold", default: DpadResolver.defaultThreshold),
+            diagonalRatio: node.props.getFloat(
+                "diagonal_ratio", default: DpadResolver.defaultDiagonalRatio),
             baseColor: Color(argb: node.props.getColor("color", default: 0x66FF_FFFF)),
             activeColor: Color(argb: node.props.getColor("active_color", default: 0xE6FF_FFFF))
         )
@@ -27,8 +27,8 @@ struct DpadSurfaceView: View {
 private struct DpadPad: View {
     let surface: String
     let port: Int
-    let deadZone: Float
-    let diagonalStrength: Float
+    let threshold: Float
+    let diagonalRatio: Float
     let baseColor: Color
     let activeColor: Color
 
@@ -65,8 +65,8 @@ private struct DpadPad: View {
                         push(DpadResolver.resolve(
                             nx: normalize(Float(value.location.x), Float(geo.size.width)),
                             ny: normalize(Float(value.location.y), Float(geo.size.height)),
-                            deadZone: deadZone,
-                            diagonalStrength: diagonalStrength
+                            threshold: threshold,
+                            diagonalRatio: diagonalRatio
                         ))
                     }
                     .onEnded { _ in push([]) }

@@ -39,9 +39,9 @@ object DpadSurface {
     fun Render(node: NativeUINode, modifier: Modifier) {
         val surface = node.props.getString("surface", "main")
         val port = node.props.getInt("port", 1)
-        val deadZone = node.props.getFloat("dead_zone", DpadResolver.DEFAULT_DEAD_ZONE)
-        val diagonalStrength =
-            node.props.getFloat("diagonal_strength", DpadResolver.DEFAULT_DIAGONAL_STRENGTH)
+        val threshold = node.props.getFloat("threshold", DpadResolver.DEFAULT_THRESHOLD)
+        val diagonalRatio =
+            node.props.getFloat("diagonal_ratio", DpadResolver.DEFAULT_DIAGONAL_RATIO)
         val baseColor = Color(node.props.getColor("color", 0x66FFFFFF))
         val activeColor = Color(node.props.getColor("active_color", 0xE6FFFFFF.toInt()))
 
@@ -57,15 +57,15 @@ object DpadSurface {
         }
 
         Canvas(
-            modifier = modifier.pointerInput(surface, port, deadZone, diagonalStrength) {
+            modifier = modifier.pointerInput(surface, port, threshold, diagonalRatio) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
 
                     fun resolveAt(x: Float, y: Float) = DpadResolver.resolve(
                         nx = normalize(x, size.width),
                         ny = normalize(y, size.height),
-                        deadZone = deadZone,
-                        diagonalStrength = diagonalStrength,
+                        threshold = threshold,
+                        diagonalRatio = diagonalRatio,
                     )
 
                     fun push(next: Set<DpadDirection>) {

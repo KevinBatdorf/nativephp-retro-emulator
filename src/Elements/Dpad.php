@@ -24,9 +24,9 @@ class Dpad extends Element
         'port' => 1,
     ];
 
-    private ?float $deadZone = null;
+    private ?float $threshold = null;
 
-    private ?float $diagonalStrength = null;
+    private ?float $diagonalRatio = null;
 
     private ?string $color = null;
 
@@ -56,21 +56,26 @@ class Dpad extends Element
         return $this;
     }
 
-    /** Fraction of the pad's half-width that reads as neutral. */
-    public function deadZone(float $deadZone): static
+    /**
+     * How far off centre an axis travels before its direction engages, as a
+     * fraction of the pad's half-extent. Also the dead zone: a finger inside the
+     * centre square reads neutral. Lower engages sooner.
+     */
+    public function threshold(float $threshold): static
     {
-        $this->deadZone = $deadZone;
+        $this->threshold = $threshold;
 
         return $this;
     }
 
     /**
-     * How much harder a diagonal is to hit than a cardinal. 1.0 gives all eight
-     * directions an equal slice; the default biases slightly toward cardinals.
+     * How hard the weaker axis must compete before a diagonal forms, as a
+     * fraction of the stronger axis. 0 gives free diagonals; raising it keeps
+     * cardinals clean when a thumb drifts.
      */
-    public function diagonalStrength(float $strength): static
+    public function diagonalRatio(float $ratio): static
     {
-        $this->diagonalStrength = $strength;
+        $this->diagonalRatio = $ratio;
 
         return $this;
     }
@@ -98,13 +103,12 @@ class Dpad extends Element
         if (isset($attrs['port'])) {
             $this->dpadProps['port'] = (int) $attrs['port'];
         }
-        $deadZone = $attrs['deadZone'] ?? $attrs['dead-zone'] ?? null;
-        if ($deadZone !== null) {
-            $this->deadZone = (float) $deadZone;
+        if (isset($attrs['threshold'])) {
+            $this->threshold = (float) $attrs['threshold'];
         }
-        $strength = $attrs['diagonalStrength'] ?? $attrs['diagonal-strength'] ?? null;
-        if ($strength !== null) {
-            $this->diagonalStrength = (float) $strength;
+        $ratio = $attrs['diagonalRatio'] ?? $attrs['diagonal-ratio'] ?? null;
+        if ($ratio !== null) {
+            $this->diagonalRatio = (float) $ratio;
         }
         if (isset($attrs['color'])) {
             $this->color = (string) $attrs['color'];
@@ -121,11 +125,11 @@ class Dpad extends Element
 
         // Omitted props stay absent so each renderer applies its own default,
         // keeping the two platforms' feel defined in one place per platform.
-        if ($this->deadZone !== null) {
-            $props['dead_zone'] = $this->deadZone;
+        if ($this->threshold !== null) {
+            $props['threshold'] = $this->threshold;
         }
-        if ($this->diagonalStrength !== null) {
-            $props['diagonal_strength'] = $this->diagonalStrength;
+        if ($this->diagonalRatio !== null) {
+            $props['diagonal_ratio'] = $this->diagonalRatio;
         }
         if ($this->color !== null) {
             $props['color'] = $this->color;
