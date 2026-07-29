@@ -16,6 +16,10 @@ Don't forget to register the plugin:
 php artisan native:plugin:register kevinbatdorf/retro-emulator
 ```
 
+> **Pre-release note:** the plugin tracks NativePHP Mobile v4 (EDGE), currently
+> the `dev-element` branch — until v4 tags, `composer require` needs that
+> branch resolvable (a VCS `repositories` entry, or a path repo to a checkout).
+
 ## Quick start — the declarative element
 
 The element carries its own setup: native stages, boots, and applies the
@@ -252,15 +256,15 @@ errors throw `EmulatorException` synchronously instead).
 
 ```php
 use KevinBatdorf\RetroEmulator\Events\{EmulatorStarted, EmulatorError};
-use Native\Mobile\Attributes\OnNative;
+use Native\Mobile\Attributes\On;
 
-#[OnNative(EmulatorStarted::class)]
+#[On(EmulatorStarted::class)]
 public function onStarted(string $surface = '', string $system = '', string $romPath = ''): void
 {
     // First frame rendered — safe to read ports(), status(), region().
 }
 
-#[OnNative(EmulatorError::class)]
+#[On(EmulatorError::class)]
 public function onError(string $surface = '', string $code = '', string $message = ''): void
 {
     // Operational failure (see EmulatorErrorCode) — the emulator is still in

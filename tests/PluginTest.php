@@ -275,6 +275,18 @@ describe('Events', function () {
         expect($event->code)->toBe(EmulatorErrorCode::LoadFailed);
         expect($event->message)->toBe('boot failed; emulator stopped');
     });
+
+    it('every event exposes the standard dispatch helper, like the SDK events', function () {
+        $events = [
+            EmulatorStarted::class, EmulatorStopped::class, EmulatorPaused::class,
+            EmulatorResumed::class, MemoryRead::class, MemoryChanged::class,
+            EmulatorError::class,
+        ];
+
+        foreach ($events as $event) {
+            expect(method_exists($event, 'dispatch'))->toBeTrue($event);
+        }
+    });
 });
 
 describe('Error handling', function () {

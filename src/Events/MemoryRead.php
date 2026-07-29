@@ -2,11 +2,12 @@
 
 namespace KevinBatdorf\RetroEmulator\Events;
 
+use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
 class MemoryRead
 {
-    use SerializesModels;
+    use Dispatchable, SerializesModels;
 
     /**
      * @param  int[]  $bytes

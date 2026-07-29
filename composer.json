@@ -19,7 +19,8 @@
     },
     "require-dev": {
         "pestphp/pest": "^3.0",
-        "laravel/pint": "^1.29"
+        "laravel/pint": "^1.29",
+        "laravel/framework": "^13.23"
     },
     "autoload": {
         "psr-4": {

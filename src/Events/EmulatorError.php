@@ -2,12 +2,13 @@
 
 namespace KevinBatdorf\RetroEmulator\Events;
 
+use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 use KevinBatdorf\RetroEmulator\EmulatorErrorCode;
 
 class EmulatorError
 {
-    use SerializesModels;
+    use Dispatchable, SerializesModels;
 
     public readonly EmulatorErrorCode $code;
 
