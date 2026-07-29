@@ -189,9 +189,16 @@ final class EmulatorRenderer: UIView {
     }
 
     /// Master volume (0–1) and stereo balance (−1 … +1). Safe from any thread.
-    func setAudioOptions(volume: Float, balance: Float) {
-        ares_set_audio(ctx, volume, balance)
+    /// Merge audio options — nil keeps the current value, matching setVideoOptions
+    /// and Android. Passing one knob must not reset the other.
+    func setAudioOptions(volume: Float? = nil, balance: Float? = nil) {
+        if let volume { audioVolume = volume }
+        if let balance { audioBalance = balance }
+        ares_set_audio(ctx, audioVolume, audioBalance)
     }
+
+    private var audioVolume: Float = 1
+    private var audioBalance: Float = 0
 
     /// Merge global display options — nil keeps the current value, and the
     /// surface's options persist across ROM/system reloads (desktop reapplies

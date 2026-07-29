@@ -899,6 +899,36 @@ describe('Typed layer', function () {
         expect($call['payload']['options'])->toBe(['luminance' => 90, 'colorBleed' => true]);
     });
 
+    it('sends gamma as a whole percentage, like the options beside it', function () {
+        // A float here means the caller thinks it is ares' 1.0-2.0 exponent; the
+        // public contract is a percentage so all three picture knobs match.
+        Emulator::surface()->setVideo(luminance: 90, saturation: 80, gamma: 150);
+
+        $call = collect($GLOBALS['__nativephp_calls'])->firstWhere('function', 'Emulator.SetVideo');
+        expect($call['payload']['options'])->toBe([
+            'luminance' => 90, 'saturation' => 80, 'gamma' => 150,
+        ]);
+    });
+
+    it('types every percentage option as an int', function () {
+        $video = new ReflectionMethod(Emulator::class, 'setVideo');
+        $types = collect($video->getParameters())
+            ->filter(fn ($p) => in_array($p->getName(), ['luminance', 'saturation', 'gamma'], true))
+            ->mapWithKeys(fn ($p) => [$p->getName() => (string) $p->getType()]);
+
+        expect($types->all())->toBe([
+            'luminance' => '?int', 'saturation' => '?int', 'gamma' => '?int',
+        ]);
+    });
+
+    it('carries gamma through a Config as an int percentage', function () {
+        expect((new Config(gamma: 150))->toArray())->toBe(['gamma' => 150]);
+
+        $gamma = (new ReflectionClass(Config::class))->getConstructor()->getParameters();
+        $type = collect($gamma)->firstWhere(fn ($p) => $p->getName() === 'gamma')->getType();
+        expect((string) $type)->toBe('?int');
+    });
+
     it('setSystemOptions sends per-system toggles', function () {
         Emulator::surface()->setSystemOptions(['deepBlackBoost' => true]);
 

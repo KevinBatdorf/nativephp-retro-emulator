@@ -17,7 +17,7 @@ class GbConfig extends SystemConfig
     public function __construct(
         ?int $luminance = null,
         ?int $saturation = null,
-        ?float $gamma = null,
+        ?int $gamma = null,
         ?bool $colorBleed = null,
         ?bool $overscan = null,
         ?VideoOutput $output = null,

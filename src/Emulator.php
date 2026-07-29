@@ -97,8 +97,6 @@ class Emulator
             );
         }
 
-        // Send both audio knobs in one call — the native side recomputes the
-        // pair each time, so a lone key would reset the other.
         $audio = array_filter([
             'volume' => $config->volume,
             'balance' => $config->balance,
@@ -322,11 +320,15 @@ class Emulator
      * thing on every system. Omitted options keep their current values and
      * persist across ROM/system swaps. Overscan borders are trimmed by default;
      * overscan: true shows the full canvas.
+     *
+     * luminance, saturation and gamma are whole PERCENTAGES where 100 leaves the
+     * picture untouched — gamma spans 50–200, the others 0–100. Out-of-range
+     * values are rejected, not clamped.
      */
     public function setVideo(
         ?int $luminance = null,
         ?int $saturation = null,
-        ?float $gamma = null,
+        ?int $gamma = null,
         ?bool $colorBleed = null,
         ?bool $overscan = null,
         ?VideoOutput $output = null,

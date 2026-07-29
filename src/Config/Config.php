@@ -16,6 +16,17 @@ use KevinBatdorf\RetroEmulator\VideoOutput;
 class Config
 {
     /**
+     * Every percentage option below is a whole percent where 100 means "leave it
+     * alone", so one mental model covers the lot. `speed` is the exception and
+     * says so: it is a multiplier, because 1.0 = native speed is universal.
+     *
+     * @param  int|null  $luminance  Percent, 0–100; 100 is untouched.
+     * @param  int|null  $saturation  Percent, 0–100; 100 is untouched.
+     * @param  int|null  $gamma  Percent, 50–200; 100 is untouched. Above 100
+     *                           darkens midtones, below brightens them.
+     * @param  int|null  $volume  Percent, 0–100.
+     * @param  int|null  $balance  Percent, −100 (full left) … +100 (full right).
+     * @param  float|null  $speed  Multiplier, 0.25–4.0; 1.0 is native speed.
      * @param  bool|null  $overscan  Trims the overscan border (trims by default);
      *                               no effect on systems with no overscan region.
      * @param  bool|null  $colorBleed  Composite color-bleed filter; no effect on
@@ -23,13 +34,14 @@ class Config
      * @param  InputCapture|null  $inputCapture  Resolved when the surface is
      *                                           created; not changeable at runtime.
      * @param  int|null  $runAhead  0 or 1 — ares runs exactly one hidden frame.
+     * @param  int|null  $rewindBufferSeconds  Seconds of history to retain.
      * @param  string|null  $shader  librashader .slangp path; clear an active
      *                               shader with setShader(null), not null here.
      */
     public function __construct(
         public ?int $luminance = null,
         public ?int $saturation = null,
-        public ?float $gamma = null,
+        public ?int $gamma = null,
         public ?bool $colorBleed = null,
         public ?bool $overscan = null,
         public ?VideoOutput $output = null,

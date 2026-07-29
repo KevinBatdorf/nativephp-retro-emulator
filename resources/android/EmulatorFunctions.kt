@@ -165,6 +165,34 @@ object EmulatorFunctions {
     private fun paramMap(parameters: Map<String, Any>, key: String): Map<String, Any>? =
         BridgeParams.map(parameters, key)
 
+    /**
+     * Scale a whole-percent option to the native 0..1 range. Out of range fails
+     * rather than clamps: a gamma of 1, mistaken for ares' 1.0-2.0 exponent,
+     * renders an almost black screen, and accepting that silently is worse.
+     */
+    private sealed class Percent {
+        class Value(val scaled: Float?) : Percent()
+        class Failure(val response: Map<String, Any>) : Percent()
+    }
+
+    private fun percent(
+        options: Map<String, Any>,
+        key: String,
+        min: Int,
+        max: Int,
+    ): Percent {
+        val raw = options[key] as? Number ?: return Percent.Value(null)
+        val value = raw.toDouble()
+        if (value < min || value > max) {
+            return Percent.Failure(BridgeResponse.error(
+                "INVALID_PARAMETERS",
+                "$key is a whole percentage ($min-$max, 100 = unchanged) — got $value",
+            ))
+        }
+
+        return Percent.Value(value.toFloat() / 100f)
+    }
+
     // Native input calls return "" on success or "CODE"/"CODE:detail" on a
     // category-A error. Map that to a bridge response; the code stays in a
     // variable so it doesn't register on the enum drift scan (the codes it
@@ -708,9 +736,15 @@ object EmulatorFunctions {
             @Suppress("UNCHECKED_CAST")
             val options = paramMap(parameters, "options") ?: emptyMap()
             // Only the knobs actually sent update; the rest keep their value.
-            val volume  = (options["volume"]  as? Number)?.toFloat()?.div(100f)
-            val balance = (options["balance"] as? Number)?.toFloat()?.div(100f)
-            entry!!.renderer.setAudioOptions(volume, balance)
+            val volume = percent(options, "volume", 0, 100)
+            if (volume is Percent.Failure) return volume.response
+            val balance = percent(options, "balance", -100, 100)
+            if (balance is Percent.Failure) return balance.response
+
+            entry!!.renderer.setAudioOptions(
+                (volume as Percent.Value).scaled,
+                (balance as Percent.Value).scaled,
+            )
             return BridgeResponse.success(mapOf("status" to "ok"))
         }
     }
@@ -719,7 +753,8 @@ object EmulatorFunctions {
      * Merge GLOBAL display options — omitted options keep their current values,
      * and the surface's options persist across ROM/system reloads (desktop
      * reapplies its settings at load the same way). luminance/saturation
-     * 0–100, gamma 1.0–2.0, colorBleed/overscan booleans, applied on the ares
+     * 0–100 and gamma 50–200 are whole percentages (100 = unchanged);
+     * colorBleed/overscan are booleans, applied on the ares
      * screen node; presentation settings output (scale/integer/integerFixed/
      * stretch), fixedScale, and aspectCorrection (none/standard/anamorphic)
      * mirror ares desktop's Video settings. overscan false (default) trims the
@@ -746,10 +781,17 @@ object EmulatorFunctions {
                     "aspectCorrection must be none, standard, or anamorphic — got '$aspectCorrection'",
                 )
             }
+            val luminance = percent(options, "luminance", 0, 100)
+            if (luminance is Percent.Failure) return luminance.response
+            val saturation = percent(options, "saturation", 0, 100)
+            if (saturation is Percent.Failure) return saturation.response
+            val gamma = percent(options, "gamma", 50, 200)
+            if (gamma is Percent.Failure) return gamma.response
+
             entry!!.renderer.queueVideoOptions(
-                luminance  = (options["luminance"]  as? Number)?.toFloat()?.div(100f),
-                saturation = (options["saturation"] as? Number)?.toFloat()?.div(100f),
-                gamma      = (options["gamma"] as? Number)?.toFloat(),
+                luminance  = (luminance as Percent.Value).scaled,
+                saturation = (saturation as Percent.Value).scaled,
+                gamma      = (gamma as Percent.Value).scaled,
                 colorBleed = options["colorBleed"] as? Boolean,
                 overscan   = options["overscan"] as? Boolean,
                 output     = output,

@@ -147,6 +147,24 @@ enum EmulatorFunctions {
         return BridgeResponse.success(data: ["status": "failed", "code": code, "message": message])
     }
 
+    /// Scale a whole-percent option to the native 0..1 range. Out of range fails
+    /// rather than clamps: a gamma of 1, mistaken for ares' 1.0-2.0 exponent,
+    /// renders an almost black screen. Mirrors Android's `percent(...)`.
+    private static func percent(
+        _ options: [String: Any], _ key: String, min: Int, max: Int
+    ) -> (scaled: Float?, error: [String: Any]?) {
+        guard let raw = options[key] as? NSNumber else { return (nil, nil) }
+        let value = raw.doubleValue
+        if value < Double(min) || value > Double(max) {
+            return (nil, BridgeResponse.error(
+                code: "INVALID_PARAMETERS",
+                message: "\(key) is a whole percentage (\(min)-\(max), 100 = unchanged) — got \(value)"
+            ))
+        }
+
+        return (Float(value) / 100, nil)
+    }
+
     // Native input calls return "" on success or "CODE"/"CODE:detail" on a
     // category-A error. Map that to a bridge response; the code stays in a
     // variable so it doesn't register on the enum drift scan (the codes it
@@ -625,15 +643,18 @@ enum EmulatorFunctions {
         }
     }
 
-    /// Merge audio options. volume 0–100 (default 100), balance −100 … +100
-    /// (default 0). Applied in the native mixer.
+    /// Merge audio options. volume 0–100, balance −100 (left) … +100 (right),
+    /// both whole percentages. Omitted knobs keep their current value.
     class SetAudio: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
             let options = parameters["options"] as? [String: Any] ?? [:]
-            let volume  = ((options["volume"]  as? NSNumber)?.floatValue ?? 100) / 100
-            let balance = ((options["balance"] as? NSNumber)?.floatValue ?? 0) / 100
-            renderer.setAudioOptions(volume: volume, balance: balance)
+            let volume = percent(options, "volume", min: 0, max: 100)
+            if let error = volume.error { return error }
+            let balance = percent(options, "balance", min: -100, max: 100)
+            if let error = balance.error { return error }
+
+            renderer.setAudioOptions(volume: volume.scaled, balance: balance.scaled)
             return BridgeResponse.success(data: ["status": "ok"])
         }
     }
@@ -641,7 +662,8 @@ enum EmulatorFunctions {
     /// Merge global display options — omitted options keep their current
     /// values, and the surface's options persist across ROM/system reloads
     /// (desktop reapplies its settings at load the same way). luminance/
-    /// saturation 0–100, gamma 1.0–2.0, colorBleed/overscan booleans, applied
+    /// saturation 0–100 and gamma 50–200 are whole percentages (100 =
+    /// unchanged); colorBleed/overscan are booleans, applied
     /// on the ares screen node; presentation settings output (scale/integer/
     /// integerFixed/stretch), fixedScale, and aspectCorrection (none/standard/
     /// anamorphic) mirror ares desktop's Video settings. overscan false
@@ -665,10 +687,17 @@ enum EmulatorFunctions {
                     message: "aspectCorrection must be none, standard, or anamorphic — got '\(aspectCorrection)'"
                 )
             }
+            let luminance = percent(options, "luminance", min: 0, max: 100)
+            if let error = luminance.error { return error }
+            let saturation = percent(options, "saturation", min: 0, max: 100)
+            if let error = saturation.error { return error }
+            let gamma = percent(options, "gamma", min: 50, max: 200)
+            if let error = gamma.error { return error }
+
             renderer.setVideoOptions(
-                luminance:  (options["luminance"]  as? NSNumber).map { $0.floatValue / 100 },
-                saturation: (options["saturation"] as? NSNumber).map { $0.floatValue / 100 },
-                gamma:      (options["gamma"] as? NSNumber)?.floatValue,
+                luminance:  luminance.scaled,
+                saturation: saturation.scaled,
+                gamma:      gamma.scaled,
                 colorBleed: options["colorBleed"] as? Bool,
                 overscan:   options["overscan"] as? Bool,
                 output:     output,
