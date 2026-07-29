@@ -43,7 +43,8 @@ enum DpadResolver {
         nx: Float,
         ny: Float,
         threshold: Float = defaultThreshold,
-        diagonalRatio: Float = defaultDiagonalRatio
+        diagonalRatio: Float = defaultDiagonalRatio,
+        diagonals: Bool = true
     ) -> Set<DpadDirection> {
         let ax = abs(nx)
         let ay = abs(ny)
@@ -51,11 +52,15 @@ enum DpadResolver {
         var horizontal = ax > threshold
         var vertical = ay > threshold
 
-        if horizontal, vertical, diagonalRatio > 0 {
-            if ay < diagonalRatio * ax {
-                vertical = false
-            } else if ax < diagonalRatio * ay {
-                horizontal = false
+        if horizontal, vertical {
+            if !diagonals {
+                if ay > ax { horizontal = false } else { vertical = false }
+            } else if diagonalRatio > 0 {
+                if ay < diagonalRatio * ax {
+                    vertical = false
+                } else if ax < diagonalRatio * ay {
+                    horizontal = false
+                }
             }
         }
 

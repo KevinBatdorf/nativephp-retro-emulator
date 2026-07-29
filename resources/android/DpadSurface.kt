@@ -63,6 +63,7 @@ object DpadSurface {
             node.props.getFloat("diagonal_ratio", DEFAULT_DIAGONAL_RATIO_PERCENT) / 100f
         val thickness = node.props.getFloat("thickness", DEFAULT_THICKNESS_PERCENT) / 100f
         val radius = node.props.getFloat("radius", DEFAULT_RADIUS_PERCENT) / 100f
+        val diagonals = node.props.getBool("diagonals", true)
         // 0 when no handler is bound, which keeps PHP out of the press path.
         val onChange = node.props.getCallbackId("on_change")
         // 0 unless a SharedValue is bound; no frame loop starts otherwise.
@@ -88,21 +89,26 @@ object DpadSurface {
         }
 
         if (panXId != 0 || panYId != 0) {
-            LaunchedEffect(panXId, panYId, panSpeed, panXMax, panYMax) {
+            // Keyed on `held` so the effect captures it: reading composition state
+            // inside a frame callback races the host's own snapshot and kills the
+            // app. It also means no coroutine runs while nothing is pressed.
+            LaunchedEffect(held, panXId, panYId, panSpeed, panXMax, panYMax) {
                 SharedValueStore.seed(panXId, node.props.getFloat("pan_x_initial", 0f))
                 SharedValueStore.seed(panYId, node.props.getFloat("pan_y_initial", 0f))
+                if (held.isEmpty()) return@LaunchedEffect
+
+                val pressed = held
                 var last = withFrameNanos { it }
                 while (true) {
                     val now = withFrameNanos { it }
                     val seconds = (now - last) / 1_000_000_000f
                     last = now
-                    if (held.isEmpty()) continue
 
                     val step = panSpeed * seconds
-                    val dx = (if (DpadDirection.Right in held) step else 0f) -
-                        (if (DpadDirection.Left in held) step else 0f)
-                    val dy = (if (DpadDirection.Down in held) step else 0f) -
-                        (if (DpadDirection.Up in held) step else 0f)
+                    val dx = (if (DpadDirection.Right in pressed) step else 0f) -
+                        (if (DpadDirection.Left in pressed) step else 0f)
+                    val dy = (if (DpadDirection.Down in pressed) step else 0f) -
+                        (if (DpadDirection.Up in pressed) step else 0f)
                     if (panXId != 0 && dx != 0f) {
                         val next = SharedValueStore.valueOf(panXId) + dx
                         SharedValueStore.set(panXId, next.coerceIn(panXMin, panXMax))
@@ -116,7 +122,7 @@ object DpadSurface {
         }
 
         Canvas(
-            modifier = modifier.pointerInput(surface, port, threshold, diagonalRatio) {
+            modifier = modifier.pointerInput(surface, port, threshold, diagonalRatio, diagonals) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     // Claim the gesture so an ancestor scroller doesn't pan the
@@ -128,6 +134,7 @@ object DpadSurface {
                         ny = normalize(y, size.height),
                         threshold = threshold,
                         diagonalRatio = diagonalRatio,
+                        diagonals = diagonals,
                     )
 
                     fun push(next: Set<DpadDirection>) {

@@ -22,6 +22,7 @@ struct DpadSurfaceView: View {
                 "diagonal_ratio", default: DpadResolver.defaultDiagonalRatio * 100) / 100,
             thickness: CGFloat(node.props.getFloat("thickness", default: 36) / 100),
             radiusShare: CGFloat(node.props.getFloat("radius", default: 28) / 100),
+            diagonals: node.props.getBool("diagonals", default: true),
             // 0 when no handler is bound, which keeps PHP out of the press path.
             onChange: node.props.getCallbackId("on_change"),
             nodeId: node.id,
@@ -48,6 +49,7 @@ private struct DpadPad: View {
     let diagonalRatio: Float
     let thickness: CGFloat
     let radiusShare: CGFloat
+    let diagonals: Bool
     let onChange: Int
     let nodeId: Int
     let panXId: Int
@@ -101,7 +103,8 @@ private struct DpadPad: View {
                             nx: normalize(Float(value.location.x), Float(geo.size.width)),
                             ny: normalize(Float(value.location.y), Float(geo.size.height)),
                             threshold: threshold,
-                            diagonalRatio: diagonalRatio
+                            diagonalRatio: diagonalRatio,
+                            diagonals: diagonals
                         ))
                     }
                     .onEnded { _ in push([]) }
@@ -118,13 +121,19 @@ private struct DpadPad: View {
             guard panXId != 0 || panYId != 0 else { return }
             if panXId != 0 { SharedValueStore.shared.set(panXInitial, for: panXId) }
             if panYId != 0 { SharedValueStore.shared.set(panYInitial, for: panYId) }
+        }
+        // Captures the direction instead of reading @State per tick, and exists
+        // only while something is held — see DpadSurface.kt for what that costs.
+        .onChange(of: held) { pressed in
+            panTimer?.invalidate()
+            panTimer = nil
+            guard panXId != 0 || panYId != 0, !pressed.isEmpty else { return }
 
             let interval = 1.0 / 60.0
             panTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { _ in
-                guard !held.isEmpty else { return }
                 let step = panSpeed * CGFloat(interval)
-                let dx = (held.contains(.right) ? step : 0) - (held.contains(.left) ? step : 0)
-                let dy = (held.contains(.down) ? step : 0) - (held.contains(.up) ? step : 0)
+                let dx = (pressed.contains(.right) ? step : 0) - (pressed.contains(.left) ? step : 0)
+                let dy = (pressed.contains(.down) ? step : 0) - (pressed.contains(.up) ? step : 0)
                 if panXId != 0, dx != 0 {
                     let next = SharedValueStore.shared.value(for: panXId) + dx
                     SharedValueStore.shared.set(min(max(next, panXMin), panXMax), for: panXId)

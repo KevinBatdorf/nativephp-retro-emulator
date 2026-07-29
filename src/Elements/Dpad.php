@@ -52,6 +52,8 @@ class Dpad extends Element
 
     private ?string $activeColor = null;
 
+    private ?bool $diagonals = null;
+
     private ?string $changeMethod = null;
 
     private ?SharedValue $panX = null;
@@ -130,6 +132,18 @@ class Dpad extends Element
     public function radius(int $percent): static
     {
         $this->radius = $this->percent('radius', $percent);
+
+        return $this;
+    }
+
+    /**
+     * Allow two directions at once. False locks the pad to four ways, snapping to
+     * whichever axis the thumb is further along — `diagonalRatio` can only make a
+     * diagonal unlikely, which is not enough for a game that has none.
+     */
+    public function diagonals(bool $allowed): static
+    {
+        $this->diagonals = $allowed;
 
         return $this;
     }
@@ -230,6 +244,9 @@ class Dpad extends Element
         if (isset($attrs['radius'])) {
             $this->radius($this->intAttr('radius', $attrs['radius']));
         }
+        if (isset($attrs['diagonals'])) {
+            $this->diagonals = $this->boolAttr('diagonals', $attrs['diagonals']);
+        }
         if (isset($attrs['color'])) {
             $this->color = (string) $attrs['color'];
         }
@@ -277,6 +294,26 @@ class Dpad extends Element
         return (int) $value;
     }
 
+    /**
+     * A Blade attribute arrives as a string, and "false" is truthy in PHP — a
+     * plain cast would turn `diagonals="false"` into true and silently do nothing.
+     */
+    private function boolAttr(string $name, mixed $value): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+        $text = strtolower(trim((string) $value));
+        if (in_array($text, ['false', '0', 'no', 'off'], true)) {
+            return false;
+        }
+        if (in_array($text, ['true', '1', 'yes', 'on', ''], true)) {
+            return true;
+        }
+
+        throw new InvalidArgumentException("dpad {$name} is a boolean, got '{$value}'");
+    }
+
     private function percent(string $name, int $value): int
     {
         [$min, $max] = self::PERCENT_RANGES[$name];
@@ -300,6 +337,9 @@ class Dpad extends Element
             if ($this->{$name} !== null) {
                 $props[strtolower(preg_replace('/(?<!^)[A-Z]/', '_$0', $name))] = $this->{$name};
             }
+        }
+        if ($this->diagonals !== null) {
+            $props['diagonals'] = $this->diagonals;
         }
         if ($this->color !== null) {
             $props['color'] = $this->color;

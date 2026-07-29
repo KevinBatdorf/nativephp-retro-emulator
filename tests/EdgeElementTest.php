@@ -296,6 +296,38 @@ describe('Dpad rejects a value in the wrong unit', function () {
     });
 });
 
+describe('Dpad four-way lock', function () {
+    it('omits the prop by default so the renderer allows diagonals', function () {
+        expect((new DpadElement)->toArray(new CallbackRegistry)['props'])
+            ->not->toHaveKey('diagonals');
+    });
+
+    it('reads a Blade string, where a plain cast would make "false" true', function () {
+        $element = new DpadElement;
+        $element->applyAttributes(['diagonals' => 'false']);
+
+        expect($element->toArray(new CallbackRegistry)['props']['diagonals'])->toBeFalse();
+    });
+
+    it('accepts the other spellings and a real bool', function () {
+        foreach (['0', 'no', 'off', false] as $off) {
+            $element = new DpadElement;
+            $element->applyAttributes(['diagonals' => $off]);
+            expect($element->toArray(new CallbackRegistry)['props']['diagonals'])->toBeFalse();
+        }
+        foreach (['true', '1', 'yes', true] as $on) {
+            $element = new DpadElement;
+            $element->applyAttributes(['diagonals' => $on]);
+            expect($element->toArray(new CallbackRegistry)['props']['diagonals'])->toBeTrue();
+        }
+    });
+
+    it('throws on a value that is neither', function () {
+        expect(fn () => (new DpadElement)->applyAttributes(['diagonals' => 'sometimes']))
+            ->toThrow(InvalidArgumentException::class, 'boolean');
+    });
+});
+
 describe('Dpad blade component emits the element', function () {
     beforeEach(function () {
         ElementRegistry::reset();

@@ -108,6 +108,43 @@ class DpadResolverTest {
         )
     }
 
+    @Test
+    fun fourWayModeSnapsACornerToTheDominantAxis() {
+        // Deep on Down, drifting right: 8-way reports both, 4-way keeps Down.
+        assertEquals(
+            setOf(DpadDirection.Down, DpadDirection.Right),
+            DpadResolver.resolve(0.5f, 1f, diagonals = true),
+        )
+        assertEquals(
+            setOf(DpadDirection.Down),
+            DpadResolver.resolve(0.5f, 1f, diagonals = false),
+        )
+        assertEquals(
+            setOf(DpadDirection.Right),
+            DpadResolver.resolve(1f, 0.5f, diagonals = false),
+        )
+    }
+
+    /** A ratio makes a diagonal unlikely; only 4-way mode makes it impossible. */
+    @Test
+    fun fourWayModeRefusesAnExactDiagonalThatARatioWouldAllow() {
+        assertEquals(
+            setOf(DpadDirection.Up, DpadDirection.Right),
+            DpadResolver.resolve(1f, -1f, diagonalRatio = 0.95f),
+        )
+        assertEquals(
+            setOf(DpadDirection.Right),
+            DpadResolver.resolve(1f, -1f, diagonals = false),
+        )
+    }
+
+    @Test
+    fun fourWayModeStillReportsCardinals() {
+        assertEquals(setOf(DpadDirection.Up), DpadResolver.resolve(0f, -1f, diagonals = false))
+        assertEquals(setOf(DpadDirection.Left), DpadResolver.resolve(-1f, 0f, diagonals = false))
+        assertEquals(emptySet<DpadDirection>(), DpadResolver.resolve(0f, 0f, diagonals = false))
+    }
+
     /** A ratio only ever suppresses; it cannot invent a direction. */
     @Test
     fun aDiagonalRatioNeverEngagesAnAxisUnderTheThreshold() {

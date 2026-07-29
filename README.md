@@ -108,6 +108,7 @@ comes from the usual layout classes, the rest is styling and feel:
     diagonal-ratio="0"    {{-- % the weaker axis must reach; 0 = free diagonals --}}
     thickness="36"        {{-- arm width, % of the shorter side --}}
     radius="28"           {{-- corner rounding, % of arm width; 50 = round tip --}}
+    diagonals="true"      {{-- false locks it to four ways --}}
     color="#66FFFFFF" active-color="#E6FFFFFF" />
 ```
 

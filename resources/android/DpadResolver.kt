@@ -49,6 +49,7 @@ object DpadResolver {
         ny: Float,
         threshold: Float = DEFAULT_THRESHOLD,
         diagonalRatio: Float = DEFAULT_DIAGONAL_RATIO,
+        diagonals: Boolean = true,
     ): Set<DpadDirection> {
         val ax = abs(nx)
         val ay = abs(ny)
@@ -56,9 +57,15 @@ object DpadResolver {
         var horizontal = ax > threshold
         var vertical = ay > threshold
 
-        if (horizontal && vertical && diagonalRatio > 0f) {
-            if (ay < diagonalRatio * ax) vertical = false
-            else if (ax < diagonalRatio * ay) horizontal = false
+        if (horizontal && vertical) {
+            if (!diagonals) {
+                // Snap to whichever axis is further out. A ratio can only make a
+                // diagonal unlikely; a 4-way game needs it impossible.
+                if (ay > ax) horizontal = false else vertical = false
+            } else if (diagonalRatio > 0f) {
+                if (ay < diagonalRatio * ax) vertical = false
+                else if (ax < diagonalRatio * ay) horizontal = false
+            }
         }
 
         val directions = mutableSetOf<DpadDirection>()
