@@ -114,6 +114,25 @@ comes from the usual layout classes, the rest is styling and feel:
 Presses go straight into the core natively, so no PHP runs per press and nothing
 re-renders.
 
+To drive something other than the core, the pad reports its held directions
+(`@change="method"` gives `"Up,Right"`, or `""` on release) — and for smooth
+motion it can integrate them into `SharedValue`s on the native frame clock:
+
+```blade
+@php $x = SharedValue::make(0); $y = SharedValue::make(0); @endphp
+
+<native:column class="w-8 h-8 rounded-full bg-red-500"
+    :translate-x="$x" :translate-y="$y" />
+
+<native:dpad class="w-28 h-28" :pan-x="$x" :pan-y="$y" pan-speed="260"
+    pan-x-min="0" pan-x-max="760" pan-y-min="0" pan-y-max="320" />
+```
+
+Bound this way nothing moves through PHP, which is the point: a `#[Poll]` fast
+enough to animate destabilises the host. Give each axis its own range — a screen
+is not square, and an unbounded value integrates until whatever it moves is off
+the edge.
+
 > **Imperative boot caveat:** the surface must exist before the first bridge
 > call resolves. When booting from PHP, do it after the page renders (for
 > example on the first `#[Poll]` tick), not during `mount()` — the declarative

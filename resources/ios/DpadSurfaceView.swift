@@ -31,8 +31,10 @@ struct DpadSurfaceView: View {
             panXInitial: CGFloat(node.props.getFloat("pan_x_initial", default: 0)),
             panYInitial: CGFloat(node.props.getFloat("pan_y_initial", default: 0)),
             panSpeed: CGFloat(node.props.getFloat("pan_speed", default: 260)),
-            panMin: CGFloat(node.props.getFloat("pan_min", default: -.greatestFiniteMagnitude)),
-            panMax: CGFloat(node.props.getFloat("pan_max", default: .greatestFiniteMagnitude)),
+            panXMin: CGFloat(node.props.getFloat("pan_x_min", default: -.greatestFiniteMagnitude)),
+            panXMax: CGFloat(node.props.getFloat("pan_x_max", default: .greatestFiniteMagnitude)),
+            panYMin: CGFloat(node.props.getFloat("pan_y_min", default: -.greatestFiniteMagnitude)),
+            panYMax: CGFloat(node.props.getFloat("pan_y_max", default: .greatestFiniteMagnitude)),
             baseColor: Color(argb: node.props.getColor("color", default: 0x66FF_FFFF)),
             activeColor: Color(argb: node.props.getColor("active_color", default: 0xE6FF_FFFF))
         )
@@ -53,8 +55,10 @@ private struct DpadPad: View {
     let panXInitial: CGFloat
     let panYInitial: CGFloat
     let panSpeed: CGFloat
-    let panMin: CGFloat
-    let panMax: CGFloat
+    let panXMin: CGFloat
+    let panXMax: CGFloat
+    let panYMin: CGFloat
+    let panYMax: CGFloat
     let baseColor: Color
     let activeColor: Color
 
@@ -123,11 +127,11 @@ private struct DpadPad: View {
                 let dy = (held.contains(.down) ? step : 0) - (held.contains(.up) ? step : 0)
                 if panXId != 0, dx != 0 {
                     let next = SharedValueStore.shared.value(for: panXId) + dx
-                    SharedValueStore.shared.set(min(max(next, panMin), panMax), for: panXId)
+                    SharedValueStore.shared.set(min(max(next, panXMin), panXMax), for: panXId)
                 }
                 if panYId != 0, dy != 0 {
                     let next = SharedValueStore.shared.value(for: panYId) + dy
-                    SharedValueStore.shared.set(min(max(next, panMin), panMax), for: panYId)
+                    SharedValueStore.shared.set(min(max(next, panYMin), panYMax), for: panYId)
                 }
             }
         }

@@ -60,9 +60,11 @@ class Dpad extends Element
 
     private ?int $panSpeed = null;
 
-    private ?int $panMin = null;
+    /** @var array{0: int, 1: int}|null */
+    private ?array $panRangeX = null;
 
-    private ?int $panMax = null;
+    /** @var array{0: int, 1: int}|null */
+    private ?array $panRangeY = null;
 
     public static function make(string $surface = 'main'): static
     {
@@ -175,18 +177,21 @@ class Dpad extends Element
     }
 
     /**
-     * Bound `pan()` to a dp range on both axes. Without it the values integrate
-     * forever and whatever they move sails off-screen.
+     * Bound `pan()` to a dp range, per axis. Without it the values integrate
+     * forever and whatever they move sails off-screen — and the axes need
+     * separate bounds, since a screen is rarely square.
      */
-    public function panRange(int $min, int $max): static
+    public function panRange(int $minX, int $maxX, int $minY, int $maxY): static
     {
-        if ($min >= $max) {
-            throw new InvalidArgumentException(
-                "dpad panRange needs min < max, got {$min}-{$max}",
-            );
+        foreach ([['x', $minX, $maxX], ['y', $minY, $maxY]] as [$axis, $min, $max]) {
+            if ($min >= $max) {
+                throw new InvalidArgumentException(
+                    "dpad panRange {$axis} needs min < max, got {$min}-{$max}",
+                );
+            }
         }
-        $this->panMin = $min;
-        $this->panMax = $max;
+        $this->panRangeX = [$minX, $maxX];
+        $this->panRangeY = [$minY, $maxY];
 
         return $this;
     }
@@ -244,10 +249,16 @@ class Dpad extends Element
         if ($speed !== null) {
             $this->panSpeed($this->intAttr('panSpeed', $speed));
         }
-        $min = $attrs['panMin'] ?? $attrs['pan-min'] ?? null;
-        $max = $attrs['panMax'] ?? $attrs['pan-max'] ?? null;
-        if ($min !== null && $max !== null) {
-            $this->panRange($this->intAttr('panMin', $min), $this->intAttr('panMax', $max));
+        $bounds = [];
+        foreach (['xMin' => 'pan-x-min', 'xMax' => 'pan-x-max', 'yMin' => 'pan-y-min', 'yMax' => 'pan-y-max'] as $key => $attr) {
+            $camel = 'pan'.ucfirst($key);
+            $value = $attrs[$camel] ?? $attrs[$attr] ?? null;
+            if ($value !== null) {
+                $bounds[$key] = $this->intAttr($attr, $value);
+            }
+        }
+        if (count($bounds) === 4) {
+            $this->panRange($bounds['xMin'], $bounds['xMax'], $bounds['yMin'], $bounds['yMax']);
         }
     }
 
@@ -310,9 +321,9 @@ class Dpad extends Element
         if ($this->panSpeed !== null) {
             $props['pan_speed'] = $this->panSpeed;
         }
-        if ($this->panMin !== null && $this->panMax !== null) {
-            $props['pan_min'] = $this->panMin;
-            $props['pan_max'] = $this->panMax;
+        if ($this->panRangeX !== null && $this->panRangeY !== null) {
+            [$props['pan_x_min'], $props['pan_x_max']] = $this->panRangeX;
+            [$props['pan_y_min'], $props['pan_y_max']] = $this->panRangeY;
         }
 
         return $props;

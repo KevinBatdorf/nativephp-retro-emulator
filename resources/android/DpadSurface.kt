@@ -69,8 +69,10 @@ object DpadSurface {
         val panXId = node.props.getInt("pan_x_id", 0)
         val panYId = node.props.getInt("pan_y_id", 0)
         val panSpeed = node.props.getFloat("pan_speed", DEFAULT_PAN_SPEED_DP)
-        val panMin = node.props.getFloat("pan_min", Float.NEGATIVE_INFINITY)
-        val panMax = node.props.getFloat("pan_max", Float.POSITIVE_INFINITY)
+        val panXMin = node.props.getFloat("pan_x_min", Float.NEGATIVE_INFINITY)
+        val panXMax = node.props.getFloat("pan_x_max", Float.POSITIVE_INFINITY)
+        val panYMin = node.props.getFloat("pan_y_min", Float.NEGATIVE_INFINITY)
+        val panYMax = node.props.getFloat("pan_y_max", Float.POSITIVE_INFINITY)
         val baseColor = Color(node.props.getColor("color", 0x66FFFFFF))
         val activeColor = Color(node.props.getColor("active_color", 0xE6FFFFFF.toInt()))
 
@@ -86,7 +88,7 @@ object DpadSurface {
         }
 
         if (panXId != 0 || panYId != 0) {
-            LaunchedEffect(panXId, panYId, panSpeed, panMin, panMax) {
+            LaunchedEffect(panXId, panYId, panSpeed, panXMax, panYMax) {
                 SharedValueStore.seed(panXId, node.props.getFloat("pan_x_initial", 0f))
                 SharedValueStore.seed(panYId, node.props.getFloat("pan_y_initial", 0f))
                 var last = withFrameNanos { it }
@@ -103,11 +105,11 @@ object DpadSurface {
                         (if (DpadDirection.Up in held) step else 0f)
                     if (panXId != 0 && dx != 0f) {
                         val next = SharedValueStore.valueOf(panXId) + dx
-                        SharedValueStore.set(panXId, next.coerceIn(panMin, panMax))
+                        SharedValueStore.set(panXId, next.coerceIn(panXMin, panXMax))
                     }
                     if (panYId != 0 && dy != 0f) {
                         val next = SharedValueStore.valueOf(panYId) + dy
-                        SharedValueStore.set(panYId, next.coerceIn(panMin, panMax))
+                        SharedValueStore.set(panYId, next.coerceIn(panYMin, panYMax))
                     }
                 }
             }
