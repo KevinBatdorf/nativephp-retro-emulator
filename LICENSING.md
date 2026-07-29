@@ -14,16 +14,21 @@ permissive, except librashader which is file-level copyleft. Their copyright and
 permission notices ship with the plugin in the files noted below, which
 satisfies their attribution terms for binary redistribution.
 
-| Component | Role | License | Notice file |
+| Component | Role | License | Notice |
 |---|---|---|---|
-| [ares](https://ares-emu.net) | emulator core | ISC | `ares/LICENSE` |
-| librashader | shader runtime | MPL-2.0 | `ares/LICENSE` (librashader section) |
-| sljit · libchdr · ymfm · xxHash | ares dependencies | BSD | `ares/LICENSE` |
-| zlib · LZMA SDK · qoi | ares dependencies | zlib · public-domain · MIT | `ares/LICENSE` |
-| [Cult-of-GBA BIOS](https://github.com/Cult-of-GBA/BIOS) | embedded GBA BIOS | MIT | `native/firmware/LICENSE-cult-of-gba` |
+| [ares](https://ares-emu.net) | emulator core | ISC | `THIRD-PARTY-NOTICES.md` |
+| librashader | shader runtime | MPL-2.0 | `THIRD-PARTY-NOTICES.md` (librashader section) |
+| sljit · libchdr · ymfm · xxHash | ares dependencies | BSD | `THIRD-PARTY-NOTICES.md` |
+| zlib · LZMA SDK · qoi | ares dependencies | zlib · public-domain · MIT | `THIRD-PARTY-NOTICES.md` |
+| [Cult-of-GBA BIOS](https://github.com/Cult-of-GBA/BIOS) | embedded GBA BIOS | MIT | `THIRD-PARTY-NOTICES.md` |
 
-`ares/LICENSE` aggregates the copyright and permission notices for ares and the
-libraries it embeds, and it ships with this repository.
+`THIRD-PARTY-NOTICES.md` reproduces the full aggregate notice verbatim and is a
+tracked file at the package root — the `ares/` submodule and `native/` tree are
+excluded from dist installs (.gitattributes export-ignore), so the notices must
+not live only there or a packagist install would ship the binaries without
+them. Sources of truth remain `ares/LICENSE` and
+`native/firmware/LICENSE-cult-of-gba`; regenerate the notices file after an
+ares submodule bump.
 
 ### librashader (MPL-2.0)
 
