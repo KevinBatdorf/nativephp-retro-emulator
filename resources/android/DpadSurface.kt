@@ -77,6 +77,9 @@ object DpadSurface {
             modifier = modifier.pointerInput(surface, port, threshold, diagonalRatio) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
+                    // Claim the gesture so an ancestor scroller doesn't pan the
+                    // page while a thumb is steering.
+                    down.consume()
 
                     fun resolveAt(x: Float, y: Float) = DpadResolver.resolve(
                         nx = normalize(x, size.width),
@@ -103,6 +106,7 @@ object DpadSurface {
                         val change = awaitPointerEvent().changes
                             .fastFirstOrNull { it.id == down.id }
                         if (change == null || !change.pressed) break
+                        change.consume()
                         push(resolveAt(change.position.x, change.position.y))
                     }
 

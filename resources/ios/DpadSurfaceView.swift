@@ -68,7 +68,10 @@ private struct DpadPad: View {
             // Without this the gaps between the arms aren't hittable, and a
             // thumb landing on a corner reads as a miss.
             .contentShape(Rectangle())
-            .gesture(
+            // High priority so an enclosing ScrollView doesn't pan the page
+            // while a thumb is steering — the Android renderer consumes its
+            // pointer changes for the same reason.
+            .highPriorityGesture(
                 // minimumDistance 0 so the pad answers the touch down, not the
                 // first drag past a threshold.
                 DragGesture(minimumDistance: 0)
