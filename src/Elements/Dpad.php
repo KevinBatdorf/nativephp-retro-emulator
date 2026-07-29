@@ -5,6 +5,7 @@ namespace KevinBatdorf\RetroEmulator\Elements;
 use InvalidArgumentException;
 use Native\Mobile\Edge\CallbackRegistry;
 use Native\Mobile\Edge\Element;
+use Native\Mobile\Edge\SharedValue;
 
 /**
  * EDGE element behind `<native:dpad />` — an on-screen directional pad for the
@@ -52,6 +53,16 @@ class Dpad extends Element
     private ?string $activeColor = null;
 
     private ?string $changeMethod = null;
+
+    private ?SharedValue $panX = null;
+
+    private ?SharedValue $panY = null;
+
+    private ?int $panSpeed = null;
+
+    private ?int $panMin = null;
+
+    private ?int $panMax = null;
 
     public static function make(string $surface = 'main'): static
     {
@@ -149,6 +160,50 @@ class Dpad extends Element
         return $this;
     }
 
+    /**
+     * Integrate the held direction into a pair of SharedValues, in dp, on the
+     * native frame clock. Bind them to a child's `:translate-x` / `:translate-y`
+     * for motion at display rate; animating from `onChange` instead is capped by
+     * how fast the host can republish its tree, which is far below a frame.
+     */
+    public function pan(?SharedValue $x = null, ?SharedValue $y = null): static
+    {
+        $this->panX = $x;
+        $this->panY = $y;
+
+        return $this;
+    }
+
+    /**
+     * Bound `pan()` to a dp range on both axes. Without it the values integrate
+     * forever and whatever they move sails off-screen.
+     */
+    public function panRange(int $min, int $max): static
+    {
+        if ($min >= $max) {
+            throw new InvalidArgumentException(
+                "dpad panRange needs min < max, got {$min}-{$max}",
+            );
+        }
+        $this->panMin = $min;
+        $this->panMax = $max;
+
+        return $this;
+    }
+
+    /** How fast `pan()` travels, in dp per second. Default 260. */
+    public function panSpeed(int $dpPerSecond): static
+    {
+        if ($dpPerSecond < 1 || $dpPerSecond > 4000) {
+            throw new InvalidArgumentException(
+                "dpad panSpeed is dp per second (1-4000), got {$dpPerSecond}",
+            );
+        }
+        $this->panSpeed = $dpPerSecond;
+
+        return $this;
+    }
+
     public function applyAttributes(array $attrs): void
     {
         if (isset($attrs['surface'])) {
@@ -176,6 +231,23 @@ class Dpad extends Element
         $activeColor = $attrs['activeColor'] ?? $attrs['active-color'] ?? null;
         if ($activeColor !== null) {
             $this->activeColor = (string) $activeColor;
+        }
+        $panX = $attrs['panX'] ?? $attrs['pan-x'] ?? null;
+        $panY = $attrs['panY'] ?? $attrs['pan-y'] ?? null;
+        if ($panX instanceof SharedValue || $panY instanceof SharedValue) {
+            $this->pan(
+                $panX instanceof SharedValue ? $panX : null,
+                $panY instanceof SharedValue ? $panY : null,
+            );
+        }
+        $speed = $attrs['panSpeed'] ?? $attrs['pan-speed'] ?? null;
+        if ($speed !== null) {
+            $this->panSpeed($this->intAttr('panSpeed', $speed));
+        }
+        $min = $attrs['panMin'] ?? $attrs['pan-min'] ?? null;
+        $max = $attrs['panMax'] ?? $attrs['pan-max'] ?? null;
+        if ($min !== null && $max !== null) {
+            $this->panRange($this->intAttr('panMin', $min), $this->intAttr('panMax', $max));
         }
     }
 
@@ -226,6 +298,21 @@ class Dpad extends Element
         }
         if ($this->changeMethod !== null) {
             $props['on_change'] = $registry->register($this->changeMethod);
+        }
+        if ($this->panX !== null) {
+            $props['pan_x_id'] = $this->panX->id;
+            $props['pan_x_initial'] = $this->panX->value();
+        }
+        if ($this->panY !== null) {
+            $props['pan_y_id'] = $this->panY->id;
+            $props['pan_y_initial'] = $this->panY->value();
+        }
+        if ($this->panSpeed !== null) {
+            $props['pan_speed'] = $this->panSpeed;
+        }
+        if ($this->panMin !== null && $this->panMax !== null) {
+            $props['pan_min'] = $this->panMin;
+            $props['pan_max'] = $this->panMax;
         }
 
         return $props;

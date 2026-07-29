@@ -5,10 +5,12 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -21,6 +23,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.util.fastFirstOrNull
 import com.nativephp.mobile.ui.nativerender.NativeElementBridge
 import com.nativephp.mobile.ui.nativerender.NativeUINode
+import com.nativephp.mobile.ui.nativerender.SharedValueStore
 
 /**
  * Compose entry point for the `dpad` EDGE node — an on-screen directional pad
@@ -47,6 +50,9 @@ object DpadSurface {
     /** Corner rounding as a share of the arm's width; 50 is a fully round tip. */
     private const val DEFAULT_RADIUS_PERCENT = 28f
 
+    /** Travel for a bound pan value, in dp per second. */
+    private const val DEFAULT_PAN_SPEED_DP = 260f
+
     @Composable
     fun Render(node: NativeUINode, modifier: Modifier) {
         val surface = node.props.getString("surface", "main")
@@ -59,6 +65,12 @@ object DpadSurface {
         val radius = node.props.getFloat("radius", DEFAULT_RADIUS_PERCENT) / 100f
         // 0 when no handler is bound, which keeps PHP out of the press path.
         val onChange = node.props.getCallbackId("on_change")
+        // 0 unless a SharedValue is bound; no frame loop starts otherwise.
+        val panXId = node.props.getInt("pan_x_id", 0)
+        val panYId = node.props.getInt("pan_y_id", 0)
+        val panSpeed = node.props.getFloat("pan_speed", DEFAULT_PAN_SPEED_DP)
+        val panMin = node.props.getFloat("pan_min", Float.NEGATIVE_INFINITY)
+        val panMax = node.props.getFloat("pan_max", Float.POSITIVE_INFINITY)
         val baseColor = Color(node.props.getColor("color", 0x66FFFFFF))
         val activeColor = Color(node.props.getColor("active_color", 0xE6FFFFFF.toInt()))
 
@@ -70,6 +82,34 @@ object DpadSurface {
             onDispose {
                 apply(surface, port, emptySet(), held)
                 held = emptySet()
+            }
+        }
+
+        if (panXId != 0 || panYId != 0) {
+            LaunchedEffect(panXId, panYId, panSpeed, panMin, panMax) {
+                SharedValueStore.seed(panXId, node.props.getFloat("pan_x_initial", 0f))
+                SharedValueStore.seed(panYId, node.props.getFloat("pan_y_initial", 0f))
+                var last = withFrameNanos { it }
+                while (true) {
+                    val now = withFrameNanos { it }
+                    val seconds = (now - last) / 1_000_000_000f
+                    last = now
+                    if (held.isEmpty()) continue
+
+                    val step = panSpeed * seconds
+                    val dx = (if (DpadDirection.Right in held) step else 0f) -
+                        (if (DpadDirection.Left in held) step else 0f)
+                    val dy = (if (DpadDirection.Down in held) step else 0f) -
+                        (if (DpadDirection.Up in held) step else 0f)
+                    if (panXId != 0 && dx != 0f) {
+                        val next = SharedValueStore.valueOf(panXId) + dx
+                        SharedValueStore.set(panXId, next.coerceIn(panMin, panMax))
+                    }
+                    if (panYId != 0 && dy != 0f) {
+                        val next = SharedValueStore.valueOf(panYId) + dy
+                        SharedValueStore.set(panYId, next.coerceIn(panMin, panMax))
+                    }
+                }
             }
         }
 

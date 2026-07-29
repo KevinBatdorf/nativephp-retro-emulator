@@ -25,6 +25,14 @@ struct DpadSurfaceView: View {
             // 0 when no handler is bound, which keeps PHP out of the press path.
             onChange: node.props.getCallbackId("on_change"),
             nodeId: node.id,
+            // 0 unless a SharedValue is bound; no timer starts otherwise.
+            panXId: node.props.getInt("pan_x_id", default: 0),
+            panYId: node.props.getInt("pan_y_id", default: 0),
+            panXInitial: CGFloat(node.props.getFloat("pan_x_initial", default: 0)),
+            panYInitial: CGFloat(node.props.getFloat("pan_y_initial", default: 0)),
+            panSpeed: CGFloat(node.props.getFloat("pan_speed", default: 260)),
+            panMin: CGFloat(node.props.getFloat("pan_min", default: -.greatestFiniteMagnitude)),
+            panMax: CGFloat(node.props.getFloat("pan_max", default: .greatestFiniteMagnitude)),
             baseColor: Color(argb: node.props.getColor("color", default: 0x66FF_FFFF)),
             activeColor: Color(argb: node.props.getColor("active_color", default: 0xE6FF_FFFF))
         )
@@ -40,10 +48,19 @@ private struct DpadPad: View {
     let radiusShare: CGFloat
     let onChange: Int
     let nodeId: Int
+    let panXId: Int
+    let panYId: Int
+    let panXInitial: CGFloat
+    let panYInitial: CGFloat
+    let panSpeed: CGFloat
+    let panMin: CGFloat
+    let panMax: CGFloat
     let baseColor: Color
     let activeColor: Color
 
     @State private var held: Set<DpadDirection> = []
+
+    @State private var panTimer: Timer?
 
     var body: some View {
         GeometryReader { geo in
@@ -88,7 +105,32 @@ private struct DpadPad: View {
         }
         // A press outlives the view that started it (navigation, rotation), and
         // the core would hold that button forever.
-        .onDisappear { push([]) }
+        .onDisappear {
+            push([])
+            panTimer?.invalidate()
+            panTimer = nil
+        }
+        .onAppear {
+            guard panXId != 0 || panYId != 0 else { return }
+            if panXId != 0 { SharedValueStore.shared.set(panXInitial, for: panXId) }
+            if panYId != 0 { SharedValueStore.shared.set(panYInitial, for: panYId) }
+
+            let interval = 1.0 / 60.0
+            panTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { _ in
+                guard !held.isEmpty else { return }
+                let step = panSpeed * CGFloat(interval)
+                let dx = (held.contains(.right) ? step : 0) - (held.contains(.left) ? step : 0)
+                let dy = (held.contains(.down) ? step : 0) - (held.contains(.up) ? step : 0)
+                if panXId != 0, dx != 0 {
+                    let next = SharedValueStore.shared.value(for: panXId) + dx
+                    SharedValueStore.shared.set(min(max(next, panMin), panMax), for: panXId)
+                }
+                if panYId != 0, dy != 0 {
+                    let next = SharedValueStore.shared.value(for: panYId) + dy
+                    SharedValueStore.shared.set(min(max(next, panMin), panMax), for: panYId)
+                }
+            }
+        }
     }
 
     @ViewBuilder
