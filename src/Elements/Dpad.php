@@ -51,6 +51,8 @@ class Dpad extends Element
 
     private ?string $activeColor = null;
 
+    private ?string $changeMethod = null;
+
     public static function make(string $surface = 'main'): static
     {
         $el = new static;
@@ -135,6 +137,18 @@ class Dpad extends Element
         return $this;
     }
 
+    /**
+     * Report the held directions on change, comma-separated ("Up,Right", or ""
+     * on release). Bound from Blade as `@change="method"`. Only needed to drive
+     * something other than the core; unbound, no press reaches PHP at all.
+     */
+    public function onChange(string $method): static
+    {
+        $this->changeMethod = $method;
+
+        return $this;
+    }
+
     public function applyAttributes(array $attrs): void
     {
         if (isset($attrs['surface'])) {
@@ -209,6 +223,9 @@ class Dpad extends Element
         }
         if ($this->activeColor !== null) {
             $props['active_color'] = $this->activeColor;
+        }
+        if ($this->changeMethod !== null) {
+            $props['on_change'] = $registry->register($this->changeMethod);
         }
 
         return $props;

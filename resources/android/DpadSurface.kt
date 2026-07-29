@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.util.fastFirstOrNull
+import com.nativephp.mobile.ui.nativerender.NativeElementBridge
 import com.nativephp.mobile.ui.nativerender.NativeUINode
 
 /**
@@ -56,6 +57,8 @@ object DpadSurface {
             node.props.getFloat("diagonal_ratio", DEFAULT_DIAGONAL_RATIO_PERCENT) / 100f
         val thickness = node.props.getFloat("thickness", DEFAULT_THICKNESS_PERCENT) / 100f
         val radius = node.props.getFloat("radius", DEFAULT_RADIUS_PERCENT) / 100f
+        // 0 when no handler is bound, which keeps PHP out of the press path.
+        val onChange = node.props.getCallbackId("on_change")
         val baseColor = Color(node.props.getColor("color", 0x66FFFFFF))
         val activeColor = Color(node.props.getColor("active_color", 0xE6FFFFFF.toInt()))
 
@@ -86,6 +89,10 @@ object DpadSurface {
                         if (next == held) return
                         apply(surface, port, next, held)
                         held = next
+                        if (onChange != 0) {
+                            NativeElementBridge.sendTextChangeEvent(
+                                onChange, node.id, next.joinToString(",") { it.button })
+                        }
                     }
 
                     push(resolveAt(down.position.x, down.position.y))

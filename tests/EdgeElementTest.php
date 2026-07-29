@@ -256,11 +256,18 @@ describe('Dpad element contract', function () {
         expect($node['layout'])->toBe(['width' => 'fill', 'height' => 'fill']);
     });
 
-    it('registers no callbacks — presses never reach PHP', function () {
+    it('registers no callbacks by default — presses never reach PHP', function () {
         $registry = new CallbackRegistry;
         $props = DpadElement::make()->port(3)->toArray($registry)['props'];
 
         expect(array_filter(array_keys($props), fn ($k) => str_starts_with($k, 'on_')))->toBe([]);
+    });
+
+    it('registers a change callback only when one is asked for', function () {
+        $props = DpadElement::make()->onChange('steer')->toArray(new CallbackRegistry)['props'];
+
+        expect($props)->toHaveKey('on_change');
+        expect($props['on_change'])->toBeInt();
     });
 });
 

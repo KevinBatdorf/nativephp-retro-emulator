@@ -22,6 +22,9 @@ struct DpadSurfaceView: View {
                 "diagonal_ratio", default: DpadResolver.defaultDiagonalRatio * 100) / 100,
             thickness: CGFloat(node.props.getFloat("thickness", default: 36) / 100),
             radiusShare: CGFloat(node.props.getFloat("radius", default: 28) / 100),
+            // 0 when no handler is bound, which keeps PHP out of the press path.
+            onChange: node.props.getCallbackId("on_change"),
+            nodeId: node.id,
             baseColor: Color(argb: node.props.getColor("color", default: 0x66FF_FFFF)),
             activeColor: Color(argb: node.props.getColor("active_color", default: 0xE6FF_FFFF))
         )
@@ -35,6 +38,8 @@ private struct DpadPad: View {
     let diagonalRatio: Float
     let thickness: CGFloat
     let radiusShare: CGFloat
+    let onChange: Int
+    let nodeId: Int
     let baseColor: Color
     let activeColor: Color
 
@@ -116,7 +121,14 @@ private struct DpadPad: View {
     /// reads as a missed input, an extra frame of diagonal does not.
     private func push(_ next: Set<DpadDirection>) {
         guard next != held else { return }
-        defer { held = next }
+        defer {
+            held = next
+            if onChange != 0 {
+                NativeUIBridge.sendTextChangeEvent(
+                    onChange, nodeId: nodeId,
+                    text: next.map(\.rawValue).joined(separator: ","))
+            }
+        }
 
         guard let renderer = EmulatorFunctions.renderer(named: surface) else { return }
         for direction in next.subtracting(held) {
