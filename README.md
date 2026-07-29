@@ -4,8 +4,16 @@ Wraps the [ares](https://ares-emu.net) multi-system emulator as a NativePHP
 Mobile plugin: prebuilt native binaries, a typed and fluent PHP API, and
 in-layout rendering through a `<native:emulator>` element. Android and iOS.
 
+## Installation
+
 ```bash
 composer require kevinbatdorf/retro-emulator
+```
+
+Don't forget to register the plugin:
+
+```bash
+php artisan native:plugin:register kevinbatdorf/retro-emulator
 ```
 
 ## Quick start — the declarative element
@@ -56,7 +64,7 @@ $mouse->setAxis('X', 5);                                   // relative delta
 $scope = $emu->connectDevice(2, Device::SuperScope);
 $scope->aimAt(0.5, 0.5)->press('Trigger');                 // normalized 0..1
 
-$players = $emu->connectDevice(2, Device::SuperMultitap);  // Controller[4]
+$players = $emu->connectMultitap(2, Device::SuperMultitap); // Controller[4]
 
 // Remap: the in-game button reads another positional input.
 $pad->remap(['a' => 'b', 'b' => 'a']);
@@ -96,6 +104,40 @@ Two deliberate exceptions, both stated in their own docblocks: `speed` is a
 0.25–4.0 **multiplier** (1.0 = native speed, too universal a convention to
 bend), and counts carry their unit in the name — `runAhead` (frames),
 `rewindBufferSeconds`, `fixedScale`.
+
+### Accuracy vs performance
+
+The plugin ships ares' **performance** renderers by default — per-scanline,
+what phones comfortably afford. Where ares offers a more accurate renderer,
+one boot-time switch turns it on:
+
+```php
+use KevinBatdorf\RetroEmulator\Accuracy;
+
+new SfcConfig(accuracy: Accuracy::Accurate);   // the preset
+new GbaConfig(pixelAccuracy: true);            // direct ares flag; beats the preset
+```
+
+| System | `performance` (default) | `accurate` |
+|---|---|---|
+| SNES | scanline PPU | dot-accurate PPU — mid-scanline raster effects render right |
+| GBA | scanline, approximated bus timing | per-cycle rendering + real VRAM/palette contention |
+| NES, GB/GBC, Mega Drive | one renderer — the option is accepted and ignored | same |
+
+Rules worth knowing:
+
+- **Boot-time only.** It picks the renderer implementation at `loadSystem`;
+  changing it means rebooting. A post-boot `configure(['pixelAccuracy' => …])`
+  throws (`BOOT_ONLY_OPTION`) rather than silently deferring — ares' own
+  frontend also only honors the value at the next load.
+- **Readback is honest:** `$emu->accuracy()` (and the `accuracy` key on
+  status) reports which renderer the running core actually bound — `null` on
+  systems with a single renderer.
+- **The cost is real.** Measured on a Snapdragon 8 Gen 2 handheld at full
+  60 fps: SNES 28% → 46% of one core, GBA 59% → 65%. Most games render
+  pixel-identically either way; accuracy matters for mid-line tricks,
+  contention-sensitive timing, and homebrew development against real
+  hardware behavior.
 
 ### On-screen d-pad
 
@@ -207,6 +249,24 @@ and ship the presets you want with your app.
 `MemoryRead`, `MemoryChanged`, and `EmulatorError` (operational failures —
 missing ROM, failed save, bad cheat — carry an `EmulatorErrorCode`; programmer
 errors throw `EmulatorException` synchronously instead).
+
+```php
+use KevinBatdorf\RetroEmulator\Events\{EmulatorStarted, EmulatorError};
+use Native\Mobile\Attributes\OnNative;
+
+#[OnNative(EmulatorStarted::class)]
+public function onStarted(string $surface = '', string $system = '', string $romPath = ''): void
+{
+    // First frame rendered — safe to read ports(), status(), region().
+}
+
+#[OnNative(EmulatorError::class)]
+public function onError(string $surface = '', string $code = '', string $message = ''): void
+{
+    // Operational failure (see EmulatorErrorCode) — the emulator is still in
+    // a defined state; a failed loadRom leaves the previous game running.
+}
+```
 
 ## License
 
