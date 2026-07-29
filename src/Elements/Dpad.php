@@ -2,6 +2,7 @@
 
 namespace KevinBatdorf\RetroEmulator\Elements;
 
+use InvalidArgumentException;
 use Native\Mobile\Edge\CallbackRegistry;
 use Native\Mobile\Edge\Element;
 
@@ -13,9 +14,23 @@ use Native\Mobile\Edge\Element;
  * into the 1–2 directions a physical pad would report, so diagonals work and a
  * thumb sliding off the pad keeps walking. Presses go straight into the core on
  * the native side, so no PHP runs per press and nothing re-renders.
+ *
+ * Nothing here is mandatory — every prop has a default, so `<native:dpad />`
+ * alone gives a working pad. Size comes from the usual layout classes
+ * (`class="w-36 h-36"`); the props below cover how it looks and feels. Each is a
+ * whole PERCENTAGE, matching the picture and audio options, and an out-of-range
+ * value throws rather than silently producing a dead pad.
  */
 class Dpad extends Element
 {
+    /** Prop name => [min, max] percent, all inclusive. */
+    private const PERCENT_RANGES = [
+        'threshold' => [5, 90],
+        'diagonalRatio' => [0, 95],
+        'thickness' => [10, 60],
+        'radius' => [0, 50],
+    ];
+
     protected string $type = 'dpad';
 
     /** @var array<string, mixed> */
@@ -24,9 +39,13 @@ class Dpad extends Element
         'port' => 1,
     ];
 
-    private ?float $threshold = null;
+    private ?int $threshold = null;
 
-    private ?float $diagonalRatio = null;
+    private ?int $diagonalRatio = null;
+
+    private ?int $thickness = null;
+
+    private ?int $radius = null;
 
     private ?string $color = null;
 
@@ -58,28 +77,49 @@ class Dpad extends Element
 
     /**
      * How far off centre an axis travels before its direction engages, as a
-     * fraction of the pad's half-extent. Also the dead zone: a finger inside the
-     * centre square reads neutral. Lower engages sooner.
+     * percent of the pad's half-extent. Doubles as the dead zone: a finger inside
+     * the centre square reads neutral. Lower engages sooner. Default 33.
      */
-    public function threshold(float $threshold): static
+    public function threshold(int $percent): static
     {
-        $this->threshold = $threshold;
+        $this->threshold = $this->percent('threshold', $percent);
 
         return $this;
     }
 
     /**
-     * How hard the weaker axis must compete before a diagonal forms, as a
-     * fraction of the stronger axis. 0 gives free diagonals; raising it keeps
-     * cardinals clean when a thumb drifts.
+     * How hard the weaker axis must compete before a diagonal forms, as a percent
+     * of the stronger axis. 0 (default) gives free diagonals; raising it keeps
+     * cardinals clean under a drifting thumb, at the cost of the second direction
+     * arriving later.
      */
-    public function diagonalRatio(float $ratio): static
+    public function diagonalRatio(int $percent): static
     {
-        $this->diagonalRatio = $ratio;
+        $this->diagonalRatio = $this->percent('diagonalRatio', $percent);
 
         return $this;
     }
 
+    /** Arm width as a percent of the pad's shorter side. Default 36. */
+    public function thickness(int $percent): static
+    {
+        $this->thickness = $this->percent('thickness', $percent);
+
+        return $this;
+    }
+
+    /**
+     * Corner rounding as a percent of the arm's width: 0 is square, 50 gives a
+     * fully rounded tip. Default 28.
+     */
+    public function radius(int $percent): static
+    {
+        $this->radius = $this->percent('radius', $percent);
+
+        return $this;
+    }
+
+    /** Resting fill, as any color the layout classes accept (`#RRGGBB`, `#AARRGGBB`). */
     public function color(string $color): static
     {
         $this->color = $color;
@@ -104,11 +144,17 @@ class Dpad extends Element
             $this->dpadProps['port'] = (int) $attrs['port'];
         }
         if (isset($attrs['threshold'])) {
-            $this->threshold = (float) $attrs['threshold'];
+            $this->threshold($this->intAttr('threshold', $attrs['threshold']));
         }
         $ratio = $attrs['diagonalRatio'] ?? $attrs['diagonal-ratio'] ?? null;
         if ($ratio !== null) {
-            $this->diagonalRatio = (float) $ratio;
+            $this->diagonalRatio($this->intAttr('diagonalRatio', $ratio));
+        }
+        if (isset($attrs['thickness'])) {
+            $this->thickness($this->intAttr('thickness', $attrs['thickness']));
+        }
+        if (isset($attrs['radius'])) {
+            $this->radius($this->intAttr('radius', $attrs['radius']));
         }
         if (isset($attrs['color'])) {
             $this->color = (string) $attrs['color'];
@@ -119,17 +165,44 @@ class Dpad extends Element
         }
     }
 
+    /**
+     * A Blade attribute arrives as a string. Reject a fractional one before it
+     * truncates: `threshold="0.33"` would become 0 and silently disable the pad.
+     */
+    private function intAttr(string $name, mixed $value): int
+    {
+        if (! is_numeric($value) || (float) $value !== (float) (int) $value) {
+            throw new InvalidArgumentException(
+                "dpad {$name} is a whole percentage, got '{$value}'",
+            );
+        }
+
+        return (int) $value;
+    }
+
+    private function percent(string $name, int $value): int
+    {
+        [$min, $max] = self::PERCENT_RANGES[$name];
+
+        if ($value < $min || $value > $max) {
+            throw new InvalidArgumentException(
+                "dpad {$name} is a whole percentage ({$min}-{$max}), got {$value}",
+            );
+        }
+
+        return $value;
+    }
+
     protected function resolveProps(CallbackRegistry $registry): array
     {
         $props = $this->dpadProps;
 
         // Omitted props stay absent so each renderer applies its own default,
         // keeping the two platforms' feel defined in one place per platform.
-        if ($this->threshold !== null) {
-            $props['threshold'] = $this->threshold;
-        }
-        if ($this->diagonalRatio !== null) {
-            $props['diagonal_ratio'] = $this->diagonalRatio;
+        foreach (['threshold', 'diagonalRatio', 'thickness', 'radius'] as $name) {
+            if ($this->{$name} !== null) {
+                $props[strtolower(preg_replace('/(?<!^)[A-Z]/', '_$0', $name))] = $this->{$name};
+            }
         }
         if ($this->color !== null) {
             $props['color'] = $this->color;

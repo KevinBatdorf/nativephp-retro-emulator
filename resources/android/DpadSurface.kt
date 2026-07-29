@@ -35,13 +35,27 @@ import com.nativephp.mobile.ui.nativerender.NativeUINode
  */
 object DpadSurface {
 
+    // Feel defaults live in DpadResolver as fractions; expose them as the
+    // percentages the props use so the two can't drift apart.
+    private const val DEFAULT_THRESHOLD_PERCENT = DpadResolver.DEFAULT_THRESHOLD * 100f
+    private const val DEFAULT_DIAGONAL_RATIO_PERCENT = DpadResolver.DEFAULT_DIAGONAL_RATIO * 100f
+
+    /** Arm width as a share of the pad's shorter side. */
+    private const val DEFAULT_THICKNESS_PERCENT = 36f
+
+    /** Corner rounding as a share of the arm's width; 50 is a fully round tip. */
+    private const val DEFAULT_RADIUS_PERCENT = 28f
+
     @Composable
     fun Render(node: NativeUINode, modifier: Modifier) {
         val surface = node.props.getString("surface", "main")
         val port = node.props.getInt("port", 1)
-        val threshold = node.props.getFloat("threshold", DpadResolver.DEFAULT_THRESHOLD)
+        // Props are whole percentages; the resolver and drawing want fractions.
+        val threshold = node.props.getFloat("threshold", DEFAULT_THRESHOLD_PERCENT) / 100f
         val diagonalRatio =
-            node.props.getFloat("diagonal_ratio", DpadResolver.DEFAULT_DIAGONAL_RATIO)
+            node.props.getFloat("diagonal_ratio", DEFAULT_DIAGONAL_RATIO_PERCENT) / 100f
+        val thickness = node.props.getFloat("thickness", DEFAULT_THICKNESS_PERCENT) / 100f
+        val radius = node.props.getFloat("radius", DEFAULT_RADIUS_PERCENT) / 100f
         val baseColor = Color(node.props.getColor("color", 0x66FFFFFF))
         val activeColor = Color(node.props.getColor("active_color", 0xE6FFFFFF.toInt()))
 
@@ -89,7 +103,7 @@ object DpadSurface {
                 }
             },
         ) {
-            drawPad(held, baseColor, activeColor)
+            drawPad(held, baseColor, activeColor, thickness, radius)
         }
     }
 
@@ -122,9 +136,11 @@ object DpadSurface {
         held: Set<DpadDirection>,
         baseColor: Color,
         activeColor: Color,
+        thickness: Float,
+        radiusShare: Float,
     ) {
-        val arm = minOf(size.width, size.height) * 0.36f
-        val radius = CornerRadius(arm * 0.28f, arm * 0.28f)
+        val arm = minOf(size.width, size.height) * thickness
+        val radius = CornerRadius(arm * radiusShare, arm * radiusShare)
         val centerX = size.width / 2f
         val centerY = size.height / 2f
         val armLength = minOf(centerX, centerY) - arm / 2f

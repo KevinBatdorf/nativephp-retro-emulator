@@ -187,6 +187,8 @@ describe('Dpad element contract', function () {
 
         expect($props)->not->toHaveKey('threshold');
         expect($props)->not->toHaveKey('diagonal_ratio');
+        expect($props)->not->toHaveKey('thickness');
+        expect($props)->not->toHaveKey('radius');
         expect($props)->not->toHaveKey('color');
         expect($props)->not->toHaveKey('active_color');
     });
@@ -196,8 +198,10 @@ describe('Dpad element contract', function () {
         $element->applyAttributes([
             'surface' => 'side',
             'port' => '4',
-            'threshold' => '0.4',
-            'diagonal-ratio' => '0.5',
+            'threshold' => '40',
+            'diagonal-ratio' => '50',
+            'thickness' => '30',
+            'radius' => '10',
             'color' => '#40FFFFFF',
             'active-color' => '#FFFFFFFF',
         ]);
@@ -205,8 +209,10 @@ describe('Dpad element contract', function () {
         expect($element->toArray(new CallbackRegistry)['props'])->toBe([
             'surface' => 'side',
             'port' => 4,
-            'threshold' => 0.4,
-            'diagonal_ratio' => 0.5,
+            'threshold' => 40,
+            'diagonal_ratio' => 50,
+            'thickness' => 30,
+            'radius' => 10,
             'color' => '#40FFFFFF',
             'active_color' => '#FFFFFFFF',
         ]);
@@ -214,18 +220,20 @@ describe('Dpad element contract', function () {
 
     it('accepts camelCase attributes too', function () {
         $element = new DpadElement;
-        $element->applyAttributes(['diagonalRatio' => '0.6', 'activeColor' => '#FF0000FF']);
+        $element->applyAttributes(['diagonalRatio' => '60', 'activeColor' => '#FF0000FF']);
 
         $props = $element->toArray(new CallbackRegistry)['props'];
-        expect($props['diagonal_ratio'])->toBe(0.6);
+        expect($props['diagonal_ratio'])->toBe(60);
         expect($props['active_color'])->toBe('#FF0000FF');
     });
 
     it('supports fluent construction', function () {
         $node = DpadElement::make('side')
             ->port(2)
-            ->threshold(0.25)
-            ->diagonalRatio(0.7)
+            ->threshold(25)
+            ->diagonalRatio(70)
+            ->thickness(40)
+            ->radius(50)
             ->color('#20FFFFFF')
             ->activeColor('#F0FFFFFF')
             ->toArray(new CallbackRegistry);
@@ -233,8 +241,10 @@ describe('Dpad element contract', function () {
         expect($node['props'])->toBe([
             'surface' => 'side',
             'port' => 2,
-            'threshold' => 0.25,
-            'diagonal_ratio' => 0.7,
+            'threshold' => 25,
+            'diagonal_ratio' => 70,
+            'thickness' => 40,
+            'radius' => 50,
             'color' => '#20FFFFFF',
             'active_color' => '#F0FFFFFF',
         ]);
@@ -254,6 +264,31 @@ describe('Dpad element contract', function () {
     });
 });
 
+describe('Dpad rejects a value in the wrong unit', function () {
+    it('throws when a fraction is passed where a percentage belongs', function () {
+        // 0.33 truncates to 0, which would sit under every threshold and leave a
+        // pad that never reports a direction — silence is the worst outcome here.
+        expect(fn () => (new DpadElement)->applyAttributes(['threshold' => '0.33']))
+            ->toThrow(InvalidArgumentException::class, 'whole percentage');
+    });
+
+    it('throws when a percentage is out of range', function () {
+        expect(fn () => DpadElement::make()->threshold(200))
+            ->toThrow(InvalidArgumentException::class, '5-90');
+        expect(fn () => DpadElement::make()->radius(80))
+            ->toThrow(InvalidArgumentException::class, '0-50');
+    });
+
+    it('accepts the edges of each range', function () {
+        $props = DpadElement::make()
+            ->threshold(5)->diagonalRatio(0)->thickness(60)->radius(0)
+            ->toArray(new CallbackRegistry)['props'];
+
+        expect($props['threshold'])->toBe(5);
+        expect($props['thickness'])->toBe(60);
+    });
+});
+
 describe('Dpad blade component emits the element', function () {
     beforeEach(function () {
         ElementRegistry::reset();
@@ -262,7 +297,7 @@ describe('Dpad blade component emits the element', function () {
     });
 
     it('renders as a dpad element, not HTML', function () {
-        $component = new DpadComponent(surface: 'side', port: 2, threshold: 0.4);
+        $component = new DpadComponent(surface: 'side', port: 2, threshold: 40);
         $html = ($component->render())();
 
         expect($html)->toBe('');
@@ -275,7 +310,7 @@ describe('Dpad blade component emits the element', function () {
         expect($dpad)->not->toBeNull();
         expect($dpad['props']['surface'])->toBe('side');
         expect($dpad['props']['port'])->toBe(2);
-        expect($dpad['props']['threshold'])->toBe(0.4);
+        expect($dpad['props']['threshold'])->toBe(40);
     });
 
     it('omits unset feel props so the tag forms stay interchangeable', function () {

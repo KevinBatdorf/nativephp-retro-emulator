@@ -76,6 +76,44 @@ $emu->screenshot();
 Emulator::systems();   // rich objects: id, name, stable, supported
 ```
 
+### Option units
+
+One rule covers nearly everything: **anything proportional is a whole percentage
+where 100 means unchanged.**
+
+| Option | Range | Meaning |
+| --- | --- | --- |
+| `luminance`, `saturation` | 0–100 | 100 leaves the picture untouched |
+| `gamma` | 50–200 | 100 untouched; above darkens midtones |
+| `volume` | 0–100 | per-emulator gain, not device volume |
+| `balance` | −100–100 | full left … full right |
+| `<native:dpad>` `threshold`, `diagonal-ratio`, `thickness`, `radius` | see below | percentages of the pad |
+
+Out-of-range values are **rejected**, not clamped, so a wrong unit surfaces as an
+error instead of a black screen or a dead control.
+
+Two deliberate exceptions, both stated in their own docblocks: `speed` is a
+0.25–4.0 **multiplier** (1.0 = native speed, too universal a convention to
+bend), and counts carry their unit in the name — `runAhead` (frames),
+`rewindBufferSeconds`, `fixedScale`.
+
+### On-screen d-pad
+
+`<native:dpad />` needs nothing but a surface; every prop has a default. Size
+comes from the usual layout classes, the rest is styling and feel:
+
+```blade
+<native:dpad surface="play" class="w-36 h-36"
+    threshold="33"        {{-- % of half-extent before a direction engages --}}
+    diagonal-ratio="0"    {{-- % the weaker axis must reach; 0 = free diagonals --}}
+    thickness="36"        {{-- arm width, % of the shorter side --}}
+    radius="28"           {{-- corner rounding, % of arm width; 50 = round tip --}}
+    color="#66FFFFFF" active-color="#E6FFFFFF" />
+```
+
+Presses go straight into the core natively, so no PHP runs per press and nothing
+re-renders.
+
 > **Imperative boot caveat:** the surface must exist before the first bridge
 > call resolves. When booting from PHP, do it after the page renders (for
 > example on the first `#[Poll]` tick), not during `mount()` — the declarative

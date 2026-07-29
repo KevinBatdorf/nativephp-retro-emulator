@@ -15,9 +15,13 @@ struct DpadSurfaceView: View {
         DpadPad(
             surface: node.props.getString("surface", default: "main"),
             port: node.props.getInt("port", default: 1),
-            threshold: node.props.getFloat("threshold", default: DpadResolver.defaultThreshold),
+            // Props are whole percentages; the resolver and drawing want fractions.
+            threshold: node.props.getFloat(
+                "threshold", default: DpadResolver.defaultThreshold * 100) / 100,
             diagonalRatio: node.props.getFloat(
-                "diagonal_ratio", default: DpadResolver.defaultDiagonalRatio),
+                "diagonal_ratio", default: DpadResolver.defaultDiagonalRatio * 100) / 100,
+            thickness: CGFloat(node.props.getFloat("thickness", default: 36) / 100),
+            radiusShare: CGFloat(node.props.getFloat("radius", default: 28) / 100),
             baseColor: Color(argb: node.props.getColor("color", default: 0x66FF_FFFF)),
             activeColor: Color(argb: node.props.getColor("active_color", default: 0xE6FF_FFFF))
         )
@@ -29,6 +33,8 @@ private struct DpadPad: View {
     let port: Int
     let threshold: Float
     let diagonalRatio: Float
+    let thickness: CGFloat
+    let radiusShare: CGFloat
     let baseColor: Color
     let activeColor: Color
 
@@ -36,10 +42,10 @@ private struct DpadPad: View {
 
     var body: some View {
         GeometryReader { geo in
-            let arm = min(geo.size.width, geo.size.height) * 0.36
+            let arm = min(geo.size.width, geo.size.height) * thickness
             let armLength = min(geo.size.width, geo.size.height) / 2 - arm / 2
             let span = arm + armLength * 2
-            let radius = arm * 0.28
+            let radius = arm * radiusShare
 
             ZStack {
                 RoundedRectangle(cornerRadius: radius)

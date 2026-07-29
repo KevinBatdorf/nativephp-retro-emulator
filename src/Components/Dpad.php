@@ -15,8 +15,10 @@ class Dpad extends Component
     public function __construct(
         public string $surface = 'main',
         public int $port = 1,
-        public ?float $threshold = null,
-        public ?float $diagonalRatio = null,
+        public ?int $threshold = null,
+        public ?int $diagonalRatio = null,
+        public ?int $thickness = null,
+        public ?int $radius = null,
         public ?string $color = null,
         public ?string $activeColor = null,
     ) {}
@@ -34,6 +36,12 @@ class Dpad extends Component
             }
             if ($this->diagonalRatio !== null) {
                 $attrs['diagonalRatio'] = $this->diagonalRatio;
+            }
+            if ($this->thickness !== null) {
+                $attrs['thickness'] = $this->thickness;
+            }
+            if ($this->radius !== null) {
+                $attrs['radius'] = $this->radius;
             }
             if ($this->color !== null) {
                 $attrs['color'] = $this->color;
