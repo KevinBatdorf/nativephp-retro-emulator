@@ -20,6 +20,7 @@ enum EmulatorErrorCode: string
     case InvalidParameters = 'INVALID_PARAMETERS';
     case UnknownButton = 'UNKNOWN_BUTTON';
     case RewindDisabled = 'REWIND_DISABLED';
+    case BootOnlyOption = 'BOOT_ONLY_OPTION';
 
     // Operational outcomes — the call was valid but the world said no.
     // Dispatched as an EmulatorError event, never thrown.

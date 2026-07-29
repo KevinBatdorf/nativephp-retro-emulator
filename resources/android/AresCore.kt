@@ -140,6 +140,22 @@ class AresCore {
     fun isSlotConnected(index: Int): Boolean = nativeIsSlotConnected(index)
 
     /**
+     * Stage a boot option by ares' own option() name (e.g. "Pixel Accuracy").
+     * Applied before the next boot's load() — these pick renderer
+     * implementations, so a running core never changes; cores without the
+     * option ignore it.
+     */
+    fun stageBootOption(name: String, value: Boolean) =
+        nativeStageBootOption(name, if (value) "true" else "false")
+
+    /**
+     * Live boot-option value from the running core ("true"/"false"), or ""
+     * when nothing is loaded or the core doesn't expose it. Reads core state,
+     * not the staged map.
+     */
+    fun bootOption(name: String): String = nativeGetBootOption(name)
+
+    /**
      * Write current battery-backed memory to disk under the prefix passed to
      * [loadRom]. GL thread only. Returns false when nothing was persisted.
      */
@@ -411,6 +427,8 @@ class AresCore {
     ): Int
     private external fun nativeStageSlot(index: Int, rom: ByteArray)
     private external fun nativeIsSlotConnected(index: Int): Boolean
+    private external fun nativeStageBootOption(name: String, value: String)
+    private external fun nativeGetBootOption(name: String): String
     private external fun nativeFlushSaves(): Boolean
     private external fun nativeSetAudio(volume: Float, balance: Float)
     private external fun nativeSetVideo(

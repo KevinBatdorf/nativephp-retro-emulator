@@ -75,12 +75,29 @@ final class EmulatorRenderer: UIView {
     /// until the next `loadRom`. System firmware is embedded in the native
     /// library — no assets are required; `biosPath` optionally overrides gba's
     /// embedded open BIOS with a real dump for accuracy.
-    func loadSystem(_ system: String, biosPath: String? = nil) -> Bool {
+    func loadSystem(
+        _ system: String,
+        biosPath: String? = nil,
+        bootOptions: [String: Bool] = [:]
+    ) -> Bool {
         emuLock.lock()
+        // Staged for the next boot's load(); a running core never changes.
+        for (name, value) in bootOptions {
+            ares_stage_boot_option(ctx, name, value ? "true" : "false")
+        }
         let ok = ares_load_system(ctx, system, biosPath ?? "")
         emuLock.unlock()
         if ok { loadedSystem = system }
         return ok
+    }
+
+    /// Live boot-option value from the running core ("true"/"false", "" when
+    /// not exposed). Reads core state, not what was requested.
+    func bootOption(_ name: String) -> String {
+        emuLock.lock()
+        let value = String(cString: ares_get_boot_option(ctx, name))
+        emuLock.unlock()
+        return value
     }
 
     /// ares ids compiled into this build (e.g. ["fc", "sfc", "gb", "md"]).

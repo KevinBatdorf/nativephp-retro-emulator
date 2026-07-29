@@ -289,7 +289,8 @@ enum EmulatorFunctions {
     /// `supported: true`. System firmware (SFC ipl.rom + boards.bml, GB boot
     /// ROM, MD TMSS) is embedded; no biosPath is needed for these systems.
     /// config keys: biosPath (String?), autoSave, speed, runAhead, rewind,
-    /// rewindBufferSeconds, dynamicRateControl.
+    /// rewindBufferSeconds, dynamicRateControl, pixelAccuracy (boot-only
+    /// renderer choice, see Configure).
     class LoadSystem: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
@@ -330,8 +331,15 @@ enum EmulatorFunctions {
             let toggles = coreToggles(from: config)
             if !toggles.isEmpty { renderer.setCoreOptions(toggles) }
 
+            // Boot-only: picks the renderer implementation before load. Cores
+            // without a choice (fc, gb, md) accept and ignore it.
+            let bootOptions = [
+                "Pixel Accuracy": config["pixelAccuracy"] as? Bool ?? false,
+            ]
+
             guard renderer.loadSystem(system,
-                                      biosPath: config["biosPath"] as? String) else {
+                                      biosPath: config["biosPath"] as? String,
+                                      bootOptions: bootOptions) else {
                 return BridgeResponse.error(code: "LOAD_FAILED", message: "ares_load_system failed for '\(system)'")
             }
 
@@ -716,6 +724,16 @@ enum EmulatorFunctions {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
             let options = parameters["options"] as? [String: Any] ?? [:]
 
+            if options["pixelAccuracy"] != nil {
+                // Even upstream only honors this at the next load — reject
+                // rather than silently defer.
+                return BridgeResponse.error(
+                    code: "BOOT_ONLY_OPTION",
+                    message: "pixelAccuracy can only be set in the LoadSystem config — "
+                        + "it picks the renderer at boot; reboot the system to change it"
+                )
+            }
+
             if let runAhead = (options["runAhead"] as? NSNumber)?.intValue {
                 guard (0...1).contains(runAhead) else {
                     return BridgeResponse.error(
@@ -1025,8 +1043,18 @@ enum EmulatorFunctions {
     /// Return the current emulator status: "stopped", "loading", "running", or "paused".
     class GetStatus: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
-            let status = renderer(parameters)?.currentStatus ?? "stopped"
-            return BridgeResponse.success(data: ["status": status])
+            let renderer = renderer(parameters)
+            let status = renderer?.currentStatus ?? "stopped"
+
+            var payload: [String: Any] = ["status": status]
+            // Read back from the running core (which PPU is actually bound),
+            // not from what was requested. Absent on cores with one renderer.
+            switch renderer?.bootOption("Pixel Accuracy") {
+            case "true": payload["accuracy"] = "accurate"
+            case "false": payload["accuracy"] = "performance"
+            default: break
+            }
+            return BridgeResponse.success(data: payload)
         }
     }
 

@@ -33,6 +33,15 @@ auto cartridgePak(const uint8_t* rom, size_t romSize) -> CartridgePak {
 
 auto clearEntryPoints() -> void { ares::GameBoyAdvance::Thread::EntryPoints().clear(); }
 
+auto setOption(const std::string& name, const std::string& value) -> bool {
+    return ares::GameBoyAdvance::option(nall::string(name.c_str()), nall::string(value.c_str()));
+}
+
+auto getOption(const std::string& name) -> std::string {
+    if (name == "Pixel Accuracy") return ares::GameBoyAdvance::ppu.accurate ? "true" : "false";
+    return {};
+}
+
 const SystemDef kDef = {
     .id            = "gba",
     .name          = "Game Boy Advance",
@@ -57,6 +66,8 @@ const SystemDef kDef = {
     .makeCartridgePak = cartridgePak,
     .makeSlotPak   = nullptr,
     .clearEntryPoints = clearEntryPoints,
+    .setOption     = setOption,
+    .getOption     = getOption,
 };
 
 const SystemRegistry::Registrar kRegistrar{&kDef};

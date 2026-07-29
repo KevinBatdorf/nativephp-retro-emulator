@@ -1,5 +1,6 @@
 <?php
 
+use KevinBatdorf\RetroEmulator\Accuracy;
 use KevinBatdorf\RetroEmulator\AspectCorrection;
 use KevinBatdorf\RetroEmulator\Buttons\FcButton;
 use KevinBatdorf\RetroEmulator\Buttons\GbaButton;
@@ -8,6 +9,8 @@ use KevinBatdorf\RetroEmulator\Buttons\MdButton;
 use KevinBatdorf\RetroEmulator\Buttons\SfcButton;
 use KevinBatdorf\RetroEmulator\Components\Emulator as EmulatorComponent;
 use KevinBatdorf\RetroEmulator\Config\Config;
+use KevinBatdorf\RetroEmulator\Config\FcConfig;
+use KevinBatdorf\RetroEmulator\Config\GbaConfig;
 use KevinBatdorf\RetroEmulator\Config\GbConfig;
 use KevinBatdorf\RetroEmulator\Config\MdConfig;
 use KevinBatdorf\RetroEmulator\Config\RegionalSystemConfig;
@@ -690,6 +693,36 @@ describe('Typed layer', function () {
             'colorEmulation' => true,
             'interframeBlending' => true,
         ]);
+    });
+
+    it('the accuracy preset resolves to the pixelAccuracy wire flag', function () {
+        expect((new SfcConfig(accuracy: Accuracy::Accurate))->toArray())
+            ->toBe(['pixelAccuracy' => true]);
+        expect((new GbaConfig(accuracy: Accuracy::Performance))->toArray())
+            ->toBe(['pixelAccuracy' => false]);
+    });
+
+    it('a direct pixelAccuracy override beats the preset', function () {
+        $config = new SfcConfig(accuracy: Accuracy::Accurate, pixelAccuracy: false);
+
+        expect($config->toArray())->toBe(['pixelAccuracy' => false]);
+    });
+
+    it('accuracy left unset stays off the wire, keeping the native default', function () {
+        expect((new SfcConfig)->toArray())->toBe([]);
+    });
+
+    it('every system config accepts the accuracy knobs', function () {
+        $configs = [FcConfig::class, GbConfig::class, GbaConfig::class, MdConfig::class, SfcConfig::class];
+
+        foreach ($configs as $class) {
+            expect((new $class(accuracy: Accuracy::Accurate))->toArray())
+                ->toBe(['pixelAccuracy' => true], $class);
+        }
+    });
+
+    it('treats BOOT_ONLY_OPTION as a programmer error that throws', function () {
+        expect(EmulatorErrorCode::BootOnlyOption->throwsAsException())->toBeTrue();
     });
 
     it('the global Config serializes shared knobs as wire values', function () {

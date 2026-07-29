@@ -2,6 +2,7 @@
 
 namespace KevinBatdorf\RetroEmulator\Config;
 
+use KevinBatdorf\RetroEmulator\Accuracy;
 use KevinBatdorf\RetroEmulator\AspectCorrection;
 use KevinBatdorf\RetroEmulator\InputCapture;
 use KevinBatdorf\RetroEmulator\VideoOutput;
@@ -37,6 +38,10 @@ class Config
      * @param  int|null  $rewindBufferSeconds  Seconds of history to retain.
      * @param  string|null  $shader  librashader .slangp path; clear an active
      *                               shader with setShader(null), not null here.
+     * @param  Accuracy|null  $accuracy  Renderer preset — boot-only; changing it
+     *                                   means rebooting the system.
+     * @param  bool|null  $pixelAccuracy  Direct ares "Pixel Accuracy" override;
+     *                                    beats $accuracy when both are set.
      */
     public function __construct(
         public ?int $luminance = null,
@@ -58,6 +63,8 @@ class Config
         public ?bool $dynamicRateControl = null,
         public ?bool $rumble = null,
         public ?string $shader = null,
+        public ?Accuracy $accuracy = null,
+        public ?bool $pixelAccuracy = null,
     ) {}
 
     /** @return array<string, mixed> */
@@ -83,6 +90,20 @@ class Config
             'dynamicRateControl' => $this->dynamicRateControl,
             'rumble' => $this->rumble,
             'shader' => $this->shader,
+            'pixelAccuracy' => $this->resolvedPixelAccuracy(),
         ], fn ($value) => $value !== null);
+    }
+
+    /**
+     * The one wire value both knobs feed. Override beats preset; both unset
+     * omits the key, leaving the native default (performance) authoritative.
+     */
+    private function resolvedPixelAccuracy(): ?bool
+    {
+        return $this->pixelAccuracy ?? match ($this->accuracy) {
+            Accuracy::Accurate => true,
+            Accuracy::Performance => false,
+            null => null,
+        };
     }
 }

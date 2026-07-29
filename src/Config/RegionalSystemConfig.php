@@ -2,6 +2,7 @@
 
 namespace KevinBatdorf\RetroEmulator\Config;
 
+use KevinBatdorf\RetroEmulator\Accuracy;
 use KevinBatdorf\RetroEmulator\AspectCorrection;
 use KevinBatdorf\RetroEmulator\InputCapture;
 use KevinBatdorf\RetroEmulator\Region;
@@ -35,6 +36,8 @@ abstract class RegionalSystemConfig extends SystemConfig
         ?bool $dynamicRateControl = null,
         ?bool $rumble = null,
         ?string $shader = null,
+        ?Accuracy $accuracy = null,
+        ?bool $pixelAccuracy = null,
         ?string $biosPath = null,
         public ?Region $region = null,
         public ?array $preferredRegions = null,
@@ -59,6 +62,8 @@ abstract class RegionalSystemConfig extends SystemConfig
             dynamicRateControl: $dynamicRateControl,
             rumble: $rumble,
             shader: $shader,
+            accuracy: $accuracy,
+            pixelAccuracy: $pixelAccuracy,
             biosPath: $biosPath,
         );
     }

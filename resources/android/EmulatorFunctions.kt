@@ -328,6 +328,7 @@ object EmulatorFunctions {
      * no biosPath is needed for these systems.
      * config keys: biosPath (String?), autoSave (Bool), speed (Float), runAhead (Int),
      *              rewind (Bool), rewindBufferSeconds (Int), dynamicRateControl (Bool),
+     *              pixelAccuracy (Bool — boot-only renderer choice, see Configure),
      *              region (String, e.g. "PAL" — overrides ROM analysis),
      *              preferredRegions (List<String> — preference order for
      *              multi-region ROMs; default matches desktop's "NTSC-U").
@@ -376,7 +377,13 @@ object EmulatorFunctions {
                 .toMap()
             if (coreToggles.isNotEmpty()) renderer.queueCoreOptions(coreToggles)
 
-            renderer.queueSystemLoad(system, config["biosPath"] as? String)
+            // Boot-only: picks the renderer implementation before load. Cores
+            // without a choice (fc, gb, md) accept and ignore it.
+            val bootOptions = mapOf(
+                "Pixel Accuracy" to (config["pixelAccuracy"] as? Boolean ?: false),
+            )
+
+            renderer.queueSystemLoad(system, config["biosPath"] as? String, bootOptions)
 
             Log.d(TAG, "LoadSystem: staged system=$system")
             return BridgeResponse.success(mapOf("status" to "staged", "system" to system))
@@ -815,6 +822,16 @@ object EmulatorFunctions {
             @Suppress("UNCHECKED_CAST")
             val options = paramMap(parameters, "options") ?: emptyMap()
 
+            if (options.containsKey("pixelAccuracy")) {
+                // Even upstream only honors this at the next load — reject
+                // rather than silently defer.
+                return BridgeResponse.error(
+                    "BOOT_ONLY_OPTION",
+                    "pixelAccuracy can only be set in the LoadSystem config — " +
+                        "it picks the renderer at boot; reboot the system to change it",
+                )
+            }
+
             (options["runAhead"] as? Number)?.toInt()?.let { frames ->
                 if (frames !in 0..1) {
                     return BridgeResponse.error(
@@ -1156,9 +1173,21 @@ object EmulatorFunctions {
     /** Return the current emulator status: "stopped", "loading", "running", or "paused". */
     class GetStatus(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
-            val name   = surface(parameters)
-            val status = surfaces[name]?.renderer?.currentStatus ?: "stopped"
-            return BridgeResponse.success(mapOf("status" to status))
+            val name     = surface(parameters)
+            val renderer = surfaces[name]?.renderer
+            val status   = renderer?.currentStatus ?: "stopped"
+
+            // Read back from the running core (which PPU is actually bound),
+            // not from what was requested. Absent on cores with one renderer.
+            val accuracy = when (renderer?.bootOption("Pixel Accuracy")) {
+                "true" -> "accurate"
+                "false" -> "performance"
+                else -> null
+            }
+
+            val payload = mutableMapOf<String, Any>("status" to status)
+            accuracy?.let { payload["accuracy"] = it }
+            return BridgeResponse.success(payload)
         }
     }
 

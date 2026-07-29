@@ -101,6 +101,12 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     @Volatile var pendingRomBytes: ByteArray? = null
     @Volatile var pendingSavePrefix: String?  = null
 
+    // Boot options (ares option() names → value), staged native-side on the
+    // render thread with the system — same reason as pendingSlots: the native
+    // call no-ops before the core library is up. Published by the
+    // pendingSystemId volatile write that follows.
+    private var pendingBootOptions: Map<String, Boolean> = emptyMap()
+
     // Sufami Turbo / BS-X slot carts staged for the next ROM load (index 0 =
     // Slot A, 1 = Slot B). Applied on the render thread immediately before
     // core.loadRom — NOT via a direct core.stageSlot: the native call no-ops
@@ -340,6 +346,9 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
                 // Consume on success too: a stale request left behind would
                 // silently re-stage on the frame after a stop.
                 pendingSystemId = null
+                pendingBootOptions.forEach { (name, value) ->
+                    core.stageBootOption(name, value)
+                }
                 systemStaged = core.loadSystem(systemId, pendingBiosPath)
                 if (!systemStaged) Log.e(TAG, "loadSystem($systemId) failed")
             }
@@ -608,9 +617,14 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
      * legal and leaves the running game untouched until the next ROM load.
      * @param systemId ares system ID — one of [AresCore.supportedSystems].
      */
-    fun queueSystemLoad(systemId: String, biosPath: String? = null) {
+    fun queueSystemLoad(
+        systemId: String,
+        biosPath: String? = null,
+        bootOptions: Map<String, Boolean> = emptyMap(),
+    ) {
         stagedSystemId = systemId
         pendingBiosPath = biosPath
+        pendingBootOptions = bootOptions
         pendingSystemId = systemId
         requestRender()
     }
@@ -1083,6 +1097,13 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
      * once the ROM is loaded — the native value is written before [romLoaded] is set.
      */
     fun getRegion(): String = core.getRegion()
+
+    /**
+     * Live boot-option value ("true"/"false", "" when not exposed). Written
+     * only during boot on the render thread — same cross-thread contract as
+     * [getRegion].
+     */
+    fun bootOption(name: String): String = core.bootOption(name)
 
     /** Screen-node presentation geometry (see [AresCore.getVideoGeometry]). Any thread. */
     fun videoGeometry(): DoubleArray = core.getVideoGeometry()

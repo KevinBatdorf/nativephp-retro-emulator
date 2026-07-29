@@ -36,6 +36,12 @@ auto cartridgePak(const uint8_t* rom, size_t romSize) -> CartridgePak {
 
 auto clearEntryPoints() -> void { ares::MegaDrive::Thread::EntryPoints().clear(); }
 
+// md declares Recompiler (32X-only, compile-gated) and TMSS. No live readback:
+// the recompiler flag lives on 32X hardware this build doesn't compile.
+auto setOption(const std::string& name, const std::string& value) -> bool {
+    return ares::MegaDrive::option(nall::string(name.c_str()), nall::string(value.c_str()));
+}
+
 const SystemDef kDef = {
     .id            = "md",
     .name          = "Sega Mega Drive / Genesis",
@@ -62,6 +68,7 @@ const SystemDef kDef = {
     .makeCartridgePak = cartridgePak,
     .makeSlotPak   = nullptr,
     .clearEntryPoints = clearEntryPoints,
+    .setOption     = setOption,
 };
 
 const SystemRegistry::Registrar kRegistrar{&kDef};

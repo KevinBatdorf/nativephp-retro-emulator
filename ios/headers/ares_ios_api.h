@@ -69,6 +69,17 @@ void ares_stage_slot(AresContext* ctx, int index, const uint8_t* rom, size_t rom
 // Test seam: whether a staged slot cartridge actually connected at load.
 bool ares_is_slot_connected(AresContext* ctx, int index);
 
+// Stage a boot option by ares' own option() name (e.g. "Pixel Accuracy",
+// value "true"/"false"). Applied before the next boot's load() — boot options
+// pick renderer implementations, so a running core never changes; cores
+// without the option ignore it.
+void ares_stage_boot_option(AresContext* ctx, const char* name, const char* value);
+
+// Live boot-option value from the running core — "true"/"false", or "" when
+// nothing is loaded or the core doesn't expose it. Reads core state (which
+// SNES PPU is bound), not the staged map. Pointer valid until the next call.
+const char* ares_get_boot_option(AresContext* ctx, const char* name);
+
 // Write current battery-backed memory to disk under the prefix passed to
 // ares_load_rom.  Must run on the emulation thread.  Returns false when
 // nothing was persisted.

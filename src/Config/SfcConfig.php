@@ -2,6 +2,7 @@
 
 namespace KevinBatdorf\RetroEmulator\Config;
 
+use KevinBatdorf\RetroEmulator\Accuracy;
 use KevinBatdorf\RetroEmulator\AspectCorrection;
 use KevinBatdorf\RetroEmulator\InputCapture;
 use KevinBatdorf\RetroEmulator\Region;
@@ -33,6 +34,8 @@ class SfcConfig extends RegionalSystemConfig
         ?bool $dynamicRateControl = null,
         ?bool $rumble = null,
         ?string $shader = null,
+        ?Accuracy $accuracy = null,
+        ?bool $pixelAccuracy = null,
         ?string $biosPath = null,
         ?Region $region = null,
         ?array $preferredRegions = null,
@@ -58,6 +61,8 @@ class SfcConfig extends RegionalSystemConfig
             dynamicRateControl: $dynamicRateControl,
             rumble: $rumble,
             shader: $shader,
+            accuracy: $accuracy,
+            pixelAccuracy: $pixelAccuracy,
             biosPath: $biosPath,
             region: $region,
             preferredRegions: $preferredRegions,

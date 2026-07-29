@@ -14,12 +14,21 @@ using SystemRegistry::CartridgePak;
 using SystemRegistry::SystemDef;
 
 auto loadSfc(ares::Node::System& root, const SystemDef&, const std::string& loadName) -> bool {
-    // PPUBase dispatches through an implementation pointer that is NULL until
-    // setAccurate() picks one — the desktop frontend always sets the
-    // "Pixel Accuracy" option before load; without this, load crashes in
-    // bus.reset() → ppu.map(). false = the performance PPU.
-    ares::SuperFamicom::ppu.setAccurate(false);
+    // The platform applies staged boot options (setOption) before load. This
+    // guard only covers callers that staged nothing: PPUBase dispatches
+    // through an implementation pointer that stays NULL until setAccurate()
+    // picks one, and load crashes in bus.reset() → ppu.map() on it.
+    if (!ares::SuperFamicom::ppu.implementation) ares::SuperFamicom::ppu.setAccurate(false);
     return ares::SuperFamicom::load(root, nall::string(loadName.c_str()));
+}
+
+auto setOption(const std::string& name, const std::string& value) -> bool {
+    return ares::SuperFamicom::option(nall::string(name.c_str()), nall::string(value.c_str()));
+}
+
+auto getOption(const std::string& name) -> std::string {
+    if (name == "Pixel Accuracy") return ares::SuperFamicom::ppu.accurate ? "true" : "false";
+    return {};
 }
 
 // Offsets are relative to memBase; bounds are enforced by the caller against
@@ -78,6 +87,8 @@ const SystemDef kDef = {
     .makeCartridgePak = cartridgePak,
     .makeSlotPak   = slotPak,
     .clearEntryPoints = clearEntryPoints,
+    .setOption     = setOption,
+    .getOption     = getOption,
 };
 
 const SystemRegistry::Registrar kRegistrar{&kDef};

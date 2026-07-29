@@ -75,6 +75,14 @@ struct SystemDef {
     // type per core namespace, so only the core can reach it (see
     // clearStaleEntryPoints).
     void (*clearEntryPoints)();
+
+    // Boot options, by ares' own option() names ("Pixel Accuracy"). Applied
+    // before load() — SNES picks its PPU implementation this way, and load()
+    // crashes on a null implementation if it never runs. nullptr = the core
+    // declares no options. getOption reads the live value back ("true"/"false",
+    // empty for an unknown name); nullptr = nothing readable.
+    bool (*setOption)(const std::string& name, const std::string& value);
+    std::string (*getOption)(const std::string& name);
 };
 
 // Registers a compiled core at static-init time: dlopen (Android's modular

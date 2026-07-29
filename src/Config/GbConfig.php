@@ -2,6 +2,7 @@
 
 namespace KevinBatdorf\RetroEmulator\Config;
 
+use KevinBatdorf\RetroEmulator\Accuracy;
 use KevinBatdorf\RetroEmulator\AspectCorrection;
 use KevinBatdorf\RetroEmulator\InputCapture;
 use KevinBatdorf\RetroEmulator\VideoOutput;
@@ -34,6 +35,8 @@ class GbConfig extends SystemConfig
         ?bool $dynamicRateControl = null,
         ?bool $rumble = null,
         ?string $shader = null,
+        ?Accuracy $accuracy = null,
+        ?bool $pixelAccuracy = null,
         ?string $biosPath = null,
         public ?bool $colorEmulation = null,
         public ?bool $interframeBlending = null,
@@ -58,6 +61,8 @@ class GbConfig extends SystemConfig
             dynamicRateControl: $dynamicRateControl,
             rumble: $rumble,
             shader: $shader,
+            accuracy: $accuracy,
+            pixelAccuracy: $pixelAccuracy,
             biosPath: $biosPath,
         );
     }

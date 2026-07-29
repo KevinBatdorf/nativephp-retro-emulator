@@ -49,6 +49,11 @@ struct EmulatorState {
     std::shared_ptr<vfs::directory> slotPak[2];
     bool                            slotConnected[2] = {false, false};  // test seam
 
+    // Boot options, keyed by ares' option() names ("Pixel Accuracy"). Applied
+    // through SystemDef::setOption before every load; survives ROM swaps like
+    // connectedDevice.
+    std::map<std::string, std::string> stagedBootOptions;
+
     u32    frameWidth  = 0;
     u32    frameHeight = 0;
 
@@ -919,6 +924,38 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeIsSlotConnected(
 }
 
 /**
+ * Stage a boot option by ares' own option() name (e.g. "Pixel Accuracy",
+ * value "true"/"false"). Applied before the next boot's load(); a core that
+ * declares no options ignores it there.
+ */
+JNIEXPORT void JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeStageBootOption(
+    JNIEnv* env, jobject, jstring nameStr, jstring valueStr)
+{
+    if (!g_state) return;
+    g_state->stagedBootOptions[jstringToString(env, nameStr)] =
+        jstringToString(env, valueStr);
+}
+
+/**
+ * Read a boot option's live value from the running core — "true"/"false", or
+ * "" when no core is loaded, the core declares no options, or the name is
+ * unknown. Reads core state (e.g. which SNES PPU is bound), not the staged
+ * map, so it reports what the boot actually did.
+ */
+JNIEXPORT jstring JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetBootOption(
+    JNIEnv* env, jobject, jstring nameStr)
+{
+    if (!g_state || !g_state->systemLoaded || !g_state->system ||
+        !g_state->system->getOption) {
+        return env->NewStringUTF("");
+    }
+    auto value = g_state->system->getOption(jstringToString(env, nameStr));
+    return env->NewStringUTF(value.c_str());
+}
+
+/**
  * Shared boot: takes an already-built game pak (cartridge bytes or disc
  * media — analysis happened in the caller, BEFORE any teardown, so a bad
  * file leaves a running game untouched) and runs the fresh-core boot.
@@ -941,6 +978,14 @@ static int bootWithPak(SystemRegistry::CartridgePak built,
 
     // Fresh core per game, like desktop.
     if (g_state->systemLoaded) unloadCore();
+
+    // Boot options precede load(), as desktop does (super-famicom.cpp:123) —
+    // SNES picks its PPU implementation here and load() crashes without one.
+    if (def->setOption) {
+        for (auto& [name, value] : g_state->stagedBootOptions) {
+            def->setOption(name, value);
+        }
+    }
 
     g_state->systemPak = def->makeSystemPak(*def, g_state->biosBytes);
     if (!def->load(g_state->root, *def, loadName)) {

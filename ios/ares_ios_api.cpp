@@ -44,6 +44,12 @@ struct AresContext {
     std::shared_ptr<vfs::directory> slotPak[2];
     bool                            slotConnected[2] = {false, false};  // test seam
 
+    // Boot options, keyed by ares' option() names ("Pixel Accuracy"). Applied
+    // through SystemDef::setOption before every load; survives ROM swaps like
+    // connectedDevice.
+    std::map<std::string, std::string> stagedBootOptions;
+    std::string bootOptionReadback;   // backs ares_get_boot_option's pointer
+
     ares::Node::System root;
     bool systemLoaded = false;
     bool romLoaded    = false;
@@ -750,6 +756,14 @@ static int bootWithPak(AresContext* ctx, SystemRegistry::CartridgePak built,
     // Fresh core per game, like desktop.
     if (ctx->systemLoaded) unloadCore(ctx);
 
+    // Boot options precede load(), as desktop does (super-famicom.cpp:123) —
+    // SNES picks its PPU implementation here and load() crashes without one.
+    if (def->setOption) {
+        for (auto& [name, value] : ctx->stagedBootOptions) {
+            def->setOption(name, value);
+        }
+    }
+
     ctx->systemPak = def->makeSystemPak(*def, ctx->biosBytes);
     if (!def->load(ctx->root, *def, loadName)) {
         fprintf(stderr, "ares_load_rom: ares load failed: %s\n", loadName.c_str());
@@ -1082,6 +1096,20 @@ void ares_stage_slot(AresContext* ctx, int index, const uint8_t* rom, size_t rom
 bool ares_is_slot_connected(AresContext* ctx, int index) {
     if (!ctx || index < 0 || index > 1) return false;
     return ctx->slotConnected[index];
+}
+
+void ares_stage_boot_option(AresContext* ctx, const char* name, const char* value) {
+    if (!ctx || !name || !value) return;
+    ctx->stagedBootOptions[name] = value;
+}
+
+const char* ares_get_boot_option(AresContext* ctx, const char* name) {
+    if (!ctx || !name || !ctx->systemLoaded || !ctx->system ||
+        !ctx->system->getOption) {
+        return "";
+    }
+    ctx->bootOptionReadback = ctx->system->getOption(name);
+    return ctx->bootOptionReadback.c_str();
 }
 
 // Status-string returns share one thread-local buffer (copied by the caller

@@ -619,6 +619,19 @@ class Emulator
     }
 
     /**
+     * Which renderer the running core actually bound — read back from the
+     * core, not from what was requested. Null before a boot and on cores with
+     * a single renderer (NES, GB/GBC, Mega Drive). Boot-only: change it via
+     * the LoadSystem config, then reboot.
+     */
+    public function accuracy(): ?Accuracy
+    {
+        $result = $this->call('Emulator.GetStatus', ['surface' => $this->surface]);
+
+        return Accuracy::tryFrom($result['accuracy'] ?? '');
+    }
+
+    /**
      * The controller ports of the staged system: the device connected to each
      * (null if none), its button + axis names, and which devices the port
      * supports (for connectDevice).

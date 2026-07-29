@@ -2,6 +2,7 @@
 
 namespace KevinBatdorf\RetroEmulator\Config;
 
+use KevinBatdorf\RetroEmulator\Accuracy;
 use KevinBatdorf\RetroEmulator\AspectCorrection;
 use KevinBatdorf\RetroEmulator\InputCapture;
 use KevinBatdorf\RetroEmulator\VideoOutput;
@@ -33,6 +34,8 @@ abstract class SystemConfig extends Config
         ?bool $dynamicRateControl = null,
         ?bool $rumble = null,
         ?string $shader = null,
+        ?Accuracy $accuracy = null,
+        ?bool $pixelAccuracy = null,
         public ?string $biosPath = null,
     ) {
         parent::__construct(
@@ -55,6 +58,8 @@ abstract class SystemConfig extends Config
             dynamicRateControl: $dynamicRateControl,
             rumble: $rumble,
             shader: $shader,
+            accuracy: $accuracy,
+            pixelAccuracy: $pixelAccuracy,
         );
     }
 
