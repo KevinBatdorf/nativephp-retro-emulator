@@ -726,7 +726,7 @@ static void unloadCore(AresContext* ctx)
         std::lock_guard<std::mutex> lock(ctx->audioMutex);
         ctx->audioRingBuffer.clear();
     }
-    // Game knowledge dies with the core (plan 4b): cheats, rewind timeline,
+    // Game knowledge dies with the core: cheats, rewind timeline,
     // the stale refresh hint, and any paused flag from the old game.
     ctx->cheats.clear();
     ctx->cheatLookup.clear();

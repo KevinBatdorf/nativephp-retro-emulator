@@ -93,7 +93,7 @@ struct EmulatorState {
     // persisting for the rest of the session.
     static constexpr size_t kAudioCap = 12000u;
 
-    // Phase 6 — input. Two per-port button masks OR'd together at poll time:
+    // Input. Two per-port button masks OR'd together at poll time:
     //   hwMask — hardware gamepad bits, written by the UI thread via
     //            nativeSetInputState (keycode/motion → positional bits).
     //   swMask — software bits, written natively by pressButton/setButtons with
@@ -161,10 +161,10 @@ struct EmulatorState {
     std::mutex        inputRemapMutex;
     std::atomic<bool> inputRemapDirty {false};
 
-    // Phase 7 — emulator control.
+    // Emulator control.
     std::atomic<bool> paused {false};
 
-    // Phase 14 — master audio volume (0–1) and balance (−1 left … +1 right),
+    // Master audio volume (0–1) and balance (−1 left … +1 right),
     // applied when mixing into the ring buffer. Atomic: set from bridge
     // threads, read on the emu thread.
     std::atomic<float> volume  {1.0f};
@@ -634,7 +634,7 @@ static void applyConnectedDevices() {
 // ---------------------------------------------------------------------------
 extern "C" {
 
-// Phase 3 — init/destroy/version -------------------------------------------
+// Init/destroy/version -------------------------------------------
 
 /**
  * dlopen every bundled core module. Each module's SystemRegistry::Registrar
@@ -710,7 +710,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeVersion(
     return env->NewStringUTF(ares::Version.data());
 }
 
-// Phase 1.3 — Vulkan surface lifecycle + present ----------------------------
+// Vulkan surface lifecycle + present ----------------------------
 //
 // The render thread drives these: surfaceCreated/Changed/Destroyed mirror the
 // SurfaceHolder callbacks, presentFrame runs once per loop after the tick(s),
@@ -808,9 +808,9 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeScreenshotRGBA(
     return arr;
 }
 
-// Phase 4/11 → 4b — system staging + ROM-first boot ---------------------------
+// System staging + ROM-first boot ---------------------------
 //
-// No core boots without a ROM (plan 4b, agreed 2026-07-12): LoadSystem only
+// No core boots without a ROM: LoadSystem only
 // STAGES the system choice, and LoadRom is the one boot path — first load and
 // every swap alike — mirroring desktop, which builds a fresh system per game
 // load with the region already known from the ROM analysis
@@ -890,7 +890,7 @@ static void unloadCore()
         std::lock_guard<std::mutex> lock(g_state->audioMutex);
         g_state->audioRingBuffer.clear();
     }
-    // Game knowledge dies with the core (plan 4b): cheats, rewind timeline,
+    // Game knowledge dies with the core: cheats, rewind timeline,
     // the stale refresh hint, and any paused flag from the old game.
     g_state->cheats.clear();
     g_state->rebuildCheatLookup();
@@ -1102,7 +1102,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadRom(
                        jstringToString(env, preferredRegionsStr));
 }
 
-// Phase 4 — tick (real frame) -----------------------------------------------
+// Tick (real frame) -----------------------------------------------
 
 // Port of desktop-ui rewindRun(): in normal play, snapshot every `frequency`
 // frames into a bounded ring; while rewinding, pop and restore at 5× the
@@ -1192,7 +1192,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeTick(
     // the render thread's nativePresentFrame uploads + presents it via Vulkan.
 }
 
-// Phase 4 — frame dimensions ------------------------------------------------
+// Frame dimensions ------------------------------------------------
 
 JNIEXPORT jint JNICALL
 Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetFrameWidth(
@@ -1247,7 +1247,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetRefreshRateHint(
         : 0.0;
 }
 
-// Phase 5 — audio drain -----------------------------------------------------
+// Audio drain -----------------------------------------------------
 
 /**
  * Drain mixed audio samples from the ring buffer into a caller-supplied float
@@ -1278,7 +1278,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeReadAudio(
     return count;
 }
 
-// Phase 6 — input ---------------------------------------------------------
+// Input ---------------------------------------------------------
 
 /**
  * Write the current button bitmask for one controller port. Safe to call from
@@ -1636,7 +1636,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeAimAt(
     return ret("");
 }
 
-// Phase 7 — pause / resume / stop ------------------------------------------
+// Pause / resume / stop ------------------------------------------
 
 JNIEXPORT void JNICALL
 Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativePause(JNIEnv*, jobject)
@@ -1652,7 +1652,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeResume(JNIEnv*, jobje
     LOGI("emulator resumed");
 }
 
-// Phase 7 — state save / load -----------------------------------------------
+// State save / load -----------------------------------------------
 
 JNIEXPORT jboolean JNICALL
 Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeStateSave(
@@ -1706,7 +1706,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeStateLoad(
     }
 }
 
-// Phase 7/11 — memory read / write --------------------------------------------
+// Memory read / write --------------------------------------------
 // Each system exposes its work-RAM bus window (see SystemRegistry memBase/
 // memSize). Must be called from the GL thread (same thread as tick) to avoid
 // data races with emulation.
@@ -1880,7 +1880,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetRumbleState(JNIEnv
     return g_state ? (jint)g_state->rumbleState.load(std::memory_order_relaxed) : 0;
 }
 
-// Phase 7 — region / ports --------------------------------------------------
+// Region / ports --------------------------------------------------
 
 JNIEXPORT jstring JNICALL
 Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetRegion(JNIEnv* env, jobject)
@@ -1959,7 +1959,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetPortsJson(JNIEnv* 
     return env->NewStringUTF(buildPortsJson().c_str());
 }
 
-// Phase 14 — audio / video options ---------------------------------------------
+// Audio / video options ---------------------------------------------
 
 /**
  * Master volume (0–1) and stereo balance (−1 left … +1 right), applied when
@@ -2018,7 +2018,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetCoreBoolean(
     return CoreOptions::readBoolean(g_state->root, jstringToString(env, keyStr));
 }
 
-// Phase 13 — battery-save flush ------------------------------------------------
+// Battery-save flush ------------------------------------------------
 
 /**
  * Write current battery-backed memory (save.ram, save.eeprom, …) to disk under
@@ -2037,7 +2037,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeFlushSaves(
     return SaveIO::flush(g_state->cartridgePak, g_state->savePrefix) ? JNI_TRUE : JNI_FALSE;
 }
 
-// Phase 11 — supported systems ------------------------------------------------
+// Supported systems ------------------------------------------------
 
 /** Comma-separated ids of the systems compiled into this build (e.g. "fc,gb,gba,gbc,md,sfc"). */
 JNIEXPORT jstring JNICALL

@@ -1,7 +1,7 @@
 import XCTest
 import RetroEmulator
 
-/// Phase 8 — xcframework smoke tests.
+/// Xcframework smoke tests.
 ///
 /// These tests verify that the static library links correctly and that the
 /// basic lifecycle API is callable without crashing.  No ROM is required;

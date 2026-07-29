@@ -115,7 +115,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     // render thread by the pendingRomBytes volatile write that follows.
     private val pendingSlots = arrayOfNulls<ByteArray>(2)
 
-    // Staged system declaration (plan 4b) — LoadSystem never boots a core;
+    // Staged system declaration — LoadSystem never boots a core;
     // these carry the declaration until a ROM arrives and triggers the boot.
     @Volatile var stagedSystemId: String = ""
         private set
@@ -138,7 +138,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     /** Optional listener for emulator lifecycle events — dispatched on the GL thread. */
     var eventListener: EmulatorEventListener? = null
 
-    // Phase 7 — synchronous GL-thread operations.
+    // Synchronous GL-thread operations.
     // Requests are posted from bridge threads and serviced on the render thread.
 
     private data class MemReadRequest(
@@ -172,13 +172,13 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     )
     private val pendingScreenshot = AtomicReference<ScreenshotRequest?>(null)
 
-    // Phase 7 — memory watches.
+    // Memory watches.
     // Keyed by bus address; value is the last known raw byte(s) as an Int
     // (single-byte watches use bits 0–7; multi-byte watches use a packed value).
     private data class WatchEntry(val address: Int, val length: Int, var lastValue: Int)
     private val watchedAddresses = ConcurrentHashMap<Int, WatchEntry>()
 
-    // Phase 7/14 — fast-forward and speed multiplier. fastForward takes
+    // Fast-forward and speed multiplier. fastForward takes
     // precedence (4×); otherwise speedMultiplier scales the tick budget.
     // The native side mirrors the flag so run-ahead suppresses itself.
     @Volatile var fastForward: Boolean = false
@@ -197,7 +197,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     private var votedFrameRate = 0.0
     private var tickAccumulator = 0.0
 
-    // Phase 13 — periodic battery-save flush (30 s, matching ares' desktop
+    // Periodic battery-save flush (30 s, matching ares' desktop
     // auto-save cadence). Set false via LoadSystem config { autoSave: false }.
     @Volatile var autoSave: Boolean = true
     private var lastAutoSaveNanos = 0L
@@ -340,7 +340,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     }
 
     private fun doFrame() {
-            // --- Consume pending system staging (never boots — plan 4b) ---
+            // --- Consume pending system staging (never boots) ---
             val systemId = pendingSystemId
             if (systemId != null) {
                 // Consume on success too: a stale request left behind would
@@ -613,7 +613,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
 
     /**
      * Queue a system STAGING; it executes on the next render-loop pass. No core
-     * boots until a ROM arrives (plan 4b) — re-staging over a running core is
+     * boots until a ROM arrives — re-staging over a running core is
      * legal and leaves the running game untouched until the next ROM load.
      * @param systemId ares system ID — one of [AresCore.supportedSystems].
      */
@@ -644,7 +644,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
         romPath: String = "",
         savePrefix: String? = null,
     ) {
-        // Game knowledge dies with the old game (plan 4b): cheat addresses and
+        // Game knowledge dies with the old game: cheat addresses and
         // watched addresses belong to the outgoing ROM. Cheats clear natively
         // inside the reboot; watches are wrapper-held so clear them here.
         watchedAddresses.clear()
@@ -738,7 +738,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     }
 
     // ---------------------------------------------------------------------------
-    // Phase 7 — synchronous GL-thread read/write helpers
+    // Synchronous GL-thread read/write helpers
     // ---------------------------------------------------------------------------
 
     /**
@@ -962,13 +962,13 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     }
 
     // ---------------------------------------------------------------------------
-    // Phase 7 — memory watches
+    // Memory watches
     // ---------------------------------------------------------------------------
 
     /**
      * Add or merge address watches. Each entry is either a plain bus address (Int)
      * or a map with "address" and "length" keys. Watches are game knowledge and
-     * clear automatically when a new ROM loads (plan 4b).
+     * clear automatically when a new ROM loads.
      *
      * @param entries List of addresses: each element is Int or Map<String,Int>.
      */
@@ -1032,7 +1032,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     }
 
     // ---------------------------------------------------------------------------
-    // Phase 14 — audio / video options
+    // Audio / video options
     // ---------------------------------------------------------------------------
 
     // Current audio mix, merged per-key so setVolume() and setBalance() don't

@@ -4,7 +4,7 @@ import AVFoundation
 import GameController
 import RetroEmulator
 
-/// Phase 9 — Metal renderer, audio engine, and input observer smoke tests.
+/// Metal renderer, audio engine, and input observer smoke tests.
 ///
 /// These run on the iOS simulator without a ROM.  They verify that the Metal
 /// device is available, textures can be created, and AVAudioEngine starts.

@@ -5,7 +5,7 @@ import RetroEmulator
 /// ares_load_system → ares_load_rom → ares_tick → ares_get_frame.
 ///
 /// System firmware (SFC ipl.rom + boards.bml, GB boot ROM, MD TMSS) is
-/// embedded in the native library since Phase 11 — no fixtures needed.
+/// embedded in the native library — no fixtures needed.
 ///
 /// ROM: synthetic 32 KB LoROM with a valid header and checksum.
 ///      No Nintendo IP — just an infinite SEI/BRA loop so the CPU keeps running.
@@ -51,11 +51,11 @@ final class BootTests: XCTestCase {
         }
     }
 
-    // MARK: - Multi-system load (Phase 11)
+    // MARK: - Multi-system load
 
     func testEveryCompiledSystemLoads() {
         // Each system loads its core and reports controller buttons. Sequential
-        // load/teardown in one process mirrors the Android Phase 11 test.
+        // load/teardown in one process mirrors the Android multi-system test.
         for id in ["fc", "sfc", "gb", "md"] {
             let localCtx = ares_create()
             XCTAssertTrue(ares_load_system(localCtx, id, nil), "\(id): loadSystem failed")
@@ -170,7 +170,7 @@ final class BootTests: XCTestCase {
     }
 
     func testRefreshRateHintArrivesAtBootAndStagingLeavesItZero() {
-        // Under ROM-first boot (plan 4b) screens register inside ares_load_rom
+        // Under ROM-first boot screens register inside ares_load_rom
         // — staging must leave the hint at 0. Expected value follows the core
         // formula at the pinned submodule (sfc/ppu/ppu.cpp:47, NTSC 262 lines).
         XCTAssertEqual(ares_get_refresh_rate_hint(ctx), 0.0)
@@ -231,7 +231,7 @@ final class BootTests: XCTestCase {
         XCTAssertTrue(ok, "boot() failed at ares_load_rom()")
     }
 
-    // MARK: - Battery-save persistence (Phase 13)
+    // MARK: - Battery-save persistence
 
     func testBatterySaveRoundTrip() throws {
         // A LoROM with 8KB battery RAM: the LOROM-RAM board reads save.ram at
