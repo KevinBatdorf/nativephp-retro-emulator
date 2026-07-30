@@ -1,0 +1,61 @@
+# Daily canary for the buildbot URLs `retro-emulator:fetch-core` constructs.
+# The verified-core table (README) depends on an external service that
+# republishes nightly — this catches a renamed core, a changed URL scheme, or
+# an error page served as a download before a user's fetch-core does.
+name: Core canary
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  fetch-verified-cores:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch every verified core, both ABIs
+        run: |
+          set -u
+          # The README's verified table + the ABIs fetch-core downloads.
+          # FetchCoreCommand::BUILDBOT is the same base URL.
+          CORES="snes9x fceumm mesen bsnes picodrive genesis_plus_gx"
+          ABIS="arm64-v8a x86_64"
+          BASE="https://buildbot.libretro.com/nightly/android/latest"
+          failed=0
+          for core in $CORES; do
+            for abi in $ABIS; do
+              name="${core}_libretro_android.so"
+              url="$BASE/$abi/$name.zip"
+              if ! curl -fsSL --retry 3 -o core.zip "$url"; then
+                echo "::error::$url is unreachable (404 or server error)"
+                failed=1; continue
+              fi
+              if ! unzip -l core.zip | grep -q "$name"; then
+                echo "::error::$url downloaded but is not a zip containing $name"
+                failed=1; continue
+              fi
+              echo "ok: $core ($abi) — $(stat -c%s core.zip) bytes"
+              rm -f core.zip
+            done
+          done
+          exit $failed
+
+      - name: Open an issue when the buildbot drifts
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create core-canary --repo "$GITHUB_REPOSITORY" \
+            --description "Automated buildbot drift reports" --force || true
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" \
+            --label core-canary --state open --json number --jq length)
+          if [ "$existing" = "0" ]; then
+            gh issue create --repo "$GITHUB_REPOSITORY" \
+              --title "Core canary: buildbot fetch failed" \
+              --label core-canary \
+              --body "A verified-table core stopped downloading cleanly — see the failed [Core canary run](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}). Check whether the buildbot renamed the core or changed its URL scheme, then update FetchCoreCommand::BUILDBOT / the README table."
+          fi
+
+permissions:
+  contents: read
+  issues: write
