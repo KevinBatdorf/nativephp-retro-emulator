@@ -202,13 +202,23 @@ PHP per press). `@change` reports held directions (`"Up,Right"`, `""`).
 
 ## Engines and cores
 
-Resolution order for who serves a boot: explicit `backend:` in the config →
-app map in `config/retro-emulator.php` (`'backends' => ['sfc' => 'snes9x']`)
-→ the built-in engine (ares). **There is no default pick**: SameBoy, mGBA
-and every downloadable core run only when a config names them — the user is
-always explicit about what they load. A name that doesn't serve the system
-throws `UNSUPPORTED_BACKEND` listing what does — never a silent
-substitution.
+Resolution order for who serves a boot:
+
+1. **Explicit `backend:` on the system config — strict.** What you name
+   must serve or `loadSystem` throws `UNSUPPORTED_BACKEND` listing what
+   does. Never a silent substitution.
+2. **The app map in `config/retro-emulator.php` — a graceful preference
+   list.** `'sfc' => ['snes9x', 'bsnes']` tries each in order; an engine
+   that isn't bundled/fetched is skipped (a plain string wraps to a
+   one-item list). The shipped config prefers the performance engine for
+   every system, so fetching a core activates it with no config edit.
+3. **The built-in engine (ares)** — the floor when the list runs dry or no
+   map entry exists.
+
+Engines only ever run because a config named them — the plugin hardcodes no
+pick. `engineOptions` in the same config implies a specific core; if the
+preference list falls past that core, the option validation fails loudly
+rather than applying to the wrong engine.
 
 ### Bring-your-own libretro cores
 

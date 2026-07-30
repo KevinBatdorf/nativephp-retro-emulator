@@ -330,20 +330,26 @@ enum EmulatorFunctions {
             }
 
             // An explicitly requested engine must exist for this system —
-            // a dev asking for one never silently gets another.
+            // a dev asking for one never silently gets another. The config
+            // map arrives as backendPreferences instead: try each in order,
+            // skip whatever isn't present, land on the built-in engine.
             let backend = config["backend"] as? String
+            let preferences: [String] = backend == nil
+                ? ((config["backendPreferences"] as? [Any])?.map { "\($0)" } ?? [])
+                : []
             var availableForSystem: [String] = []
-            if let backend {
+            var bundled = Set<String>()
+            if backend != nil || !preferences.isEmpty {
                 let engines = EmulatorRenderer.backendsJson
                 let entry = engines[system] as? [String: Any]
                 availableForSystem = entry?["backends"] as? [String] ?? []
-                let bundled = Set(engines.values
+                bundled = Set(engines.values
                     .compactMap { ($0 as? [String: Any])?["backends"] as? [String] }
                     .flatMap { $0 })
                 // A bundled engine that doesn't claim this system is a firm
                 // no. Any other name continues to native, which probes it as
                 // a bring-your-own libretro core.
-                if bundled.contains(backend), !availableForSystem.contains(backend) {
+                if let backend, bundled.contains(backend), !availableForSystem.contains(backend) {
                     return BridgeResponse.error(
                         code: "UNSUPPORTED_BACKEND",
                         message: "Backend '\(backend)' does not serve '\(system)' in this build — available: \(availableForSystem.joined(separator: ", "))"
@@ -356,18 +362,33 @@ enum EmulatorFunctions {
             let bootOptions = [
                 "Pixel Accuracy": config["pixelAccuracy"] as? Bool ?? false,
             ]
+            let biosPath = config["biosPath"] as? String
 
-            guard renderer.loadSystem(system,
-                                      biosPath: config["biosPath"] as? String,
-                                      bootOptions: bootOptions,
-                                      backend: backend) else {
-                if let backend, !availableForSystem.contains(backend) {
-                    return BridgeResponse.error(
-                        code: "UNSUPPORTED_BACKEND",
-                        message: "No libretro core named '\(backend)' could be loaded for '\(system)' — bundle it with the app or use a bundled engine: \(availableForSystem.joined(separator: ", "))"
-                    )
+            if let backend {
+                guard renderer.loadSystem(system, biosPath: biosPath,
+                                          bootOptions: bootOptions, backend: backend) else {
+                    if !availableForSystem.contains(backend) {
+                        return BridgeResponse.error(
+                            code: "UNSUPPORTED_BACKEND",
+                            message: "No libretro core named '\(backend)' could be loaded for '\(system)' — bundle it with the app or use a bundled engine: \(availableForSystem.joined(separator: ", "))"
+                        )
+                    }
+                    return BridgeResponse.error(code: "UNSUPPORTED_SYSTEM", message: "System '\(system)' failed to stage — no engine claimed it")
                 }
-                return BridgeResponse.error(code: "UNSUPPORTED_SYSTEM", message: "System '\(system)' failed to stage — no engine claimed it")
+            } else {
+                var staged = false
+                for candidate in preferences {
+                    if bundled.contains(candidate), !availableForSystem.contains(candidate) { continue }
+                    if renderer.loadSystem(system, biosPath: biosPath,
+                                           bootOptions: bootOptions, backend: candidate) {
+                        staged = true
+                        break
+                    }
+                }
+                if !staged, !renderer.loadSystem(system, biosPath: biosPath,
+                                                 bootOptions: bootOptions, backend: nil) {
+                    return BridgeResponse.error(code: "UNSUPPORTED_SYSTEM", message: "System '\(system)' failed to stage — no engine claimed it")
+                }
             }
 
             // Engine-declared options validate against the schema the staged

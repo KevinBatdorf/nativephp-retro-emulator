@@ -2,6 +2,7 @@
 
 namespace KevinBatdorf\RetroEmulator;
 
+use KevinBatdorf\RetroEmulator\Backend;
 use KevinBatdorf\RetroEmulator\Concerns\InteractsWithBridge;
 use KevinBatdorf\RetroEmulator\Config\Config;
 use KevinBatdorf\RetroEmulator\Config\SystemConfig;
@@ -62,9 +63,21 @@ class Emulator
             ? array_diff_key($config->toArray(), array_flip(self::PRESENTATION_KEYS))
             : $config;
 
-        // Engine resolution order: explicit config beats the app-wide
-        // config/retro-emulator.php map beats the built-in engine.
-        $staged['backend'] ??= config('retro-emulator.backends')[$systemId] ?? null;
+        // Engine resolution: an explicit backend is strict (must serve or
+        // throw); the config map is a graceful preference list — engines
+        // that aren't present are skipped, ending at the built-in engine.
+        if (! isset($staged['backend'])) {
+            $preferences = config('retro-emulator.backends')[$systemId] ?? [];
+
+            if ($preferences !== [] && $preferences !== null) {
+                $staged['backendPreferences'] = array_values(array_map(
+                    fn (Backend|string $engine) => $engine instanceof Backend
+                        ? $engine->value
+                        : $engine,
+                    (array) $preferences,
+                ));
+            }
+        }
         $staged = array_filter($staged, fn ($value) => $value !== null);
 
         $this->call('Emulator.LoadSystem', [

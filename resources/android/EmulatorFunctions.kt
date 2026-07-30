@@ -373,22 +373,30 @@ object EmulatorFunctions {
                 renderer.speedMultiplier = speed.coerceIn(0.25, 4.0)
             }
             // An explicitly requested engine must exist for this system —
-            // a dev asking for one never silently gets another.
+            // a dev asking for one never silently gets another. The config
+            // map arrives as backendPreferences instead: try each in order,
+            // skip whatever isn't present, land on the built-in engine.
             val backend = config["backend"] as? String
+            val preferences = if (backend == null) {
+                (config["backendPreferences"] as? List<*>)?.map { it.toString() }.orEmpty()
+            } else {
+                emptyList()
+            }
             var availableForSystem = emptyList<String>()
-            if (backend != null) {
+            var bundled = emptySet<String>()
+            if (backend != null || preferences.isNotEmpty()) {
                 val engines = JSONObject(EmulatorCore().backendsJson())
                 availableForSystem = engines.optJSONObject(system)?.optJSONArray("backends")
                     ?.let { list -> (0 until list.length()).map { list.getString(it) } }
                     ?: emptyList()
-                val bundled = engines.keys().asSequence()
+                bundled = engines.keys().asSequence()
                     .mapNotNull { engines.optJSONObject(it)?.optJSONArray("backends") }
                     .flatMap { list -> (0 until list.length()).map { list.getString(it) } }
                     .toSet()
                 // A bundled engine that doesn't claim this system is a firm
                 // no. Any other name continues to native, which probes it as
                 // a bring-your-own libretro core.
-                if (backend in bundled && backend !in availableForSystem) {
+                if (backend != null && backend in bundled && backend !in availableForSystem) {
                     return BridgeResponse.error(
                         "UNSUPPORTED_BACKEND",
                         "Backend '$backend' does not serve '$system' in this build — available: ${availableForSystem.joinToString(", ")}",
@@ -404,14 +412,33 @@ object EmulatorFunctions {
 
             // Synchronous staging so everything below validates against the
             // engine that will actually serve this system.
-            if (renderer.stageSystem(system, config["biosPath"] as? String, bootOptions, backend) != true) {
-                return if (backend != null && backend !in availableForSystem) {
-                    BridgeResponse.error(
-                        "UNSUPPORTED_BACKEND",
-                        "No libretro core named '$backend' could be loaded for '$system' — package it under resources/emulator-cores/android/<abi>/ or use a bundled engine: ${availableForSystem.joinToString(", ")}",
-                    )
-                } else {
-                    BridgeResponse.error(
+            val biosPath = config["biosPath"] as? String
+            var staged = false
+            if (backend != null) {
+                staged = renderer.stageSystem(system, biosPath, bootOptions, backend) == true
+                if (!staged) {
+                    return if (backend !in availableForSystem) {
+                        BridgeResponse.error(
+                            "UNSUPPORTED_BACKEND",
+                            "No libretro core named '$backend' could be loaded for '$system' — package it under resources/emulator-cores/android/<abi>/ or use a bundled engine: ${availableForSystem.joinToString(", ")}",
+                        )
+                    } else {
+                        BridgeResponse.error(
+                            "UNSUPPORTED_SYSTEM",
+                            "System '$system' failed to stage — no engine claimed it",
+                        )
+                    }
+                }
+            } else {
+                for (candidate in preferences) {
+                    if (candidate in bundled && candidate !in availableForSystem) continue
+                    if (renderer.stageSystem(system, biosPath, bootOptions, candidate) == true) {
+                        staged = true
+                        break
+                    }
+                }
+                if (!staged && renderer.stageSystem(system, biosPath, bootOptions, null) != true) {
+                    return BridgeResponse.error(
                         "UNSUPPORTED_SYSTEM",
                         "System '$system' failed to stage — no engine claimed it",
                     )

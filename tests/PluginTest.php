@@ -743,13 +743,17 @@ describe('Typed layer', function () {
             ->toContain('licence unknown');
     });
 
-    it('resolves the engine: explicit config beats the app map beats native default', function () {
+    it('resolves the engine: explicit is strict, the app map is a graceful preference list', function () {
         $GLOBALS['__nativephp_calls'] = [];
-        config()->set('retro-emulator.backends', ['gb' => 'ares']);
+        config()->set('retro-emulator.backends', [
+            'gb' => 'ares',
+            'fc' => ['fceumm', Backend::Ares],
+        ]);
 
         try {
             Emulator::surface('main')->loadSystem(System::Gb);
             Emulator::surface('main')->loadSystem(System::Gb, new GbConfig(backend: Backend::SameBoy));
+            Emulator::surface('main')->loadSystem(System::Fc);
             Emulator::surface('main')->loadSystem(System::Sfc);
 
             $staged = array_values(array_filter(
@@ -757,13 +761,28 @@ describe('Typed layer', function () {
                 fn ($call) => $call['function'] === 'Emulator.LoadSystem',
             ));
 
-            // App map fills the gap; explicit wins; unmapped systems send
-            // nothing — an unnamed boot runs the built-in engine.
-            expect($staged[0]['payload']['config']['backend'])->toBe('ares');
+            // The map travels as preferences (a string wraps to a list, enum
+            // cases become wire strings); explicit stays the strict backend
+            // key; unmapped systems send nothing — an unnamed boot runs the
+            // built-in engine.
+            expect($staged[0]['payload']['config']['backendPreferences'])->toBe(['ares']);
+            expect($staged[0]['payload']['config'])->not->toHaveKey('backend');
             expect($staged[1]['payload']['config']['backend'])->toBe('sameboy');
-            expect($staged[2]['payload']['config'])->not->toHaveKey('backend');
+            expect($staged[1]['payload']['config'])->not->toHaveKey('backendPreferences');
+            expect($staged[2]['payload']['config']['backendPreferences'])->toBe(['fceumm', 'ares']);
+            expect($staged[3]['payload']['config'])->not->toHaveKey('backend');
+            expect($staged[3]['payload']['config'])->not->toHaveKey('backendPreferences');
         } finally {
             config()->set('retro-emulator.backends', []);
+        }
+    });
+
+    it('ships a performance-first preference map covering every system', function () {
+        $map = require dirname(__DIR__).'/config/retro-emulator.php';
+
+        foreach (array_map(fn ($case) => $case->value, System::cases()) as $id) {
+            expect($map['backends'])->toHaveKey($id);
+            expect($map['backends'][$id])->toBeArray();
         }
     });
 

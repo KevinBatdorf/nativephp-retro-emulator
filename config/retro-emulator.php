@@ -32,17 +32,31 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Default engines
+    | Engine preferences
     |--------------------------------------------------------------------------
     |
-    | Which emulation engine serves each system, e.g. ['gb' => 'ares']. Systems
-    | not listed use the plugin's default: the bundled fast core where one
-    | exists (SameBoy for gb/gbc), ares otherwise. A per-boot backend on the
-    | system's config (GbConfig(backend: Backend::Ares)) overrides both.
-    | Emulator::systems() reports each system's available backends.
+    | Per system: the engines to try, in order. Each entry is tried until one
+    | serves — an engine that isn't bundled or fetched is skipped, and when
+    | the list runs dry the built-in engine (ares) plays. So the defaults
+    | below prefer the fast engine everywhere, cost nothing until a core is
+    | actually available, and activate the moment you fetch one:
+    |
+    |     php artisan retro-emulator:fetch-core snes9x
+    |
+    | A single string works too ('gb' => 'sameboy'). A per-boot backend on
+    | the system's config (SfcConfig(backend: 'bsnes')) overrides this map
+    | and is strict: what you name must serve, or loadSystem throws.
+    | Emulator::systems() reports each system's available engines.
     |
     */
 
-    'backends' => [],
+    'backends' => [
+        'fc' => ['fceumm'],
+        'sfc' => ['snes9x'],
+        'gb' => ['sameboy'],
+        'gbc' => ['sameboy'],
+        'gba' => ['mgba'],
+        'md' => ['picodrive'],
+    ],
 
 ];
