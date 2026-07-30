@@ -1166,9 +1166,7 @@ std::string EmulatorHost::backendsJson() {
             if (!claimants.empty()) claimants += ",";
             claimants += "\"" + name + "\"";
         }
-        auto* preferred = Backends::forSystem(id);
-        json += ",\"" + id + "\":{\"backends\":[" + claimants + "]"
-              + ",\"default\":\"" + (preferred ? preferred->name() : "") + "\"}";
+        json += ",\"" + id + "\":{\"backends\":[" + claimants + "]}";
     }
     return json + "}";
 }

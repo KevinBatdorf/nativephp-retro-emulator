@@ -156,8 +156,9 @@ public:
     bool toggleSupported(const std::string& key) const;
     // The engine serving calls right now: active, else staged, else "".
     std::string backendName() const;
-    // {"gb":{"backends":["ares","sameboy"],"default":"sameboy"}, …} for every
-    // available system — the introspection the PHP layer surfaces.
+    // {"engines":[…], "gb":{"backends":["ares","sameboy"]}, …} for every
+    // available system — the introspection the PHP layer surfaces. No
+    // "default" key on purpose: unnamed boots run the built-in engine.
     static std::string backendsJson();
     // Engine-declared options (libretro cores). Set returns "" or the
     // refusal message the bridge surfaces as UNSUPPORTED_OPTION; `staged`

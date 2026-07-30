@@ -23,17 +23,18 @@ php artisan retro-emulator:fetch-core snes9x
 
 | System | In the box | One download away |
 |---|---|---|
-| NES | ares — accurate, heavier | fceumm — fast, light (GPL-2.0) · mesen — most accurate (GPL-3.0) |
-| SNES | ares — accurate | snes9x — fast, runs everything (non-commercial) · bsnes — most accurate (GPL-3.0) |
+| NES | ares — accurate, heavier | fceumm — fast, light · mesen — most accurate |
+| SNES | ares — accurate | snes9x — fast, runs everything · bsnes — most accurate |
 | Game Boy / Color | ares · SameBoy — fast *and* accurate | |
 | GBA | ares · mGBA — fast, battle-tested | |
-| Genesis | ares — accurate, heaviest | picodrive — fastest (non-commercial) · genesis_plus_gx — accurate and still fast (non-commercial) |
+| Genesis | ares — accurate, heaviest | picodrive — fastest · genesis_plus_gx — accurate and still fast |
 
 We test every core in that table on real hardware. Any other libretro core
 loads the same way — untested, but if it renders in software it should just
-work. Downloads are Android `.so` files from the libretro buildbot; on iOS
-the bundled engines cover you, and extra cores must be embedded as
-self-built frameworks (see [AGENTS.md](AGENTS.md)).
+work. Each core carries its own licence — see
+[LICENSING.md](LICENSING.md). Downloads are Android `.so` files from the
+libretro buildbot; on iOS the bundled engines cover you, and extra cores
+must be embedded as self-built frameworks (see [AGENTS.md](AGENTS.md)).
 
 ## Show me
 

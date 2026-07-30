@@ -758,7 +758,7 @@ describe('Typed layer', function () {
             ));
 
             // App map fills the gap; explicit wins; unmapped systems send
-            // nothing and let the native fast-by-default decide.
+            // nothing — an unnamed boot runs the built-in engine.
             expect($staged[0]['payload']['config']['backend'])->toBe('ares');
             expect($staged[1]['payload']['config']['backend'])->toBe('sameboy');
             expect($staged[2]['payload']['config'])->not->toHaveKey('backend');

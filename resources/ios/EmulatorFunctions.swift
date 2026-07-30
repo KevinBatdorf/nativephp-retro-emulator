@@ -1208,8 +1208,7 @@ enum EmulatorFunctions {
                 let entry = backends[id] as? [String: Any]
                 return ["id": id, "name": name, "stable": stable,
                         "supported": compiled.contains(id),
-                        "backends": entry?["backends"] as? [String] ?? [],
-                        "defaultBackend": entry?["default"] as? String ?? ""]
+                        "backends": entry?["backends"] as? [String] ?? []]
             }
             let systems: [[String: Any]] = [
                 system("fc",  "NES / Famicom",             stable: true),

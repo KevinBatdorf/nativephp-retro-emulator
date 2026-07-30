@@ -63,7 +63,7 @@ class Emulator
             : $config;
 
         // Engine resolution order: explicit config beats the app-wide
-        // config/retro-emulator.php map beats the native fast-by-default.
+        // config/retro-emulator.php map beats the built-in engine.
         $staged['backend'] ??= config('retro-emulator.backends')[$systemId] ?? null;
         $staged = array_filter($staged, fn ($value) => $value !== null);
 

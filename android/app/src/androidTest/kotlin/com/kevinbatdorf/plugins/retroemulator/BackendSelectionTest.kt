@@ -6,9 +6,10 @@ import org.junit.runner.RunWith
 import java.io.File
 
 /**
- * Backend selection through the seam: gb/gbc default to the bundled SameBoy
- * fast core, an explicit backend request is honored (never silently
- * substituted), and both engines boot the same ROM and answer the same API.
+ * Backend selection through the seam: an unnamed boot runs the built-in
+ * engine (ares) — every other engine is an explicit choice, never a silent
+ * substitution — and the alternates boot the same ROM and answer the same
+ * API when named.
  *
  * Needs /data/local/tmp/test-gb.rom (see Phase11MultiSystemTest's push list).
  */
@@ -27,14 +28,28 @@ class BackendSelectionTest {
     }
 
     @Test
-    fun gbDefaultsToSameBoy() {
-        val rom = romOrSkip() ?: return
+    fun gbUnnamedBootsTheBuiltInEngine() {
         val core = EmulatorCore()
         try {
             assert(core.init())
             assert(core.loadSystem("gb")) { "loadSystem failed" }
+            assert(core.backendName() == "ares") {
+                "an unnamed boot runs the built-in engine — got '${core.backendName()}'"
+            }
+        } finally {
+            core.destroy()
+        }
+    }
+
+    @Test
+    fun explicitSameBoyServesGb() {
+        val rom = romOrSkip() ?: return
+        val core = EmulatorCore()
+        try {
+            assert(core.init())
+            assert(core.loadSystem("gb", backend = "sameboy")) { "loadSystem failed" }
             assert(core.backendName() == "sameboy") {
-                "gb must default to the bundled fast core — got '${core.backendName()}'"
+                "explicit sameboy must be honored — got '${core.backendName()}'"
             }
             assert(core.loadRom(rom) == EmulatorCore.LOAD_OK) { "loadRom failed on sameboy" }
             repeat(120) { core.tick() }
@@ -106,7 +121,21 @@ class BackendSelectionTest {
     }
 
     @Test
-    fun gbaDefaultsToMgba() {
+    fun gbaUnnamedBootsTheBuiltInEngine() {
+        val core = EmulatorCore()
+        try {
+            assert(core.init())
+            assert(core.loadSystem("gba")) { "loadSystem failed" }
+            assert(core.backendName() == "ares") {
+                "an unnamed boot runs the built-in engine — got '${core.backendName()}'"
+            }
+        } finally {
+            core.destroy()
+        }
+    }
+
+    @Test
+    fun explicitMgbaServesGba() {
         val romFile = File("/data/local/tmp/test-gba.rom")
         if (!romFile.exists()) {
             android.util.Log.w("BackendSelectionTest", "Skipping gba: no ROM")
@@ -115,9 +144,9 @@ class BackendSelectionTest {
         val core = EmulatorCore()
         try {
             assert(core.init())
-            assert(core.loadSystem("gba")) { "loadSystem failed" }
+            assert(core.loadSystem("gba", backend = "mgba")) { "loadSystem failed" }
             assert(core.backendName() == "mgba") {
-                "gba must default to the bundled fast core — got '${core.backendName()}'"
+                "explicit mgba must be honored — got '${core.backendName()}'"
             }
             assert(core.loadRom(romFile.readBytes()) == EmulatorCore.LOAD_OK) {
                 "loadRom failed on mgba"
@@ -164,7 +193,7 @@ class BackendSelectionTest {
     }
 
     @Test
-    fun backendsJsonReportsClaimantsAndDefaults() {
+    fun backendsJsonListsClaimantsAndSuggestsNothing() {
         val core = EmulatorCore()
         try {
             assert(core.init())
@@ -189,13 +218,11 @@ class BackendSelectionTest {
             assert("ares" in gbBackends && "sameboy" in gbBackends) {
                 "gb must be claimed by both engines — got $gbBackends"
             }
-            assert(gb.getString("default") == "sameboy") { "gb default must be sameboy" }
-
-            val gba = json.getJSONObject("gba")
-            assert(gba.getString("default") == "mgba") { "gba default must be mgba" }
-
-            val sfc = json.getJSONObject("sfc")
-            assert(sfc.getString("default") == "ares") { "sfc default must be ares" }
+            // Availability only — no crowned pick anywhere in the discovery
+            // surface; unnamed boots run the built-in engine.
+            assert(!gb.has("default")) { "backendsJson must not suggest a default" }
+            assert(!json.getJSONObject("gba").has("default"))
+            assert(!json.getJSONObject("sfc").has("default"))
         } finally {
             core.destroy()
         }

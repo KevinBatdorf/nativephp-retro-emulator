@@ -70,11 +70,6 @@ auto availableSystems() -> std::vector<std::string> {
     return ids;
 }
 
-// Fast-by-default: where a bundled fast core exists it is the system's
-// default engine; ares stays the always-there baseline and the accuracy
-// option. Order = preference.
-static const char* const kDefaultOrder[] = {"sameboy", "mgba", "ares"};
-
 auto forSystem(const std::string& systemId,
                const std::string& preferred) -> Backend* {
     auto claims = [&](Backend* backend) {
@@ -95,17 +90,10 @@ auto forSystem(const std::string& systemId,
         }
         return nullptr;
     }
-    for (auto* name : kDefaultOrder) {
-        auto* backend = byName(name);
-        if (claims(backend)) return backend;
-    }
-    // A backend outside the default table (BYO libretro) still serves when it
-    // is the only claimant.
-    for (auto& entry : registry()) {
-        auto* backend = instanceOf(entry);
-        if (claims(backend)) return backend;
-    }
-    return nullptr;
+    // No name means the built-in engine, never a substituted pick — every
+    // other engine runs only because a config named it.
+    auto* ares = byName("ares");
+    return claims(ares) ? ares : nullptr;
 }
 
 } // namespace Backends

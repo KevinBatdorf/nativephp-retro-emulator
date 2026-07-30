@@ -46,6 +46,29 @@ fleroviux, **MIT-licensed** — original work, freely redistributable, embedded
 with its license preserved at `native/firmware/LICENSE-cult-of-gba`. A dev may
 override it with a real BIOS dump via `biosPath` for bit-accurate compatibility.
 
+## Bring-your-own libretro cores
+
+Cores an app fetches (`retro-emulator:fetch-core`) or drops into
+`resources/emulator-cores/` are **not distributed with this plugin** — each
+one is the core project's work under its own licence, and complying when you
+ship your app is the app author's responsibility. The build prints one
+licence line per packaged core so nothing ships unnoticed. The
+hardware-tested set:
+
+| Core | Licence | What it means for your app |
+|---|---|---|
+| fceumm | GPL-2.0-or-later | Source availability for the combined app when distributed |
+| mesen | GPL-3.0 | Same, GPLv3 terms |
+| bsnes | GPL-3.0 | Same, GPLv3 terms |
+| snes9x | Snes9x licence (non-commercial only) | Never in a paid or monetized app |
+| picodrive | MAME-style non-commercial | Never in a paid or monetized app |
+| genesis_plus_gx | Non-commercial | Never in a paid or monetized app |
+| gambatte | GPL-2.0 | Source availability, GPLv2 terms |
+| nestopia | GPL-2.0 | Source availability, GPLv2 terms |
+| quicknes | LGPL-2.1 | Keep the core replaceable + offer its source |
+
+Cores outside this table: check the core project's licence before shipping.
+
 ---
 
 This is not legal advice. If you're building a business on store distribution,

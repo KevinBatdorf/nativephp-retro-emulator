@@ -204,9 +204,11 @@ PHP per press). `@change` reports held directions (`"Up,Right"`, `""`).
 
 Resolution order for who serves a boot: explicit `backend:` in the config →
 app map in `config/retro-emulator.php` (`'backends' => ['sfc' => 'snes9x']`)
-→ the plugin's built-in order (bundled fast engine where one exists, else
-ares). A name that doesn't serve the system throws `UNSUPPORTED_BACKEND`
-listing what does — never a silent substitution.
+→ the built-in engine (ares). **There is no default pick**: SameBoy, mGBA
+and every downloadable core run only when a config names them — the user is
+always explicit about what they load. A name that doesn't serve the system
+throws `UNSUPPORTED_BACKEND` listing what does — never a silent
+substitution.
 
 ### Bring-your-own libretro cores
 
@@ -235,21 +237,20 @@ dir into the app with the `lib` prefix Android needs. Name the core as
 Hardware-verified cores (instrumented suite boots each on device; CPU = % of
 one Snapdragon 8 Gen 2 core, same scenes as the ares numbers):
 
-| Core | System | Licence | CPU | ares same scene |
-|---|---|---|---|---|
-| fceumm | fc | GPL-2.0 | 6.9% | 28.6% |
-| mesen | fc | GPL-3.0 | 15.0% | 28.6% |
-| snes9x | sfc | non-commercial | 8.1% | 20.6% |
-| bsnes | sfc | GPL-3.0 | 18.5% | 20.6% |
-| picodrive | md | MAME-style non-commercial | 7.0% | 45.0% |
-| genesis_plus_gx | md | non-commercial | 8.6% | 45.0% |
+| Core | System | CPU | ares same scene |
+|---|---|---|---|
+| fceumm | fc | 6.9% | 28.6% |
+| mesen | fc | 15.0% | 28.6% |
+| snes9x | sfc | 8.1% | 20.6% |
+| bsnes | sfc | 18.5% | 20.6% |
+| picodrive | md | 7.0% | 45.0% |
+| genesis_plus_gx | md | 8.6% | 45.0% |
 
 Bundled for comparison: SameBoy 8.6% vs ares 27.7% (gb); mGBA 8.1% vs ares
 51.7% (gba). Other cores load but are untested; software renderers only (no
-hardware-GL cores). Core licences are the app author's obligation — GPL
-requires source availability for the combined app; non-commercial forbids
-paid apps. A daily GitHub Action (`core-canary.yml`) watches the buildbot
-URLs for drift.
+hardware-GL cores). Every core's licence and what it obligates lives in
+LICENSING.md — the app author's responsibility when shipping. A daily
+GitHub Action (`core-canary.yml`) watches the buildbot URLs for drift.
 
 ### engineOptions
 

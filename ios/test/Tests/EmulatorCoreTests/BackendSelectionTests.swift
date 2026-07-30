@@ -1,9 +1,10 @@
 import XCTest
 import RetroEmulator
 
-/// Backend selection through the seam on the static iOS build: gb defaults
-/// to the bundled SameBoy fast core, an explicit engine is honored, an
-/// unknown one fails to stage, and the discovery JSON reports both engines.
+/// Backend selection through the seam on the static iOS build: an unnamed
+/// boot runs the built-in engine (ares), an explicit engine is honored, an
+/// unknown one fails to stage, and the discovery JSON lists availability
+/// without suggesting a pick.
 final class BackendSelectionTests: XCTestCase {
     private var ctx: OpaquePointer!
 
@@ -18,10 +19,10 @@ final class BackendSelectionTests: XCTestCase {
         super.tearDown()
     }
 
-    func testGbDefaultsToSameBoy() {
+    func testGbUnnamedBootsTheBuiltInEngine() {
         XCTAssertTrue(emu_load_system(ctx, "gb", nil, nil))
-        XCTAssertEqual(String(cString: emu_get_backend_name(ctx)), "sameboy",
-                       "gb must default to the bundled fast core")
+        XCTAssertEqual(String(cString: emu_get_backend_name(ctx)), "ares",
+                       "an unnamed boot runs the built-in engine — every other engine is an explicit choice")
     }
 
     func testExplicitAresIsHonored() {
@@ -105,7 +106,7 @@ final class BackendSelectionTests: XCTestCase {
         return rom
     }
 
-    func testBackendsJsonReportsClaimantsAndDefaults() throws {
+    func testBackendsJsonListsClaimantsAndSuggestsNothing() throws {
         let raw = String(cString: emu_get_backends_json())
         let json = try XCTUnwrap(
             JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: Any]
@@ -113,19 +114,15 @@ final class BackendSelectionTests: XCTestCase {
         let gb = try XCTUnwrap(json["gb"] as? [String: Any])
         let engines = try XCTUnwrap(gb["backends"] as? [String])
         XCTAssertTrue(engines.contains("ares") && engines.contains("sameboy"))
-        XCTAssertEqual(gb["default"] as? String, "sameboy")
-
-        let gba = try XCTUnwrap(json["gba"] as? [String: Any])
-        XCTAssertEqual(gba["default"] as? String, "mgba")
-
-        let sfc = try XCTUnwrap(json["sfc"] as? [String: Any])
-        XCTAssertEqual(sfc["default"] as? String, "ares")
+        // Availability only — no crowned pick anywhere in the discovery
+        // surface; unnamed boots run the built-in engine.
+        XCTAssertNil(gb["default"], "backendsJson must not suggest a default")
     }
 
-    func testGbaDefaultsToMgba() {
+    func testGbaUnnamedBootsTheBuiltInEngine() {
         XCTAssertTrue(emu_load_system(ctx, "gba", nil, nil))
-        XCTAssertEqual(String(cString: emu_get_backend_name(ctx)), "mgba",
-                       "gba must default to the bundled fast core")
+        XCTAssertEqual(String(cString: emu_get_backend_name(ctx)), "ares",
+                       "an unnamed boot runs the built-in engine — every other engine is an explicit choice")
     }
 
     func testMgbaBootsARom() {

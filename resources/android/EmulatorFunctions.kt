@@ -1426,7 +1426,6 @@ object EmulatorFunctions {
                 "id" to id, "name" to name,
                 "stable" to stable, "supported" to (id in compiled),
                 "backends" to engines,
-                "defaultBackend" to (entry?.optString("default") ?: ""),
             )
         }
     }
