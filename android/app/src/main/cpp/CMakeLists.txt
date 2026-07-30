@@ -361,6 +361,44 @@ target_link_libraries(backend_ares PUBLIC ares_core nall ares_iface)
 target_link_libraries(backend_ares PRIVATE libco log retro_emulator)
 
 # ---------------------------------------------------------------------------
+# backend_sameboy — the SameBoy engine (Expat) + adapter: the bundled fast
+# core for gb/gbc. Engine sources come from the pinned sameboy submodule and
+# compile exactly as SameBoy's own Makefile does (GB_INTERNAL + gnu11 for the
+# core; the adapter sees only the opaque API). embedded_firmware.cpp is
+# compiled into this module too — each backend DSO carries its own copy
+# (RTLD_LOCAL keeps them separate) so backends never link each other.
+# ---------------------------------------------------------------------------
+get_filename_component(SAMEBOY_ROOT
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../sameboy"
+    ABSOLUTE
+)
+# Deterministic: the submodule is pinned, so the glob is a fixed set.
+file(GLOB SAMEBOY_SOURCES "${SAMEBOY_ROOT}/Core/*.c")
+# SameBoy's Makefile CORE_FILTER for DISABLE_DEBUGGER: these units only
+# compile with the debugger present.
+list(REMOVE_ITEM SAMEBOY_SOURCES
+    "${SAMEBOY_ROOT}/Core/debugger.c"
+    "${SAMEBOY_ROOT}/Core/sm83_disassembler.c"
+    "${SAMEBOY_ROOT}/Core/symbol_hash.c"
+    "${SAMEBOY_ROOT}/Core/cheat_search.c"
+)
+add_library(backend_sameboy SHARED
+    "${NATIVE_ROOT}/backends/sameboy/sameboy_backend.cpp"
+    "${FIRMWARE_DIR}/embedded_firmware.cpp"
+    ${SAMEBOY_SOURCES}
+)
+target_include_directories(backend_sameboy PRIVATE
+    "${SAMEBOY_ROOT}"
+    "${NATIVE_ROOT}"
+    "${FIRMWARE_DIR}"
+)
+set_source_files_properties(${SAMEBOY_SOURCES} PROPERTIES
+    COMPILE_OPTIONS "-DGB_INTERNAL;-std=gnu11;-D_GNU_SOURCE;-DGB_DISABLE_DEBUGGER;-DGB_DISABLE_CHEAT_SEARCH"
+)
+target_compile_definitions(backend_sameboy PRIVATE GB_VERSION="1.0.3")
+target_link_libraries(backend_sameboy PRIVATE retro_emulator log)
+
+# ---------------------------------------------------------------------------
 # Per-core modules — each is its own shared library so the copy-assets hook
 # can bundle only the systems a host app declares. dlopen runs the module's
 # SystemRegistry::Registrar, so loading IS registering.

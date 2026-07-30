@@ -231,6 +231,24 @@ find_package(Threads REQUIRED)
 # All object libraries are collected here so the xcframework slice is
 # self-contained: the host app only needs to link -lretro_emulator_ios.
 # ---------------------------------------------------------------------------
+# SameBoy engine sources (Expat) from the pinned submodule, compiled exactly
+# as SameBoy's own Makefile does; the debugger-only units are filtered the
+# same way the Android module filters them.
+get_filename_component(SAMEBOY_ROOT
+    "${CMAKE_CURRENT_SOURCE_DIR}/../sameboy"
+    ABSOLUTE
+)
+file(GLOB SAMEBOY_SOURCES "${SAMEBOY_ROOT}/Core/*.c")
+list(REMOVE_ITEM SAMEBOY_SOURCES
+    "${SAMEBOY_ROOT}/Core/debugger.c"
+    "${SAMEBOY_ROOT}/Core/sm83_disassembler.c"
+    "${SAMEBOY_ROOT}/Core/symbol_hash.c"
+    "${SAMEBOY_ROOT}/Core/cheat_search.c"
+)
+set_source_files_properties(${SAMEBOY_SOURCES} PROPERTIES
+    COMPILE_OPTIONS "-DGB_INTERNAL;-std=gnu11;-D_GNU_SOURCE;-DGB_DISABLE_DEBUGGER;-DGB_DISABLE_CHEAT_SEARCH;-DGB_VERSION=\"1.0.3\""
+)
+
 add_library(retro_emulator_ios STATIC
     "${CMAKE_CURRENT_SOURCE_DIR}/emulator_api.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/librashader_metal_shim.mm"
@@ -239,6 +257,8 @@ add_library(retro_emulator_ios STATIC
     "${NATIVE_ROOT}/host/system_catalog.cpp"
     "${NATIVE_ROOT}/host/emulator_host.cpp"
     "${NATIVE_ROOT}/backends/ares/ares_backend.cpp"
+    "${NATIVE_ROOT}/backends/sameboy/sameboy_backend.cpp"
+    ${SAMEBOY_SOURCES}
     "${NATIVE_ROOT}/system_registry.cpp"
     "${NATIVE_ROOT}/cores/core_sfc.cpp"
     "${NATIVE_ROOT}/cores/core_fc.cpp"
@@ -270,7 +290,15 @@ target_include_directories(retro_emulator_ios PUBLIC
     "${NATIVE_ROOT}/host"
     "${NATIVE_ROOT}/pak"
     "${NATIVE_ROOT}/vendor/librashader"
+    "${SAMEBOY_ROOT}"
     "${FIRMWARE_DIR}"
+)
+
+# The SameBoy adapter reports GB_VERSION; only it and the engine need the
+# macro.
+set_source_files_properties(
+    "${NATIVE_ROOT}/backends/sameboy/sameboy_backend.cpp"
+    PROPERTIES COMPILE_OPTIONS "-DGB_VERSION=\"1.0.3\""
 )
 
 # The librashader Metal shim needs ARC for the __bridge casts.

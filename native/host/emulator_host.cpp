@@ -386,6 +386,9 @@ int EmulatorHost::loadRom(const uint8_t* rom, size_t size,
 
     systemLoaded_ = true;
     romLoaded_    = true;
+    // Cheats staged before the first boot reach push-style engines here;
+    // ares reads the table directly.
+    if (!cheatLookup_.empty()) activeBackend_->syncCheats(cheatLookup_);
     // Report the BOOTED region — for region-free systems fall back to
     // whatever the analyzer said (usually empty).
     romRegion_ = region.empty() ? analysis.regionCsv : region;
@@ -1004,6 +1007,8 @@ void EmulatorHost::rebuildCheatLookup() {
     for (auto& [code, pairs] : cheats_) {
         for (auto& [addr, value] : pairs) cheatLookup_[addr] = value;
     }
+    // Push-style engines mirror the table into their own cheat slots.
+    if (activeBackend_ && systemLoaded_) activeBackend_->syncCheats(cheatLookup_);
 }
 
 bool EmulatorHost::addCheat(const std::string& code) {
@@ -1027,7 +1032,7 @@ bool EmulatorHost::removeCheat(const std::string& code) {
 
 void EmulatorHost::clearCheats() {
     cheats_.clear();
-    cheatLookup_.clear();
+    rebuildCheatLookup();
 }
 
 // --- rewind / run-ahead / pacing ------------------------------------------------------
@@ -1069,6 +1074,51 @@ void EmulatorHost::setRumbleEnabled(bool enabled) {
 
 uint32_t EmulatorHost::rumbleState() const {
     return rumbleState_.load(std::memory_order_relaxed);
+}
+
+// --- capabilities --------------------------------------------------------------------
+
+bool EmulatorHost::videoSettingsSupported() const {
+    auto* backend = activeBackend_ ? activeBackend_ : stagedBackend_;
+    auto* system  = activeBackend_ ? activeSystem_  : stagedSystem_;
+    if (!backend || !system) return true;   // nothing staged: nothing to reject yet
+    return backend->capabilities(system->id).videoSettings;
+}
+
+bool EmulatorHost::toggleSupported(const std::string& key) const {
+    auto* backend = activeBackend_ ? activeBackend_ : stagedBackend_;
+    auto* system  = activeBackend_ ? activeSystem_  : stagedSystem_;
+    if (!backend || !system) return true;
+    for (auto& option : backend->capabilities(system->id).options) {
+        if (option.stage == OptionInfo::Stage::Runtime && option.key == key) return true;
+    }
+    return false;
+}
+
+std::string EmulatorHost::backendName() const {
+    if (activeBackend_) return activeBackend_->name();
+    if (stagedBackend_) return stagedBackend_->name();
+    return "";
+}
+
+std::string EmulatorHost::backendsJson() {
+    std::string json = "{";
+    for (auto& id : Backends::availableSystems()) {
+        std::string claimants;
+        for (auto& name : Backends::names()) {
+            auto* backend = Backends::byName(name);
+            if (!backend) continue;
+            auto ids = backend->systems();
+            if (std::find(ids.begin(), ids.end(), id) == ids.end()) continue;
+            if (!claimants.empty()) claimants += ",";
+            claimants += "\"" + name + "\"";
+        }
+        auto* preferred = Backends::forSystem(id);
+        if (json.size() > 1) json += ",";
+        json += "\"" + id + "\":{\"backends\":[" + claimants + "]"
+              + ",\"default\":\"" + (preferred ? preferred->name() : "") + "\"}";
+    }
+    return json + "}";
 }
 
 // --- metadata ----------------------------------------------------------------------

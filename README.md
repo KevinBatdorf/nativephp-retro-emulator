@@ -202,16 +202,34 @@ the core is compiled into the shipped binaries, `stable: false` flags a core
 we consider not yet production-ready. Per-system game compatibility:
 `https://ares-emu.net/compatibility/<system>`.
 
-| System | id | Compiled today | Notes |
-|---|---|---|---|
-| NES / Famicom | `fc` | ✅ | |
-| SNES / Super Famicom | `sfc` | ✅ | Full feature set, incl. peripherals + slotted media |
-| Game Boy / Game Boy Color | `gb` / `gbc` | ✅ | |
-| Game Boy Advance | `gba` | ✅ | Boots on an embedded open BIOS; supply a real one via `biosPath` for accuracy |
-| Mega Drive / Genesis | `md` | ✅ | |
+| System | id | Compiled today | Default engine | Notes |
+|---|---|---|---|---|
+| NES / Famicom | `fc` | ✅ | ares | |
+| SNES / Super Famicom | `sfc` | ✅ | ares | Full feature set, incl. peripherals + slotted media |
+| Game Boy / Game Boy Color | `gb` / `gbc` | ✅ | SameBoy | ares selectable for its node-tree feature set |
+| Game Boy Advance | `gba` | ✅ | ares | Boots on an embedded open BIOS; supply a real one via `biosPath` for accuracy |
+| Mega Drive / Genesis | `md` | ✅ | ares | |
 
 Other ares systems appear in `Emulator::systems()` with `supported: false` —
 they aren't compiled into the shipped binaries.
+
+### Engines
+
+Phones want speed: where the plugin bundles a permissively-licensed fast
+core, it is that system's default engine, and ares stays available as the
+accuracy option. `Emulator::systems()` reports each system's `backends` and
+`defaultBackend`. Pick per boot with the config —
+
+```php
+use KevinBatdorf\RetroEmulator\Backend;
+
+Emulator::surface()->loadSystem(System::Gb, new GbConfig(backend: Backend::Ares));
+```
+
+— or app-wide in `config/retro-emulator.php` (`'backends' => ['gb' => 'ares']`).
+An engine that doesn't serve the system throws `UNSUPPORTED_BACKEND`, and an
+option the active engine lacks (e.g. `interframeBlending` on SameBoy) throws
+`UNSUPPORTED_OPTION` — never a silent no-op.
 
 ## BIOS files
 

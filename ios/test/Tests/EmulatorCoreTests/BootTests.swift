@@ -27,20 +27,20 @@ final class BootTests: XCTestCase {
     // MARK: - System load
 
     func testLoadSystemSucceeds() {
-        XCTAssertTrue(emu_load_system(ctx, "sfc", nil),
+        XCTAssertTrue(emu_load_system(ctx, "sfc", nil, nil),
                       "emu_load_system(\"sfc\") must return true")
     }
 
     func testLoadSystemIsIdempotent() {
-        XCTAssertTrue(emu_load_system(ctx, "sfc", nil))
+        XCTAssertTrue(emu_load_system(ctx, "sfc", nil, nil))
         // Second call should be a no-op and return true.
-        XCTAssertTrue(emu_load_system(ctx, "sfc", nil))
+        XCTAssertTrue(emu_load_system(ctx, "sfc", nil, nil))
     }
 
     func testLoadSystemFailsWithUnknownId() {
         // "saturn" has no ares core in this tree, so it is never registered —
         // an id absent from the registry must be rejected.
-        XCTAssertFalse(emu_load_system(ctx, "saturn", nil),
+        XCTAssertFalse(emu_load_system(ctx, "saturn", nil, nil),
                        "systems not compiled into this build must be rejected")
     }
 
@@ -58,7 +58,7 @@ final class BootTests: XCTestCase {
         // load/teardown in one process mirrors the Android multi-system test.
         for id in ["fc", "sfc", "gb", "md"] {
             let localCtx = emu_create()
-            XCTAssertTrue(emu_load_system(localCtx, id, nil), "\(id): loadSystem failed")
+            XCTAssertTrue(emu_load_system(localCtx, id, nil, nil), "\(id): loadSystem failed")
             let json = String(cString: emu_get_ports_json(localCtx))
             XCTAssertTrue(json.contains("buttons"), "\(id): unexpected ports JSON \(json)")
             emu_destroy(localCtx)
@@ -70,7 +70,7 @@ final class BootTests: XCTestCase {
     // MARK: - ROM load
 
     func testLoadRomSucceedsWithSyntheticLoRom() {
-        XCTAssertTrue(emu_load_system(ctx, "sfc", nil))
+        XCTAssertTrue(emu_load_system(ctx, "sfc", nil, nil))
 
         let rom = Self.makeMinimalLoRom()
         let ok  = rom.withUnsafeBytes {
@@ -88,7 +88,7 @@ final class BootTests: XCTestCase {
     }
 
     func testLoadRomFailsWithTooSmallData() {
-        XCTAssertTrue(emu_load_system(ctx, "sfc", nil))
+        XCTAssertTrue(emu_load_system(ctx, "sfc", nil, nil))
 
         let tiny = Data(count: 100)
         let ok   = tiny.withUnsafeBytes {
@@ -174,7 +174,7 @@ final class BootTests: XCTestCase {
         // — staging must leave the hint at 0. Expected value follows the core
         // formula at the pinned submodule (sfc/ppu/ppu.cpp:47, NTSC 262 lines).
         XCTAssertEqual(emu_get_refresh_rate_hint(ctx), 0.0)
-        XCTAssertTrue(emu_load_system(ctx, "sfc", nil))
+        XCTAssertTrue(emu_load_system(ctx, "sfc", nil, nil))
         XCTAssertEqual(emu_get_refresh_rate_hint(ctx), 0.0,
                        "staging must not boot a core")
         boot()
@@ -188,7 +188,7 @@ final class BootTests: XCTestCase {
         // ($02 = Europe → PAL, sfc_pak region detection); PAL SFC refresh =
         // cpuFrequency(PAL colorburst · 4.8) / (1364 · 312) ≈ 50.0070
         // (sfc/ppu/ppu.cpp, 312-line PAL frame).
-        XCTAssertTrue(emu_load_system(ctx, "sfc", nil))
+        XCTAssertTrue(emu_load_system(ctx, "sfc", nil, nil))
         let rom = Self.makeMinimalLoRom(region: .pal)
         let ok = rom.withUnsafeBytes {
             emu_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil, nil, nil) == 1
@@ -202,7 +202,7 @@ final class BootTests: XCTestCase {
     func testRegionOverrideWinsOverAnalysis() {
         // Explicit region override (dev knows best — junk homebrew headers):
         // an NTSC-headered ROM forced to PAL must boot PAL.
-        XCTAssertTrue(emu_load_system(ctx, "sfc", nil))
+        XCTAssertTrue(emu_load_system(ctx, "sfc", nil, nil))
         let rom = Self.makeMinimalLoRom()
         let ok = rom.withUnsafeBytes {
             emu_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil, "PAL", nil) == 1
@@ -215,7 +215,7 @@ final class BootTests: XCTestCase {
     // MARK: - Ports JSON
 
     func testGetPortsJsonAfterSystemLoad() {
-        XCTAssertTrue(emu_load_system(ctx, "sfc", nil))
+        XCTAssertTrue(emu_load_system(ctx, "sfc", nil, nil))
         let json = String(cString: emu_get_ports_json(ctx))
         XCTAssertTrue(json.contains("buttons"), "ports JSON must list buttons")
     }
@@ -224,7 +224,7 @@ final class BootTests: XCTestCase {
 
     private func boot() {
         let rom = Self.makeMinimalLoRom()
-        XCTAssertTrue(emu_load_system(ctx, "sfc", nil))
+        XCTAssertTrue(emu_load_system(ctx, "sfc", nil, nil))
         let ok = rom.withUnsafeBytes {
             emu_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil, nil, nil) == 1
         }
@@ -242,7 +242,7 @@ final class BootTests: XCTestCase {
         let pattern = Data(repeating: 0xAB, count: 8192)
         try pattern.write(to: URL(fileURLWithPath: savePath))
 
-        XCTAssertTrue(emu_load_system(ctx, "sfc", nil))
+        XCTAssertTrue(emu_load_system(ctx, "sfc", nil, nil))
         let rom = Self.makeMinimalLoRom(withSram: true)
         let ok = rom.withUnsafeBytes {
             emu_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, prefix, nil, nil) == 1
@@ -259,7 +259,7 @@ final class BootTests: XCTestCase {
     }
 
     func testFlushWithoutPrefixReturnsFalse() {
-        XCTAssertTrue(emu_load_system(ctx, "sfc", nil))
+        XCTAssertTrue(emu_load_system(ctx, "sfc", nil, nil))
         let rom = Self.makeMinimalLoRom()
         _ = rom.withUnsafeBytes {
             emu_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil, nil, nil) == 1

@@ -89,15 +89,29 @@ class EmulatorCore {
      * @param systemId One of [supportedSystems] (e.g. "sfc", "fc", "gb", "md").
      * @param biosPath Optional real BIOS dump to override gba's embedded open
      *                 BIOS for accuracy; null otherwise.
+     * @param backend  Engine to serve this system ("ares", "sameboy", …);
+     *                 null picks the bundled fast core where one exists.
      */
-    fun loadSystem(systemId: String, biosPath: String? = null): Boolean =
-        nativeLoadSystem(systemId, biosPath ?: "")
+    fun loadSystem(systemId: String, biosPath: String? = null, backend: String? = null): Boolean =
+        nativeLoadSystem(systemId, biosPath ?: "", backend ?: "")
 
-    /** Comma-separated ares system IDs compiled into this build (e.g. "fc,gb,gba,gbc,md,sfc"). */
+    /** Comma-separated system IDs available in this build (e.g. "fc,gb,gba,gbc,md,sfc"). */
     fun supportedSystems(): String = nativeGetSupportedSystems()
 
     /** Comma-separated ROM file extensions (no dots) valid for [systemId]. */
     fun systemExtensions(systemId: String): String = nativeGetSystemExtensions(systemId)
+
+    /** The engine serving calls right now: active, else staged, else "". */
+    fun backendName(): String = nativeGetBackendName()
+
+    /** Per-system engine availability + default pick, as a JSON object string. */
+    fun backendsJson(): String = nativeGetBackendsJson()
+
+    /** Whether the staged/active engine exposes the setVideo settings door. */
+    fun videoSettingsSupported(): Boolean = nativeVideoSettingsSupported()
+
+    /** Whether the staged/active engine declares the per-system toggle [key]. */
+    fun toggleSupported(key: String): Boolean = nativeToggleSupported(key)
 
     /**
      * Boot the staged system with this ROM — the ONE boot path, first load and
@@ -417,9 +431,13 @@ class EmulatorCore {
     private external fun nativeSetShader(path: String?): Boolean
     private external fun nativeScreenshotRGBA(dims: IntArray): ByteArray?
 
-    private external fun nativeLoadSystem(systemId: String, biosPath: String): Boolean
+    private external fun nativeLoadSystem(systemId: String, biosPath: String, backend: String): Boolean
     private external fun nativeGetSupportedSystems(): String
     private external fun nativeGetSystemExtensions(systemId: String): String
+    private external fun nativeGetBackendName(): String
+    private external fun nativeGetBackendsJson(): String
+    private external fun nativeVideoSettingsSupported(): Boolean
+    private external fun nativeToggleSupported(key: String): Boolean
 
     private external fun nativeLoadRom(
         romBytes: ByteArray, savePrefix: String?,

@@ -45,7 +45,7 @@ private const val RUMBLE_ONESHOT_MS = 10_000L
  *
  * Usage:
  * 1. Construct and set as the Activity's content view (or wrap in AndroidView).
- * 2. Call [queueSystemLoad] / [queueRomLoad]; the native calls execute on the
+ * 2. Call [stageSystem] / [queueRomLoad]; the native calls execute on the
  *    render thread once the surface is ready.
  */
 class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.Callback {
@@ -96,16 +96,8 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     }
 
     // Pending commands posted from the main thread and consumed on the GL thread.
-    @Volatile var pendingSystemId: String?    = null
-    @Volatile var pendingBiosPath: String?    = null
     @Volatile var pendingRomBytes: ByteArray? = null
     @Volatile var pendingSavePrefix: String?  = null
-
-    // Boot options (ares option() names → value), staged native-side on the
-    // render thread with the system — same reason as pendingSlots: the native
-    // call no-ops before the core library is up. Published by the
-    // pendingSystemId volatile write that follows.
-    private var pendingBootOptions: Map<String, Boolean> = emptyMap()
 
     // Sufami Turbo / BS-X slot carts staged for the next ROM load (index 0 =
     // Slot A, 1 = Slot B). Applied on the render thread immediately before
@@ -340,20 +332,8 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     }
 
     private fun doFrame() {
-            // --- Consume pending system staging (never boots) ---
-            val systemId = pendingSystemId
-            if (systemId != null) {
-                // Consume on success too: a stale request left behind would
-                // silently re-stage on the frame after a stop.
-                pendingSystemId = null
-                pendingBootOptions.forEach { (name, value) ->
-                    core.stageBootOption(name, value)
-                }
-                systemStaged = core.loadSystem(systemId, pendingBiosPath)
-                if (!systemStaged) Log.e(TAG, "loadSystem($systemId) failed")
-            }
-
-            // --- Service pending ports read here so it orders after a queued staging ---
+            // --- Service pending ports read (stageSystem is synchronous, so a
+            // read that follows LoadSystem already sees the staged system) ---
             pendingPortsRead.getAndSet(null)?.let { req ->
                 req.result = if (systemStaged) core.getPortsJson() else null
                 req.latch.countDown()
@@ -612,21 +592,43 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     // ---------------------------------------------------------------------------
 
     /**
-     * Queue a system STAGING; it executes on the next render-loop pass. No core
-     * boots until a ROM arrives — re-staging over a running core is
-     * legal and leaves the running game untouched until the next ROM load.
-     * @param systemId ares system ID — one of [EmulatorCore.supportedSystems].
+     * Stage a system on the render thread and block for the result. No core
+     * boots until a ROM arrives — re-staging over a running core is legal and
+     * leaves the running game untouched until the next ROM load. Synchronous
+     * so the bridge can validate the staged engine (backend availability,
+     * option support) before answering PHP.
+     * @param systemId system ID — one of [EmulatorCore.supportedSystems].
+     * @param backend  engine to serve it; null picks the bundled fast core.
+     * @return staging result, or null when the render thread is unavailable.
      */
-    fun queueSystemLoad(
+    fun stageSystem(
         systemId: String,
         biosPath: String? = null,
         bootOptions: Map<String, Boolean> = emptyMap(),
-    ) {
+        backend: String? = null,
+    ): Boolean? {
         stagedSystemId = systemId
-        pendingBiosPath = biosPath
-        pendingBootOptions = bootOptions
-        pendingSystemId = systemId
-        requestRender()
+        val stage = {
+            bootOptions.forEach { (name, value) ->
+                core.stageBootOption(name, value)
+            }
+            core.loadSystem(systemId, biosPath, backend).also { staged ->
+                systemStaged = staged
+                if (!staged) Log.e(TAG, "loadSystem($systemId) failed")
+            }
+        }
+        // Before the first surface there is no render thread to sync with —
+        // and nothing emulating to race — so stage directly, exactly like the
+        // iOS bridge does under its lock. The render loop normally calls
+        // init() first; this path must too (idempotent) or staging lands on
+        // a host that doesn't exist yet and reports failure.
+        val t = renderThread
+        return if (t == null || !t.isAlive) {
+            core.init()
+            stage()
+        } else {
+            syncOnGlThread(stage)
+        }
     }
 
     /**

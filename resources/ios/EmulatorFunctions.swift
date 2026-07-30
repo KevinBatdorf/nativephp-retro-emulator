@@ -328,8 +328,20 @@ enum EmulatorFunctions {
             if let speed = (config["speed"] as? NSNumber)?.doubleValue {
                 renderer.speedMultiplier = min(max(speed, 0.25), 4.0)
             }
-            let toggles = coreToggles(from: config)
-            if !toggles.isEmpty { renderer.setCoreOptions(toggles) }
+
+            // An explicitly requested engine must exist for this system —
+            // a dev asking for one never silently gets another.
+            let backend = config["backend"] as? String
+            if let backend {
+                let entry = EmulatorRenderer.backendsJson[system] as? [String: Any]
+                let available = entry?["backends"] as? [String] ?? []
+                guard available.contains(backend) else {
+                    return BridgeResponse.error(
+                        code: "UNSUPPORTED_BACKEND",
+                        message: "Backend '\(backend)' does not serve '\(system)' in this build — available: \(available.joined(separator: ", "))"
+                    )
+                }
+            }
 
             // Boot-only: picks the renderer implementation before load. Cores
             // without a choice (fc, gb, md) accept and ignore it.
@@ -339,11 +351,30 @@ enum EmulatorFunctions {
 
             guard renderer.loadSystem(system,
                                       biosPath: config["biosPath"] as? String,
-                                      bootOptions: bootOptions) else {
-                return BridgeResponse.error(code: "LOAD_FAILED", message: "emu_load_system failed for '\(system)'")
+                                      bootOptions: bootOptions,
+                                      backend: backend) else {
+                return BridgeResponse.error(code: "UNSUPPORTED_SYSTEM", message: "System '\(system)' failed to stage — no engine claimed it")
             }
 
-            return BridgeResponse.success(data: ["status": "staged", "system": system])
+            // Staging is synchronous, so the toggles validate against the
+            // engine that will actually serve this system. Only ENABLING an
+            // absent feature is an error; disabling one the engine never had
+            // is vacuously satisfied (configs routinely send explicit false
+            // defaults).
+            let toggles = coreToggles(from: config)
+            for (key, value) in toggles where value && !renderer.toggleSupported(key) {
+                return BridgeResponse.error(
+                    code: "UNSUPPORTED_OPTION",
+                    message: "Backend '\(renderer.backendName())' does not support '\(key)' on '\(system)'"
+                )
+            }
+            if !toggles.isEmpty { renderer.setCoreOptions(toggles) }
+
+            return BridgeResponse.success(data: [
+                "status": "staged",
+                "system": system,
+                "backend": renderer.backendName(),
+            ])
         }
     }
 
@@ -681,6 +712,26 @@ enum EmulatorFunctions {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
             let options = parameters["options"] as? [String: Any] ?? [:]
+            // output/aspectCorrection are renderer-side presentation and work
+            // on every engine; the screen-node settings below only exist where
+            // the engine has that door. Only a CHANGE is gated — 100 means
+            // "unchanged" in the whole-percent contract and false is the
+            // default, so neutral values are vacuously satisfied (configs
+            // send explicit defaults).
+            var screenChanges: [String] = []
+            for key in ["luminance", "saturation", "gamma"] {
+                if let value = (options[key] as? NSNumber)?.intValue, value != 100 {
+                    screenChanges.append(key)
+                }
+            }
+            if options["colorBleed"] as? Bool == true { screenChanges.append("colorBleed") }
+            if options["overscan"] as? Bool == true { screenChanges.append("overscan") }
+            if !screenChanges.isEmpty, !renderer.videoSettingsSupported() {
+                return BridgeResponse.error(
+                    code: "UNSUPPORTED_OPTION",
+                    message: "Backend '\(renderer.backendName())' does not support \(screenChanges.joined(separator: ", "))"
+                )
+            }
             let output = options["output"] as? String
             if let output, !["scale", "integer", "integerFixed", "stretch"].contains(output) {
                 return BridgeResponse.error(
@@ -781,6 +832,13 @@ enum EmulatorFunctions {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
             let options = parameters["options"] as? [String: Any] ?? [:]
             let toggles = coreToggles(from: options)
+            // Enable-only gate — see LoadSystem's toggle validation.
+            for (key, value) in toggles where value && !renderer.toggleSupported(key) {
+                return BridgeResponse.error(
+                    code: "UNSUPPORTED_OPTION",
+                    message: "Backend '\(renderer.backendName())' does not support '\(key)'"
+                )
+            }
             if !toggles.isEmpty { renderer.setCoreOptions(toggles) }
             return BridgeResponse.success(data: ["status": "ok"])
         }
@@ -1054,6 +1112,9 @@ enum EmulatorFunctions {
             case "false": payload["accuracy"] = "performance"
             default: break
             }
+            if let backend = renderer?.backendName(), !backend.isEmpty {
+                payload["backend"] = backend
+            }
             return BridgeResponse.success(data: payload)
         }
     }
@@ -1093,9 +1154,13 @@ enum EmulatorFunctions {
     class GetSystems: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             let compiled = Set(EmulatorRenderer.supportedSystems)
+            let backends = EmulatorRenderer.backendsJson
             func system(_ id: String, _ name: String, stable: Bool) -> [String: Any] {
-                ["id": id, "name": name, "stable": stable,
-                 "supported": compiled.contains(id)]
+                let entry = backends[id] as? [String: Any]
+                return ["id": id, "name": name, "stable": stable,
+                        "supported": compiled.contains(id),
+                        "backends": entry?["backends"] as? [String] ?? [],
+                        "defaultBackend": entry?["default"] as? String ?? ""]
             }
             let systems: [[String: Any]] = [
                 system("fc",  "NES / Famicom",             stable: true),

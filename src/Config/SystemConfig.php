@@ -4,13 +4,15 @@ namespace KevinBatdorf\RetroEmulator\Config;
 
 use KevinBatdorf\RetroEmulator\Accuracy;
 use KevinBatdorf\RetroEmulator\AspectCorrection;
+use KevinBatdorf\RetroEmulator\Backend;
 use KevinBatdorf\RetroEmulator\InputCapture;
 use KevinBatdorf\RetroEmulator\VideoOutput;
 
 /**
- * A single system's config: everything shared from Config, plus the one key
- * that is never shareable — the path to that system's BIOS/firmware. Subclassed
- * per system because each system's remaining options are genuinely unique.
+ * A single system's config: everything shared from Config, plus the keys that
+ * are never shareable — the system's BIOS/firmware path and the engine that
+ * should serve it. Subclassed per system because each system's remaining
+ * options are genuinely unique.
  */
 abstract class SystemConfig extends Config
 {
@@ -37,6 +39,7 @@ abstract class SystemConfig extends Config
         ?Accuracy $accuracy = null,
         ?bool $pixelAccuracy = null,
         public ?string $biosPath = null,
+        public Backend|string|null $backend = null,
     ) {
         parent::__construct(
             luminance: $luminance,
@@ -68,6 +71,9 @@ abstract class SystemConfig extends Config
     {
         return parent::toArray() + array_filter([
             'biosPath' => $this->biosPath,
+            'backend' => $this->backend instanceof Backend
+                ? $this->backend->value
+                : $this->backend,
         ], fn ($value) => $value !== null);
     }
 }

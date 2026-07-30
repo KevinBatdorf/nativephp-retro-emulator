@@ -29,6 +29,7 @@ class EmulatorActivity : Activity() {
         const val EXTRA_ROM_PATH = "ROM_PATH"
         const val EXTRA_SYSTEM   = "SYSTEM"
         const val EXTRA_BIOS_PATH = "BIOS_PATH"
+        const val EXTRA_BACKEND  = "BACKEND"
         const val EXTRA_SLOT_A_PATH = "SLOT_A_PATH"
         const val EXTRA_SLOT_B_PATH = "SLOT_B_PATH"
         const val EXTRA_REGION   = "REGION"
@@ -63,9 +64,13 @@ class EmulatorActivity : Activity() {
         intent.getStringExtra(EXTRA_ASPECT_CORRECTION)?.let { renderer.videoAspectCorrection = it }
         intent.getStringExtra(EXTRA_REGION)?.let { renderer.stagedRegion = it }
 
-        // Queue the system load (executes on GL thread). BIOS_PATH feeds
-        // firmware-gated systems (gba) their dev-supplied dump.
-        renderer.queueSystemLoad(system, intent.getStringExtra(EXTRA_BIOS_PATH) ?: "")
+        // Stage the system. BIOS_PATH feeds firmware-gated systems (gba)
+        // their dev-supplied dump; BACKEND pins an engine for A/B runs.
+        renderer.stageSystem(
+            system,
+            intent.getStringExtra(EXTRA_BIOS_PATH) ?: "",
+            backend = intent.getStringExtra(EXTRA_BACKEND),
+        )
 
         val romFile = File(romPath)
         val saveDir = File(filesDir, "saves")

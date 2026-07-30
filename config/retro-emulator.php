@@ -30,4 +30,19 @@ return [
 
     'shaders' => true,
 
+    /*
+    |--------------------------------------------------------------------------
+    | Default engines
+    |--------------------------------------------------------------------------
+    |
+    | Which emulation engine serves each system, e.g. ['gb' => 'ares']. Systems
+    | not listed use the plugin's default: the bundled fast core where one
+    | exists (SameBoy for gb/gbc), ares otherwise. A per-boot backend on the
+    | system's config (GbConfig(backend: Backend::Ares)) overrides both.
+    | Emulator::systems() reports each system's available backends.
+    |
+    */
+
+    'backends' => [],
+
 ];

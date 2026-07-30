@@ -217,6 +217,13 @@ public:
     // Steer engine-side resampling toward a half-full host ring (dynamic rate
     // control). fillLevel ∈ [0,1]. Return false where the engine can't.
     virtual bool applyRateControl(double fillLevel) = 0;
+
+    // Cheats are host-owned (parse + table); engines consume them one of two
+    // ways. Pull: intercept bus reads through HostPort::cheatTable (ares).
+    // Push: mirror the table into engine cheat slots here — the host calls
+    // this after every add/remove/clear and after boot. Default no-op serves
+    // the pull style.
+    virtual void syncCheats(const std::unordered_map<uint32_t, uint32_t>& table) { (void)table; }
 };
 
 } // namespace EmuHost

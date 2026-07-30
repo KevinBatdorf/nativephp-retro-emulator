@@ -372,10 +372,21 @@ object EmulatorFunctions {
             (config["speed"] as? Number)?.toDouble()?.let { speed ->
                 renderer.speedMultiplier = speed.coerceIn(0.25, 4.0)
             }
-            val coreToggles = CORE_TOGGLE_KEYS
-                .mapNotNull { key -> (config[key] as? Boolean)?.let { key to it } }
-                .toMap()
-            if (coreToggles.isNotEmpty()) renderer.queueCoreOptions(coreToggles)
+            // An explicitly requested engine must exist for this system —
+            // a dev asking for one never silently gets another.
+            val backend = config["backend"] as? String
+            if (backend != null) {
+                val available = JSONObject(EmulatorCore().backendsJson())
+                    .optJSONObject(system)?.optJSONArray("backends")
+                    ?.let { list -> (0 until list.length()).map { list.getString(it) } }
+                    ?: emptyList()
+                if (backend !in available) {
+                    return BridgeResponse.error(
+                        "UNSUPPORTED_BACKEND",
+                        "Backend '$backend' does not serve '$system' in this build — available: ${available.joinToString(", ")}",
+                    )
+                }
+            }
 
             // Boot-only: picks the renderer implementation before load. Cores
             // without a choice (fc, gb, md) accept and ignore it.
@@ -383,10 +394,39 @@ object EmulatorFunctions {
                 "Pixel Accuracy" to (config["pixelAccuracy"] as? Boolean ?: false),
             )
 
-            renderer.queueSystemLoad(system, config["biosPath"] as? String, bootOptions)
+            // Synchronous staging so everything below validates against the
+            // engine that will actually serve this system.
+            if (renderer.stageSystem(system, config["biosPath"] as? String, bootOptions, backend) != true) {
+                return BridgeResponse.error(
+                    "UNSUPPORTED_SYSTEM",
+                    "System '$system' failed to stage — no engine claimed it",
+                )
+            }
 
-            Log.d(TAG, "LoadSystem: staged system=$system")
-            return BridgeResponse.success(mapOf("status" to "staged", "system" to system))
+            val coreToggles = CORE_TOGGLE_KEYS
+                .mapNotNull { key -> (config[key] as? Boolean)?.let { key to it } }
+                .toMap()
+            // Only ENABLING an absent feature is an error; disabling one the
+            // engine never had is vacuously satisfied (configs routinely send
+            // explicit false defaults).
+            for ((key, value) in coreToggles) {
+                if (value && !EmulatorCore().toggleSupported(key)) {
+                    return BridgeResponse.error(
+                        "UNSUPPORTED_OPTION",
+                        "Backend '${EmulatorCore().backendName()}' does not support '$key' on '$system'",
+                    )
+                }
+            }
+            if (coreToggles.isNotEmpty()) renderer.queueCoreOptions(coreToggles)
+
+            Log.d(TAG, "LoadSystem: staged system=$system backend=${EmulatorCore().backendName()}")
+            return BridgeResponse.success(
+                mapOf(
+                    "status" to "staged",
+                    "system" to system,
+                    "backend" to EmulatorCore().backendName(),
+                ),
+            )
         }
     }
 
@@ -774,6 +814,27 @@ object EmulatorFunctions {
             if (err != null) return err
             @Suppress("UNCHECKED_CAST")
             val options = paramMap(parameters, "options") ?: emptyMap()
+            // output/aspectCorrection are renderer-side presentation and work
+            // on every engine; the screen-node settings below only exist where
+            // the engine has that door. Only a CHANGE is gated — 100 means
+            // "unchanged" in the whole-percent contract and false is the
+            // default, so neutral values are vacuously satisfied (configs
+            // send explicit defaults).
+            val screenChanges = buildList {
+                for (key in listOf("luminance", "saturation", "gamma")) {
+                    val value = (options[key] as? Number)?.toInt()
+                    if (value != null && value != 100) add(key)
+                }
+                if (options["colorBleed"] == true) add("colorBleed")
+                if (options["overscan"] == true) add("overscan")
+            }
+            if (screenChanges.isNotEmpty() && !EmulatorCore().videoSettingsSupported()) {
+                return BridgeResponse.error(
+                    "UNSUPPORTED_OPTION",
+                    "Backend '${EmulatorCore().backendName()}' does not support "
+                        + screenChanges.joinToString(", "),
+                )
+            }
             val output = options["output"] as? String
             if (output != null && output !in setOf("scale", "integer", "integerFixed", "stretch")) {
                 return BridgeResponse.error(
@@ -888,6 +949,15 @@ object EmulatorFunctions {
             val toggles = CORE_TOGGLE_KEYS
                 .mapNotNull { key -> (options[key] as? Boolean)?.let { key to it } }
                 .toMap()
+            // Enable-only gate — see LoadSystem's toggle validation.
+            for ((key, value) in toggles) {
+                if (value && !EmulatorCore().toggleSupported(key)) {
+                    return BridgeResponse.error(
+                        "UNSUPPORTED_OPTION",
+                        "Backend '${EmulatorCore().backendName()}' does not support '$key'",
+                    )
+                }
+            }
             if (toggles.isNotEmpty()) entry!!.renderer.queueCoreOptions(toggles)
             return BridgeResponse.success(mapOf("status" to "ok"))
         }
@@ -1187,6 +1257,9 @@ object EmulatorFunctions {
 
             val payload = mutableMapOf<String, Any>("status" to status)
             accuracy?.let { payload["accuracy"] = it }
+            EmulatorCore().backendName().takeIf { it.isNotEmpty() }?.let {
+                payload["backend"] = it
+            }
             return BridgeResponse.success(payload)
         }
     }
@@ -1257,22 +1330,36 @@ object EmulatorFunctions {
     class GetSystems(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
             val compiled = EmulatorCore().supportedSystems().split(",").toSet()
+            val backends = JSONObject(EmulatorCore().backendsJson())
             val systems = listOf(
-                system("fc",  "NES / Famicom",             stable = true,  compiled),
-                system("sfc", "SNES / Super Famicom",      stable = true,  compiled),
-                system("gb",  "Game Boy",                  stable = true,  compiled),
-                system("gbc", "Game Boy Color",            stable = true,  compiled),
-                system("gba", "Game Boy Advance",          stable = true,  compiled),
-                system("md",  "Sega Mega Drive / Genesis", stable = true,  compiled),
+                system("fc",  "NES / Famicom",             stable = true,  compiled, backends),
+                system("sfc", "SNES / Super Famicom",      stable = true,  compiled, backends),
+                system("gb",  "Game Boy",                  stable = true,  compiled, backends),
+                system("gbc", "Game Boy Color",            stable = true,  compiled, backends),
+                system("gba", "Game Boy Advance",          stable = true,  compiled, backends),
+                system("md",  "Sega Mega Drive / Genesis", stable = true,  compiled, backends),
             )
             return BridgeResponse.success(mapOf("systems" to systems))
         }
 
-        private fun system(id: String, name: String, stable: Boolean, compiled: Set<String>) =
-            mapOf(
+        private fun system(
+            id: String,
+            name: String,
+            stable: Boolean,
+            compiled: Set<String>,
+            backends: JSONObject,
+        ): Map<String, Any> {
+            val entry = backends.optJSONObject(id)
+            val engines = entry?.optJSONArray("backends")
+                ?.let { list -> (0 until list.length()).map { list.getString(it) } }
+                ?: emptyList()
+            return mapOf(
                 "id" to id, "name" to name,
                 "stable" to stable, "supported" to (id in compiled),
+                "backends" to engines,
+                "defaultBackend" to (entry?.optString("default") ?: ""),
             )
+        }
     }
 
     /**

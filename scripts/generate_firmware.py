@@ -26,8 +26,12 @@ BLOBS = [
 # (C symbol, path relative to this repo) — firmware not carried by ares. The GBA
 # BIOS is the Cult-of-GBA open replacement (MIT); ares ships no GBA BIOS because
 # the real one is copyrighted. See native/firmware/LICENSE-cult-of-gba.
+# The SameBoy boot ROMs are its own Expat-licensed replacements, vendored as
+# built binaries so no build machine needs rgbds. See LICENSE-sameboy.
 REPO_BLOBS = [
     ("GbaBios", "native/firmware/gba_open_bios.bin"),
+    ("SameBoyDmgBoot", "native/firmware/sameboy_dmg_boot.bin"),
+    ("SameBoyCgbBoot", "native/firmware/sameboy_cgb_boot.bin"),
 ]
 REPO_ROOT = Path(__file__).resolve().parent.parent
 

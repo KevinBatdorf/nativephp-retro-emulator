@@ -71,9 +71,31 @@ const char* emu_supported_systems(void) {
     return ids.c_str();
 }
 
-bool emu_load_system(EmuContext* ctx, const char* system_id, const char* bios_path) {
+bool emu_load_system(EmuContext* ctx, const char* system_id, const char* bios_path,
+                     const char* backend) {
     if (!ctx || !system_id) return false;
-    return ctx->host.stageSystem(system_id, bios_path ? bios_path : "");
+    return ctx->host.stageSystem(system_id, bios_path ? bios_path : "",
+                                 backend ? backend : "");
+}
+
+const char* emu_get_backend_name(EmuContext* ctx) {
+    static thread_local std::string name;
+    name = ctx ? ctx->host.backendName() : "";
+    return name.c_str();
+}
+
+const char* emu_get_backends_json(void) {
+    static thread_local std::string json;
+    json = EmuHost::EmulatorHost::backendsJson();
+    return json.c_str();
+}
+
+bool emu_video_settings_supported(EmuContext* ctx) {
+    return ctx && ctx->host.videoSettingsSupported();
+}
+
+bool emu_toggle_supported(EmuContext* ctx, const char* key) {
+    return ctx && key && ctx->host.toggleSupported(key);
 }
 
 int emu_load_rom(EmuContext* ctx, const uint8_t* rom, size_t rom_size,

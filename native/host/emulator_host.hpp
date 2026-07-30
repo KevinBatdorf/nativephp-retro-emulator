@@ -146,6 +146,20 @@ public:
     void     setRumbleEnabled(bool enabled);                  // any thread
     uint32_t rumbleState() const;                             // any thread
 
+    // Capabilities ------------------------------------------------------------
+    // Answered against the engine a call would actually hit (active first,
+    // else staged) so bridges can reject an unsupported option loudly and
+    // synchronously — never a silent no-op on an engine that lacks the door.
+    bool videoSettingsSupported() const;
+    // A toggle key outside the engine's declared option set is unsupported;
+    // a declared key keeps the may-accept semantics engines always had.
+    bool toggleSupported(const std::string& key) const;
+    // The engine serving calls right now: active, else staged, else "".
+    std::string backendName() const;
+    // {"gb":{"backends":["ares","sameboy"],"default":"sameboy"}, …} for every
+    // available system — the introspection the PHP layer surfaces.
+    static std::string backendsJson();
+
     // Metadata ---------------------------------------------------------------
     std::string region() const;
     bool systemStaged() const { return stagedSystem_ != nullptr; }

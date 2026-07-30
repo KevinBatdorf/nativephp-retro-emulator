@@ -4,6 +4,24 @@ uses()->in('.');
 
 /*
 |--------------------------------------------------------------------------
+| Minimal container config
+|--------------------------------------------------------------------------
+| Emulator::loadSystem() reads config('retro-emulator.backends') for the
+| app-wide engine map. Outside a booted Laravel app the container has no
+| 'config' binding, so bind the plugin's real config file — tests then
+| exercise the actual resolution order (explicit > config map > native
+| default) and can swap the repository to test the map.
+*/
+
+use Illuminate\Config\Repository;
+use Illuminate\Container\Container;
+
+Container::getInstance()->instance('config', new Repository([
+    'retro-emulator' => require __DIR__.'/../config/retro-emulator.php',
+]));
+
+/*
+|--------------------------------------------------------------------------
 | nativephp_call stub
 |--------------------------------------------------------------------------
 | The real nativephp_call() is a C extension injected by the NativePHP

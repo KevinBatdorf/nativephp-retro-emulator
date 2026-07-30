@@ -78,17 +78,50 @@ final class EmulatorRenderer: UIView {
     func loadSystem(
         _ system: String,
         biosPath: String? = nil,
-        bootOptions: [String: Bool] = [:]
+        bootOptions: [String: Bool] = [:],
+        backend: String? = nil
     ) -> Bool {
         emuLock.lock()
         // Staged for the next boot's load(); a running core never changes.
         for (name, value) in bootOptions {
             emu_stage_boot_option(ctx, name, value ? "true" : "false")
         }
-        let ok = emu_load_system(ctx, system, biosPath ?? "")
+        let ok = emu_load_system(ctx, system, biosPath ?? "", backend ?? "")
         emuLock.unlock()
         if ok { loadedSystem = system }
         return ok
+    }
+
+    /// The engine serving calls right now: active, else staged, else "".
+    func backendName() -> String {
+        emuLock.lock()
+        let name = String(cString: emu_get_backend_name(ctx))
+        emuLock.unlock()
+        return name
+    }
+
+    /// Whether the staged/active engine exposes the setVideo settings door.
+    func videoSettingsSupported() -> Bool {
+        emuLock.lock()
+        let supported = emu_video_settings_supported(ctx)
+        emuLock.unlock()
+        return supported
+    }
+
+    /// Whether the staged/active engine declares the per-system toggle `key`.
+    func toggleSupported(_ key: String) -> Bool {
+        emuLock.lock()
+        let supported = emu_toggle_supported(ctx, key)
+        emuLock.unlock()
+        return supported
+    }
+
+    /// Per-system engine availability + default pick, parsed from the native
+    /// JSON: `["gb": (backends: [...], default: "sameboy"), …]`.
+    static var backendsJson: [String: Any] {
+        let raw = String(cString: emu_get_backends_json())
+        let data = raw.data(using: .utf8) ?? Data()
+        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
     }
 
     /// Live boot-option value from the running core ("true"/"false", "" when

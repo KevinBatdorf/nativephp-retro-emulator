@@ -4,6 +4,7 @@ namespace KevinBatdorf\RetroEmulator\Config;
 
 use KevinBatdorf\RetroEmulator\Accuracy;
 use KevinBatdorf\RetroEmulator\AspectCorrection;
+use KevinBatdorf\RetroEmulator\Backend;
 use KevinBatdorf\RetroEmulator\InputCapture;
 use KevinBatdorf\RetroEmulator\Region;
 use KevinBatdorf\RetroEmulator\VideoOutput;
@@ -37,6 +38,7 @@ class SfcConfig extends RegionalSystemConfig
         ?Accuracy $accuracy = null,
         ?bool $pixelAccuracy = null,
         ?string $biosPath = null,
+        Backend|string|null $backend = null,
         ?Region $region = null,
         ?array $preferredRegions = null,
         public ?bool $deepBlackBoost = null,
@@ -64,6 +66,7 @@ class SfcConfig extends RegionalSystemConfig
             accuracy: $accuracy,
             pixelAccuracy: $pixelAccuracy,
             biosPath: $biosPath,
+            backend: $backend,
             region: $region,
             preferredRegions: $preferredRegions,
         );

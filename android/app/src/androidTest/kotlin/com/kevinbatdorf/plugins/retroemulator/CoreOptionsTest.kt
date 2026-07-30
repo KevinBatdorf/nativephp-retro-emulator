@@ -54,7 +54,8 @@ class CoreOptionsTest {
         val core = EmulatorCore()
         try {
             assert(core.init())
-            assert(core.loadSystem("gb"))
+            // This test pins the ares node scan; gb defaults to sameboy now.
+            assert(core.loadSystem("gb", backend = "ares"))
             assert(core.loadRom(romFile.readBytes()) == EmulatorCore.LOAD_OK)
             core.tick()
 

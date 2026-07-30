@@ -56,13 +56,20 @@ class Emulator
      */
     public function loadSystem(System|string $system, SystemConfig|array $config = []): static
     {
+        $systemId = $system instanceof System ? $system->value : $system;
+
         $staged = $config instanceof Config
             ? array_diff_key($config->toArray(), array_flip(self::PRESENTATION_KEYS))
             : $config;
 
+        // Engine resolution order: explicit config beats the app-wide
+        // config/retro-emulator.php map beats the native fast-by-default.
+        $staged['backend'] ??= config('retro-emulator.backends')[$systemId] ?? null;
+        $staged = array_filter($staged, fn ($value) => $value !== null);
+
         $this->call('Emulator.LoadSystem', [
             'surface' => $this->surface,
-            'system' => $system instanceof System ? $system->value : $system,
+            'system' => $systemId,
             'config' => $staged,
         ]);
 

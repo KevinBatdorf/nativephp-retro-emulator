@@ -230,11 +230,49 @@ Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeScreenshotRGBA(
 
 JNIEXPORT jboolean JNICALL
 Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeLoadSystem(
-    JNIEnv* env, jobject, jstring systemIdStr, jstring biosPathStr)
+    JNIEnv* env, jobject, jstring systemIdStr, jstring biosPathStr,
+    jstring backendStr)
 {
     if (!g_host) return JNI_FALSE;
     return g_host->stageSystem(jstringToString(env, systemIdStr),
-                               jstringToString(env, biosPathStr))
+                               jstringToString(env, biosPathStr),
+                               jstringToString(env, backendStr))
+        ? JNI_TRUE : JNI_FALSE;
+}
+
+/** The engine serving calls right now: active, else staged, else "". */
+JNIEXPORT jstring JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeGetBackendName(
+    JNIEnv* env, jobject)
+{
+    if (!g_host) return env->NewStringUTF("");
+    return env->NewStringUTF(g_host->backendName().c_str());
+}
+
+/** Per-system engine availability + the fast-by-default pick, as JSON. */
+JNIEXPORT jstring JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeGetBackendsJson(
+    JNIEnv* env, jobject)
+{
+    loadBackendModules();  // registry read — see nativeGetSupportedSystems
+    return env->NewStringUTF(EmulatorHost::backendsJson().c_str());
+}
+
+// Capability gates — synchronous, so the bridge can reject an unsupported
+// option loudly BEFORE queueing the (async) apply onto the emulation thread.
+
+JNIEXPORT jboolean JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeVideoSettingsSupported(
+    JNIEnv*, jobject)
+{
+    return (g_host && g_host->videoSettingsSupported()) ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeToggleSupported(
+    JNIEnv* env, jobject, jstring keyStr)
+{
+    return (g_host && g_host->toggleSupported(jstringToString(env, keyStr)))
         ? JNI_TRUE : JNI_FALSE;
 }
 

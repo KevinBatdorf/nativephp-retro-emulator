@@ -4,6 +4,7 @@ namespace KevinBatdorf\RetroEmulator\Config;
 
 use KevinBatdorf\RetroEmulator\Accuracy;
 use KevinBatdorf\RetroEmulator\AspectCorrection;
+use KevinBatdorf\RetroEmulator\Backend;
 use KevinBatdorf\RetroEmulator\InputCapture;
 use KevinBatdorf\RetroEmulator\VideoOutput;
 
@@ -38,6 +39,7 @@ class GbConfig extends SystemConfig
         ?Accuracy $accuracy = null,
         ?bool $pixelAccuracy = null,
         ?string $biosPath = null,
+        Backend|string|null $backend = null,
         public ?bool $colorEmulation = null,
         public ?bool $interframeBlending = null,
     ) {
@@ -64,6 +66,7 @@ class GbConfig extends SystemConfig
             accuracy: $accuracy,
             pixelAccuracy: $pixelAccuracy,
             biosPath: $biosPath,
+            backend: $backend,
         );
     }
 

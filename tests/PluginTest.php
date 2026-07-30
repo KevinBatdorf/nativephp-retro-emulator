@@ -2,6 +2,7 @@
 
 use KevinBatdorf\RetroEmulator\Accuracy;
 use KevinBatdorf\RetroEmulator\AspectCorrection;
+use KevinBatdorf\RetroEmulator\Backend;
 use KevinBatdorf\RetroEmulator\Buttons\FcButton;
 use KevinBatdorf\RetroEmulator\Buttons\GbaButton;
 use KevinBatdorf\RetroEmulator\Buttons\GbButton;
@@ -658,6 +659,51 @@ describe('Typed layer', function () {
         sort($native);
         sort($enum);
         expect($enum)->toBe($native);
+    });
+
+    it('backend enum matches the native discovery list', function () {
+        $jni = file_get_contents(dirname(__DIR__).'/android/app/src/main/cpp/emulator_jni.cpp');
+
+        preg_match('/kBackendNames\[\]\s*=\s*\{(.*?)\};/s', $jni, $m);
+        preg_match_all('/"([a-z0-9]+)"/', $m[1] ?? '', $names);
+        $native = $names[1];
+        $enum = array_map(fn ($case) => $case->value, Backend::cases());
+
+        sort($native);
+        sort($enum);
+        expect($enum)->toBe($native);
+    });
+
+    it('serializes the backend choice as its wire string', function () {
+        $config = new GbConfig(backend: Backend::Ares);
+
+        expect($config->toArray()['backend'])->toBe('ares');
+        expect((new GbConfig)->toArray())->not->toHaveKey('backend');
+        expect((new GbConfig(backend: 'quicknes'))->toArray()['backend'])->toBe('quicknes');
+    });
+
+    it('resolves the engine: explicit config beats the app map beats native default', function () {
+        $GLOBALS['__nativephp_calls'] = [];
+        config()->set('retro-emulator.backends', ['gb' => 'ares']);
+
+        try {
+            Emulator::surface('main')->loadSystem(System::Gb);
+            Emulator::surface('main')->loadSystem(System::Gb, new GbConfig(backend: Backend::SameBoy));
+            Emulator::surface('main')->loadSystem(System::Sfc);
+
+            $staged = array_values(array_filter(
+                $GLOBALS['__nativephp_calls'],
+                fn ($call) => $call['function'] === 'Emulator.LoadSystem',
+            ));
+
+            // App map fills the gap; explicit wins; unmapped systems send
+            // nothing and let the native fast-by-default decide.
+            expect($staged[0]['payload']['config']['backend'])->toBe('ares');
+            expect($staged[1]['payload']['config']['backend'])->toBe('sameboy');
+            expect($staged[2]['payload']['config'])->not->toHaveKey('backend');
+        } finally {
+            config()->set('retro-emulator.backends', []);
+        }
     });
 
     it('config classes send only explicitly set options', function () {

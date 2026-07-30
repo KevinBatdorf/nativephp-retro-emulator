@@ -23,7 +23,7 @@ final class StateAndOptionsTests: XCTestCase {
     }
 
     private func boot() {
-        XCTAssertTrue(emu_load_system(ctx, "sfc", nil))
+        XCTAssertTrue(emu_load_system(ctx, "sfc", nil, nil))
         let rom = BootTests.makeMinimalLoRom()
         let ok = rom.withUnsafeBytes {
             emu_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil, nil, nil) == 1

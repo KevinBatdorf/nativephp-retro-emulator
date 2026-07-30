@@ -34,11 +34,32 @@ void emu_reset(EmuContext* ctx);
 // false for ids not compiled into this build.
 // bios_path: optional real BIOS dump to override gba's embedded open BIOS;
 // NULL/empty otherwise (all systems boot on embedded firmware).
-bool emu_load_system(EmuContext* ctx, const char* system_id, const char* bios_path);
+// backend: engine to serve this system ("ares", "sameboy", …); NULL/empty
+// picks the bundled fast core where one exists. An explicitly requested
+// engine that does not claim the system fails the staging — never a silent
+// substitution.
+bool emu_load_system(EmuContext* ctx, const char* system_id, const char* bios_path,
+                     const char* backend);
 
 // Comma-separated ids of the systems compiled into this build, e.g.
 // "fc,gb,gba,gbc,md,sfc".  Static storage — do not free.
 const char* emu_supported_systems(void);
+
+// The engine serving calls right now: active, else staged, else "".
+// Thread-local storage — copy before the next call on the same thread.
+const char* emu_get_backend_name(EmuContext* ctx);
+
+// Per-system engine availability + the fast-by-default pick, as a JSON
+// object string:
+// {"gb":{"backends":["ares","sameboy"],"default":"sameboy"}, …}.
+// Thread-local storage — copy before the next call on the same thread.
+const char* emu_get_backends_json(void);
+
+// Capability gates, answered against the engine a call would actually hit
+// (active first, else staged) — the bridge rejects an unsupported option
+// loudly instead of letting it become a silent no-op.
+bool emu_video_settings_supported(EmuContext* ctx);
+bool emu_toggle_supported(EmuContext* ctx, const char* key);
 
 // Comma-separated ROM file extensions (no dots) valid for a system id —
 // the LoadRom family-mismatch gate.  Empty string for unknown ids.
