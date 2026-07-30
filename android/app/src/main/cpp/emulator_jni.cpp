@@ -16,7 +16,7 @@
 #include <string>
 #include <vector>
 
-#define LOG_TAG "AresCore"
+#define LOG_TAG "EmulatorCore"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO,  LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
@@ -95,7 +95,7 @@ static void loadBackendModules()
 }
 
 JNIEXPORT jboolean JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeInit(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeInit(
     JNIEnv*, jobject)
 {
     loadBackendModules();
@@ -110,7 +110,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeInit(
 }
 
 JNIEXPORT void JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeDestroy(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeDestroy(
     JNIEnv*, jobject)
 {
     // The host destructor unloads any running game (joining engine worker
@@ -122,7 +122,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeDestroy(
 }
 
 JNIEXPORT jstring JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeVersion(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeVersion(
     JNIEnv* env, jobject)
 {
     auto* ares = EmuHost::Backends::byName("ares");
@@ -137,7 +137,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeVersion(
 // frame back. All run on the one render thread, same as tick().
 
 JNIEXPORT void JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSurfaceCreated(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeSurfaceCreated(
     JNIEnv* env, jobject, jobject surface)
 {
     if (!surface) return;
@@ -159,28 +159,28 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSurfaceCreated(
 // Final teardown of the Vulkan renderer (device + instance), called when the
 // render thread exits. Transient surface loss uses nativeSurfaceDestroyed.
 JNIEXPORT void JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeReleaseRenderer(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeReleaseRenderer(
     JNIEnv*, jobject)
 {
     delete g_vk; g_vk = nullptr;
 }
 
 JNIEXPORT void JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSurfaceChanged(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeSurfaceChanged(
     JNIEnv*, jobject, jint width, jint height)
 {
     if (g_vk) g_vk->onResize((int)width, (int)height);
 }
 
 JNIEXPORT void JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSurfaceDestroyed(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeSurfaceDestroyed(
     JNIEnv*, jobject)
 {
     if (g_vk) g_vk->clearSurface();
 }
 
 JNIEXPORT jboolean JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativePresentFrame(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativePresentFrame(
     JNIEnv*, jobject, jint outX, jint outY, jint outW, jint outH)
 {
     if (!g_vk || !g_host) return JNI_FALSE;
@@ -193,7 +193,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativePresentFrame(
 }
 
 JNIEXPORT jboolean JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetShader(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeSetShader(
     JNIEnv* env, jobject, jstring path)
 {
     if (!g_vk) return JNI_FALSE;
@@ -205,7 +205,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetShader(
 }
 
 JNIEXPORT jbyteArray JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeScreenshotRGBA(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeScreenshotRGBA(
     JNIEnv* env, jobject, jintArray dims)
 {
     if (!g_vk) return nullptr;
@@ -229,7 +229,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeScreenshotRGBA(
 // owns the policy (region resolution, teardown ordering, save seeding).
 
 JNIEXPORT jboolean JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadSystem(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeLoadSystem(
     JNIEnv* env, jobject, jstring systemIdStr, jstring biosPathStr)
 {
     if (!g_host) return JNI_FALSE;
@@ -244,7 +244,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadSystem(
  * clear the slot. Kept separate so loadRom's signature stays single-ROM.
  */
 JNIEXPORT void JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeStageSlot(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeStageSlot(
     JNIEnv* env, jobject, jint index, jbyteArray romBytes)
 {
     if (!g_host) return;
@@ -254,7 +254,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeStageSlot(
 
 /** Test seam: whether a staged slot cartridge actually connected at load. */
 JNIEXPORT jboolean JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeIsSlotConnected(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeIsSlotConnected(
     JNIEnv*, jobject, jint index)
 {
     if (!g_host) return JNI_FALSE;
@@ -267,7 +267,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeIsSlotConnected(
  * option ignore it there.
  */
 JNIEXPORT void JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeStageBootOption(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeStageBootOption(
     JNIEnv* env, jobject, jstring nameStr, jstring valueStr)
 {
     if (!g_host) return;
@@ -281,7 +281,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeStageBootOption(
  * which SNES PPU is bound), not the staged map.
  */
 JNIEXPORT jstring JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetBootOption(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeGetBootOption(
     JNIEnv* env, jobject, jstring nameStr)
 {
     if (!g_host) return env->NewStringUTF("");
@@ -290,7 +290,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetBootOption(
 }
 
 JNIEXPORT jint JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadRom(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeLoadRom(
     JNIEnv* env, jobject, jbyteArray romBytes, jstring savePrefixStr,
     jstring regionOverrideStr, jstring preferredRegionsStr)
 {
@@ -308,7 +308,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeLoadRom(
 // Tick (real frame) -----------------------------------------------
 
 JNIEXPORT void JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeTick(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeTick(
     JNIEnv*, jobject)
 {
     if (g_host) g_host->tick();
@@ -319,14 +319,14 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeTick(
 // Frame dimensions ------------------------------------------------
 
 JNIEXPORT jint JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetFrameWidth(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeGetFrameWidth(
     JNIEnv*, jobject)
 {
     return g_host ? (jint)g_host->frameWidth() : 0;
 }
 
 JNIEXPORT jint JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetFrameHeight(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeGetFrameHeight(
     JNIEnv*, jobject)
 {
     return g_host ? (jint)g_host->frameHeight() : 0;
@@ -338,7 +338,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetFrameHeight(
  * All zeros before the first frame. Any thread (frame-lock guarded).
  */
 JNIEXPORT jdoubleArray JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetVideoGeometry(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeGetVideoGeometry(
     JNIEnv* env, jobject)
 {
     jdouble values[7] = {0, 0, 1, 1, 1, 1, 0};
@@ -353,7 +353,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetVideoGeometry(
  * first hint fires during system power-on. Any thread.
  */
 JNIEXPORT jdouble JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetRefreshRateHint(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeGetRefreshRateHint(
     JNIEnv*, jobject)
 {
     return g_host ? (jdouble)g_host->refreshRateHint() : 0.0;
@@ -367,7 +367,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetRefreshRateHint(
  * Thread-safe against the emulation thread filling the ring.
  */
 JNIEXPORT jint JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeReadAudio(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeReadAudio(
     JNIEnv* env, jobject, jfloatArray buffer)
 {
     if (!g_host) return 0;
@@ -387,7 +387,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeReadAudio(
  * from any thread; the emulation thread samples atomically at poll time.
  */
 JNIEXPORT void JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetInputState(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeSetInputState(
     JNIEnv*, jobject, jint port, jint buttons)
 {
     if (g_host) g_host->setInput((int)port, (uint32_t)buttons);
@@ -398,7 +398,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetInputState(
  * the value the engine will see on its next input poll. Test seam.
  */
 JNIEXPORT jint JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetInputState(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeGetInputState(
     JNIEnv*, jobject, jint port)
 {
     return g_host ? (jint)g_host->combinedInput((int)port) : 0;
@@ -409,7 +409,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetInputState(
  * against the port's connected device. Empty when nothing is held.
  */
 JNIEXPORT jstring JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetPressedButtons(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeGetPressedButtons(
     JNIEnv* env, jobject, jint port)
 {
     if (!g_host) return env->NewStringUTF("");
@@ -422,7 +422,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetPressedButtons(
  * category-A error string for the bridge to raise synchronously.
  */
 JNIEXPORT jstring JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetInputMapping(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeSetInputMapping(
     JNIEnv* env, jobject, jint port, jobjectArray emulated, jobjectArray source)
 {
     // Staged-system gate precedes shape validation: callers key on
@@ -455,7 +455,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetInputMapping(
  * SetInputMapping to apply.
  */
 JNIEXPORT jint JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetButtonBit(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeGetButtonBit(
     JNIEnv* env, jobject, jint port, jstring nameStr)
 {
     if (!g_host) return -1;
@@ -464,7 +464,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetButtonBit(
 
 /** The pending (unconsumed) accumulated delta on one axis. Test seam. */
 JNIEXPORT jint JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetAxisAccum(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeGetAxisAccum(
     JNIEnv* env, jobject, jint port, jstring nameStr)
 {
     if (!g_host) return 0;
@@ -477,7 +477,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetAxisAccum(
  * empty name disconnects. Registrations persist across loadRom.
  */
 JNIEXPORT jstring JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeConnectDevice(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeConnectDevice(
     JNIEnv* env, jobject, jstring systemIdStr, jint port, jstring deviceStr)
 {
     if (!g_host) return env->NewStringUTF("SYSTEM_NOT_LOADED");
@@ -492,7 +492,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeConnectDevice(
  * available.
  */
 JNIEXPORT jintArray JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeDevicePorts(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeDevicePorts(
     JNIEnv* env, jobject, jstring systemIdStr, jint physical)
 {
     std::vector<int> ports;
@@ -510,7 +510,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeDevicePorts(
  * device's own button set. Software bits merge with the hardware mask.
  */
 JNIEXPORT jstring JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativePressButton(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativePressButton(
     JNIEnv* env, jobject, jint port, jstring nameStr, jboolean down)
 {
     if (!g_host) return env->NewStringUTF("SYSTEM_NOT_LOADED");
@@ -524,7 +524,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativePressButton(
  * light-gun X/Y). Consumed on the engine's next poll.
  */
 JNIEXPORT jstring JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetAxis(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeSetAxis(
     JNIEnv* env, jobject, jint port, jstring nameStr, jint value)
 {
     if (!g_host) return env->NewStringUTF("SYSTEM_NOT_LOADED");
@@ -537,7 +537,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetAxis(
  * host's shadow cursor feeds the relative delta the engine's gun needs.
  */
 JNIEXPORT jstring JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeAimAt(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeAimAt(
     JNIEnv* env, jobject, jint port, jfloat nx, jfloat ny)
 {
     if (!g_host) return env->NewStringUTF("SYSTEM_NOT_LOADED");
@@ -547,14 +547,14 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeAimAt(
 // Pause / resume / stop ------------------------------------------
 
 JNIEXPORT void JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativePause(JNIEnv*, jobject)
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativePause(JNIEnv*, jobject)
 {
     if (g_host) g_host->pause();
     LOGI("emulator paused");
 }
 
 JNIEXPORT void JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeResume(JNIEnv*, jobject)
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeResume(JNIEnv*, jobject)
 {
     if (g_host) g_host->resume();
     LOGI("emulator resumed");
@@ -563,7 +563,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeResume(JNIEnv*, jobje
 // State save / load -----------------------------------------------
 
 JNIEXPORT jboolean JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeStateSave(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeStateSave(
     JNIEnv* env, jobject, jstring pathStr)
 {
     if (!g_host) return JNI_FALSE;
@@ -571,7 +571,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeStateSave(
 }
 
 JNIEXPORT jboolean JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeStateLoad(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeStateLoad(
     JNIEnv* env, jobject, jstring pathStr)
 {
     if (!g_host) return JNI_FALSE;
@@ -584,7 +584,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeStateLoad(
 // races with emulation.
 
 JNIEXPORT jbyteArray JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeReadMemory(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeReadMemory(
     JNIEnv* env, jobject, jint address, jint length)
 {
     if (!g_host) return nullptr;
@@ -603,7 +603,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeReadMemory(
 }
 
 JNIEXPORT void JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeWriteMemory(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeWriteMemory(
     JNIEnv* env, jobject, jint address, jbyteArray bytesArr)
 {
     if (!g_host || !bytesArr) return;
@@ -620,7 +620,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeWriteMemory(
  * no valid ADDR:VALUE pair could be parsed from the code.
  */
 JNIEXPORT jboolean JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeAddCheat(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeAddCheat(
     JNIEnv* env, jobject, jstring codeStr)
 {
     if (!g_host) return JNI_FALSE;
@@ -629,7 +629,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeAddCheat(
 
 /** Remove a cheat by its exact code string. Returns false if it wasn't active. */
 JNIEXPORT jboolean JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeRemoveCheat(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeRemoveCheat(
     JNIEnv* env, jobject, jstring codeStr)
 {
     if (!g_host) return JNI_FALSE;
@@ -637,7 +637,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeRemoveCheat(
 }
 
 JNIEXPORT void JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeClearCheats(JNIEnv*, jobject)
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeClearCheats(JNIEnv*, jobject)
 {
     if (g_host) g_host->clearCheats();
 }
@@ -652,7 +652,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeClearCheats(JNIEnv*, 
  * snapshots (~16.7 s). Disabling drops history.
  */
 JNIEXPORT void JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeConfigureRewind(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeConfigureRewind(
     JNIEnv*, jobject, jboolean enabled, jint bufferSeconds)
 {
     if (g_host) g_host->configureRewind(enabled == JNI_TRUE, (int)bufferSeconds);
@@ -663,14 +663,14 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeConfigureRewind(
  * 1 rewinding, 0 playing, -1 rewind capture is not enabled.
  */
 JNIEXPORT jint JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeToggleRewind(JNIEnv*, jobject)
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeToggleRewind(JNIEnv*, jobject)
 {
     return g_host ? (jint)g_host->toggleRewind() : -1;
 }
 
 /** Enable/disable one-frame run-ahead (see the host tick loop). */
 JNIEXPORT void JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetRunAhead(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeSetRunAhead(
     JNIEnv*, jobject, jboolean enabled)
 {
     if (g_host) g_host->setRunAhead(enabled == JNI_TRUE);
@@ -678,7 +678,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetRunAhead(
 
 /** Mirror of the Kotlin fast-forward flag — suppresses run-ahead. Any thread. */
 JNIEXPORT void JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetFastForward(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeSetFastForward(
     JNIEnv*, jobject, jboolean active)
 {
     if (g_host) g_host->setFastForward(active == JNI_TRUE);
@@ -686,7 +686,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetFastForward(
 
 /** Enable/disable dynamic rate control (default on). Any thread. */
 JNIEXPORT void JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetDynamicRateControl(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeSetDynamicRateControl(
     JNIEnv*, jobject, jboolean enabled)
 {
     if (g_host) g_host->setDynamicRateControl(enabled == JNI_TRUE);
@@ -694,7 +694,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetDynamicRateControl
 
 /** Gate rumble forwarding. Disabling zeroes the motor state. Any thread. */
 JNIEXPORT void JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetRumbleEnabled(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeSetRumbleEnabled(
     JNIEnv*, jobject, jboolean enabled)
 {
     if (g_host) g_host->setRumbleEnabled(enabled == JNI_TRUE);
@@ -702,7 +702,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetRumbleEnabled(
 
 /** Current motor state, packed strong<<16|weak (u16 each). Any thread. */
 JNIEXPORT jint JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetRumbleState(JNIEnv*, jobject)
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeGetRumbleState(JNIEnv*, jobject)
 {
     return g_host ? (jint)g_host->rumbleState() : 0;
 }
@@ -710,14 +710,14 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetRumbleState(JNIEnv
 // Region / ports --------------------------------------------------
 
 JNIEXPORT jstring JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetRegion(JNIEnv* env, jobject)
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeGetRegion(JNIEnv* env, jobject)
 {
     if (!g_host) return env->NewStringUTF("");
     return env->NewStringUTF(g_host->region().c_str());
 }
 
 JNIEXPORT jstring JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetPortsJson(JNIEnv* env, jobject)
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeGetPortsJson(JNIEnv* env, jobject)
 {
     // Available from staging on, no booted core required.
     if (!g_host) return env->NewStringUTF("[]");
@@ -731,7 +731,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetPortsJson(JNIEnv* 
  * mixing into the audio ring buffer. Safe from any thread.
  */
 JNIEXPORT void JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetAudio(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeSetAudio(
     JNIEnv*, jobject, jfloat volume, jfloat balance)
 {
     if (g_host) g_host->setAudio((float)volume, (float)balance);
@@ -742,7 +742,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetAudio(
  * engine: luminance/saturation 0–1, gamma 1.0–2.0. Must run on the GL thread.
  */
 JNIEXPORT void JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetVideo(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeSetVideo(
     JNIEnv*, jobject, jfloat luminance, jfloat saturation, jfloat gamma,
     jboolean colorBleed, jboolean overscan)
 {
@@ -756,7 +756,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetVideo(
  * declare the node, so callers apply every toggle unconditionally. GL thread.
  */
 JNIEXPORT void JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetCoreBoolean(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeSetCoreBoolean(
     JNIEnv* env, jobject, jstring keyStr, jboolean value)
 {
     if (g_host) g_host->setCoreBoolean(jstringToString(env, keyStr), value == JNI_TRUE);
@@ -764,7 +764,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeSetCoreBoolean(
 
 /** Test seam: read a toggle's current node value (1/0), or -1 if absent. */
 JNIEXPORT jint JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetCoreBoolean(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeGetCoreBoolean(
     JNIEnv* env, jobject, jstring keyStr)
 {
     if (!g_host) return -1;
@@ -779,7 +779,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetCoreBoolean(
  * Returns false when nothing was persisted.
  */
 JNIEXPORT jboolean JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeFlushSaves(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeFlushSaves(
     JNIEnv*, jobject)
 {
     if (!g_host) return JNI_FALSE;
@@ -790,7 +790,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeFlushSaves(
 
 /** Comma-separated ids of the systems available in this build (e.g. "fc,gb,gba,gbc,md,sfc"). */
 JNIEXPORT jstring JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetSupportedSystems(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeGetSupportedSystems(
     JNIEnv* env, jobject)
 {
     // Registry reads must not depend on a surface existing: nativeInit only
@@ -805,7 +805,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetSupportedSystems(
  * family-mismatch gate. Empty string for unavailable systems.
  */
 JNIEXPORT jstring JNICALL
-Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetSystemExtensions(
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeGetSystemExtensions(
     JNIEnv* env, jobject, jstring systemIdStr)
 {
     loadBackendModules();  // registry read — see nativeGetSupportedSystems

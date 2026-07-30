@@ -16,26 +16,26 @@ import org.junit.runner.RunWith
  *   - nativeDestroy() completes without crashing
  */
 @RunWith(AndroidJUnit4::class)
-class AresCoreTest {
+class EmulatorCoreTest {
 
     @Test
     fun loadsLibraryWithoutCrash() {
-        // System.loadLibrary is called in AresCore's init block.
+        // System.loadLibrary is called in EmulatorCore's init block.
         // If the .so is missing or corrupt this throws UnsatisfiedLinkError.
-        val core = AresCore()
+        val core = EmulatorCore()
         assertNotNull(core)
     }
 
     @Test
     fun initReturnsTrueWithoutCrash() {
-        val core = AresCore()
+        val core = EmulatorCore()
         assertTrue("nativeInit() must return true on first call", core.init())
         core.destroy()
     }
 
     @Test
     fun tickDoesNotCrash() {
-        val core = AresCore()
+        val core = EmulatorCore()
         core.init()
         core.tick()   // no-op stub in Phase 3 — must not SIGABRT
         core.destroy()
@@ -43,7 +43,7 @@ class AresCoreTest {
 
     @Test
     fun versionStringIsNonEmpty() {
-        val core = AresCore()
+        val core = EmulatorCore()
         core.init()
         val version = core.version()
         assertTrue("version must be non-empty", version.isNotEmpty())

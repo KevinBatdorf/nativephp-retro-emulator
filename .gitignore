@@ -35,7 +35,10 @@ android/*.iml
 android/app/src/main/jniLibs/
 
 # iOS test media staged locally, never committed
-ios/test/Tests/AresCoreTests/TestMedia/*
+ios/test/Tests/EmulatorCoreTests/TestMedia/*
 ios/devharness/Tests/Resources/*
-!ios/test/Tests/AresCoreTests/TestMedia/README.md
+!ios/test/Tests/EmulatorCoreTests/TestMedia/README.md
 !ios/devharness/Tests/Resources/README.md
+
+# Engine source clones for the bundled fast-core builds (never vendored wholesale)
+/vendor-engines/

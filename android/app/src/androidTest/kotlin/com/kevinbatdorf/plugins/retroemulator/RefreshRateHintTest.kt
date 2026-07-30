@@ -52,7 +52,7 @@ class RefreshRateHintTest {
                 continue
             }
 
-            val core = AresCore()
+            val core = EmulatorCore()
             try {
                 assert(core.init()) { "${case.id}: init failed" }
                 assert(core.refreshRateHint() == 0.0) {
@@ -62,7 +62,7 @@ class RefreshRateHintTest {
                 assert(core.refreshRateHint() == 0.0) {
                     "${case.id}: staging must not boot a core — hint still 0"
                 }
-                assert(core.loadRom(romFile.readBytes()) == AresCore.LOAD_OK) {
+                assert(core.loadRom(romFile.readBytes()) == EmulatorCore.LOAD_OK) {
                     "${case.id}: loadRom failed"
                 }
                 val hint = core.refreshRateHint()

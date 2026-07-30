@@ -10,7 +10,7 @@ struct PresentationSettings {
 }
 
 /// Screen-node presentation geometry, captured alongside each frame
-/// (ares_get_video_geometry order).
+/// (emu_get_video_geometry order).
 struct VideoGeometry {
     var width: Double = 0
     var height: Double = 0
@@ -212,7 +212,7 @@ final class MetalFrameRenderer: NSObject, MTKViewDelegate {
         super.init()
     }
 
-    /// Thread-safe. Called from the emulation loop thread after each ares_tick().
+    /// Thread-safe. Called from the emulation loop thread after each emu_tick().
     func submitFrame(_ pixels: [UInt32], width: Int, height: Int, geometry: VideoGeometry) {
         lock.lock()
         pending  = pixels

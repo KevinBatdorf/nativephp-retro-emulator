@@ -24,11 +24,11 @@ class VideoGeometryTest {
 
     @Test
     fun overscanIsTrimmedByDefault() {
-        val core = AresCore()
+        val core = EmulatorCore()
         try {
             assert(core.init())
             assert(core.loadSystem("sfc"))
-            assert(core.loadRom(makeLoRom(), null) == AresCore.LOAD_OK)
+            assert(core.loadRom(makeLoRom(), null) == EmulatorCore.LOAD_OK)
             repeat(10) { core.tick() }
             assert(core.getFrameWidth() > 0) { "no frame produced" }
 
@@ -47,11 +47,11 @@ class VideoGeometryTest {
 
     @Test
     fun overscanToggleShowsFullCanvas() {
-        val core = AresCore()
+        val core = EmulatorCore()
         try {
             assert(core.init())
             assert(core.loadSystem("sfc"))
-            assert(core.loadRom(makeLoRom(), null) == AresCore.LOAD_OK)
+            assert(core.loadRom(makeLoRom(), null) == EmulatorCore.LOAD_OK)
             repeat(10) { core.tick() }
 
             core.setVideo(

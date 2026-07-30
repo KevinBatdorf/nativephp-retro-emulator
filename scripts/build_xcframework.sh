@@ -21,8 +21,8 @@ SIM_ONLY=false
 for arg in "$@"; do [[ "$arg" == "--sim-only" ]] && SIM_ONLY=true; done
 
 # The packaged Headers/ are a staged copy — refresh from the source of truth
-# so they can never drift from ios/ares_ios_api.h (check_artifacts verifies).
-cp "$IOS_SRC/ares_ios_api.h" "$HEADERS_DIR/ares_ios_api.h"
+# so they can never drift from ios/emulator_api.h (check_artifacts verifies).
+cp "$IOS_SRC/emulator_api.h" "$HEADERS_DIR/emulator_api.h"
 cp "$IOS_SRC/librashader_metal_shim.h" "$HEADERS_DIR/librashader_metal_shim.h"
 
 DEVICE_SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
@@ -113,7 +113,7 @@ make_xcframework() {
         rm -f "$fw_dir/Headers/module.modulemap"
         cat > "$fw_dir/Modules/module.modulemap" <<'EOF'
 framework module RetroEmulator {
-    header "ares_ios_api.h"
+    header "emulator_api.h"
     header "librashader_metal_shim.h"
     export *
 }

@@ -50,7 +50,7 @@ private const val RUMBLE_ONESHOT_MS = 10_000L
  */
 class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.Callback {
 
-    private val core  = AresCore()
+    private val core  = EmulatorCore()
     private val audio = EmulatorAudio(core)
     val input = EmulatorInput(core)
 
@@ -369,7 +369,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
                 // live and single-owner of stagedSlot.
                 for (i in 0..1) pendingSlots[i]?.let { core.stageSlot(i, it); pendingSlots[i] = null }
                 when (core.loadRom(rom, pendingSavePrefix, stagedRegion, stagedPreferredRegions)) {
-                    AresCore.LOAD_OK -> {
+                    EmulatorCore.LOAD_OK -> {
                         romLoaded = true
                         currentStatus = "loading"
                         // Fresh screen nodes boot with ares defaults — reapply
@@ -380,12 +380,12 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
                         applyVideoOptions()
                         applyCoreOptions()
                     }
-                    AresCore.LOAD_REJECTED -> {
+                    EmulatorCore.LOAD_REJECTED -> {
                         // Pre-teardown rejection: a running game is untouched.
                         Log.e(TAG, "loadRom rejected — prior state kept")
                         eventListener?.onError("LOAD_FAILED", "ROM rejected by analyzer")
                     }
-                    AresCore.LOAD_FAILED_STOPPED -> {
+                    EmulatorCore.LOAD_FAILED_STOPPED -> {
                         romLoaded = false
                         audioStarted = false
                         audio.stop()
@@ -615,7 +615,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
      * Queue a system STAGING; it executes on the next render-loop pass. No core
      * boots until a ROM arrives — re-staging over a running core is
      * legal and leaves the running game untouched until the next ROM load.
-     * @param systemId ares system ID — one of [AresCore.supportedSystems].
+     * @param systemId ares system ID — one of [EmulatorCore.supportedSystems].
      */
     fun queueSystemLoad(
         systemId: String,
@@ -635,7 +635,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
      * a fresh core boots with the region resolved from this ROM.
      * @param system     ares system ID (e.g. "sfc") — stored for [EmulatorStarted] event.
      * @param romPath    Absolute file path — stored for [EmulatorStarted] event.
-     * @param savePrefix Battery-save file prefix (see [AresCore.loadRom]); null
+     * @param savePrefix Battery-save file prefix (see [EmulatorCore.loadRom]); null
      *                   disables persistence.
      */
     fun queueRomLoad(
@@ -825,7 +825,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     // Rewind / run-ahead — state lives GL-side (read inside tick)
     // ---------------------------------------------------------------------------
 
-    /** Enable/disable rewind capture (see [AresCore.configureRewind]). Fire-and-forget. */
+    /** Enable/disable rewind capture (see [EmulatorCore.configureRewind]). Fire-and-forget. */
     fun queueConfigureRewind(enabled: Boolean, bufferSeconds: Int = 0) =
         queueEvent { core.configureRewind(enabled, bufferSeconds) }
 
@@ -835,10 +835,10 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
      */
     fun syncToggleRewind(): Int? = syncOnGlThread { core.toggleRewind() }
 
-    /** Enable/disable one-frame run-ahead (see [AresCore.setRunAhead]). Fire-and-forget. */
+    /** Enable/disable one-frame run-ahead (see [EmulatorCore.setRunAhead]). Fire-and-forget. */
     fun queueSetRunAhead(enabled: Boolean) = queueEvent { core.setRunAhead(enabled) }
 
-    /** Enable/disable dynamic rate control (see [AresCore.setDynamicRateControl]). Fire-and-forget. */
+    /** Enable/disable dynamic rate control (see [EmulatorCore.setDynamicRateControl]). Fire-and-forget. */
     fun queueSetDynamicRateControl(enabled: Boolean) =
         queueEvent { core.setDynamicRateControl(enabled) }
 
@@ -859,7 +859,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     fun hasVibrator(): Boolean = vibrator?.hasVibrator() == true
 
     /**
-     * Merge a per-port controller remap (see [AresCore.setInputMapping]).
+     * Merge a per-port controller remap (see [EmulatorCore.setInputMapping]).
      * Native stores it under a lock and applies it on the render thread, so this
      * is safe to call from the bridge thread. Returns "" on success or a
      * category-A error string ("SYSTEM_NOT_LOADED" / "INVALID_PARAMETERS" /
@@ -868,42 +868,42 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     fun setInputMapping(port: Int, emulated: Array<String>, source: Array<String>): String =
         core.setInputMapping(port, emulated, source)
 
-    /** Test seam: the positional bit a core button currently reads (see [AresCore.getButtonBit]). */
+    /** Test seam: the positional bit a core button currently reads (see [EmulatorCore.getButtonBit]). */
     fun getButtonBit(port: Int, name: String): Int = core.getButtonBit(port, name)
 
     /**
-     * Register/swap the device on a port (see [AresCore.connectDevice]). Passes
+     * Register/swap the device on a port (see [EmulatorCore.connectDevice]). Passes
      * the synchronously-known staged system id so validation doesn't race the
      * async LoadSystem staging. Thread-safe.
      */
     fun connectDevice(port: Int, device: String): String =
         core.connectDevice(stagedSystemId, port, device)
 
-    /** Logical ports a physical port's device occupies (see [AresCore.devicePorts]). */
+    /** Logical ports a physical port's device occupies (see [EmulatorCore.devicePorts]). */
     fun devicePorts(port: Int): IntArray = core.devicePorts(stagedSystemId, port)
 
-    /** Buttons held on a port, from any source (see [AresCore.getPressedButtons]). */
+    /** Buttons held on a port, from any source (see [EmulatorCore.getPressedButtons]). */
     fun pressedButtons(port: Int): String = core.getPressedButtons(port)
 
-    /** Set/clear a software button on a port (see [AresCore.pressButton]). Thread-safe. */
+    /** Set/clear a software button on a port (see [EmulatorCore.pressButton]). Thread-safe. */
     fun pressButton(port: Int, name: String, down: Boolean): String =
         core.pressButton(port, name, down)
 
-    /** Accumulate a relative axis delta on a port (see [AresCore.setAxis]). Thread-safe. */
+    /** Accumulate a relative axis delta on a port (see [EmulatorCore.setAxis]). Thread-safe. */
     fun setAxis(port: Int, name: String, value: Int): String = core.setAxis(port, name, value)
 
-    /** Aim a light-gun at a normalized position (see [AresCore.aimAt]). Thread-safe. */
+    /** Aim a light-gun at a normalized position (see [EmulatorCore.aimAt]). Thread-safe. */
     fun aimAt(port: Int, x: Float, y: Float): String = core.aimAt(port, x, y)
 
     /**
      * Stage a Sufami Turbo / BS-X slot ROM for the next load (see
-     * [AresCore.stageSlot]). Records the bytes; the render thread inserts them
+     * [EmulatorCore.stageSlot]). Records the bytes; the render thread inserts them
      * into the core immediately before the next ROM boot. Safe to call before
      * the surface (and core) exist — no native call happens here.
      */
     fun stageSlot(index: Int, rom: ByteArray) { if (index in 0..1) pendingSlots[index] = rom }
 
-    /** Test seam: pending accumulated axis delta (see [AresCore.getAxisAccum]). */
+    /** Test seam: pending accumulated axis delta (see [EmulatorCore.getAxisAccum]). */
     fun getAxisAccum(port: Int, name: String): Int = core.getAxisAccum(port, name)
 
     private fun applyRumble(state: Int) {
@@ -1105,7 +1105,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
      */
     fun bootOption(name: String): String = core.bootOption(name)
 
-    /** Screen-node presentation geometry (see [AresCore.getVideoGeometry]). Any thread. */
+    /** Screen-node presentation geometry (see [EmulatorCore.getVideoGeometry]). Any thread. */
     fun videoGeometry(): DoubleArray = core.getVideoGeometry()
 
     /**

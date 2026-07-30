@@ -24,7 +24,7 @@ protocol EmulatorEventListener: AnyObject {
 /// The emulation loop runs on a background thread; Metal displays the latest frame
 /// at the device's native refresh rate.
 ///
-/// Threading: `ares_tick` runs on the emulation loop thread while bridge calls
+/// Threading: `emu_tick` runs on the emulation loop thread while bridge calls
 /// (memory, state, screenshot) arrive on an arbitrary bridge thread. All `ctx`
 /// access is serialized through `emuLock` — the iOS equivalent of Android posting
 /// GL-critical work onto the GL thread.
@@ -57,7 +57,7 @@ final class EmulatorRenderer: UIView {
     /// parity with Android; consumed by the loop's frame pacing. Mirrored to the
     /// native side so run-ahead can suppress itself while fast-forwarding.
     var fastForward: Bool = false {
-        didSet { ares_set_fast_forward(ctx, fastForward) }
+        didSet { emu_set_fast_forward(ctx, fastForward) }
     }
 
     /// Periodic battery-save flush toggle (LoadSystem config { autoSave }).
@@ -83,9 +83,9 @@ final class EmulatorRenderer: UIView {
         emuLock.lock()
         // Staged for the next boot's load(); a running core never changes.
         for (name, value) in bootOptions {
-            ares_stage_boot_option(ctx, name, value ? "true" : "false")
+            emu_stage_boot_option(ctx, name, value ? "true" : "false")
         }
-        let ok = ares_load_system(ctx, system, biosPath ?? "")
+        let ok = emu_load_system(ctx, system, biosPath ?? "")
         emuLock.unlock()
         if ok { loadedSystem = system }
         return ok
@@ -95,21 +95,21 @@ final class EmulatorRenderer: UIView {
     /// not exposed). Reads core state, not what was requested.
     func bootOption(_ name: String) -> String {
         emuLock.lock()
-        let value = String(cString: ares_get_boot_option(ctx, name))
+        let value = String(cString: emu_get_boot_option(ctx, name))
         emuLock.unlock()
         return value
     }
 
     /// ares ids compiled into this build (e.g. ["fc", "sfc", "gb", "md"]).
     static var supportedSystems: [String] {
-        String(cString: ares_supported_systems()).components(separatedBy: ",")
+        String(cString: emu_supported_systems()).components(separatedBy: ",")
     }
 
     /// ROM file extensions (no dots) valid for a system id — the LoadRom
     /// family-mismatch gate.
     func systemExtensions(_ system: String) -> [String] {
         emuLock.lock()
-        let exts = String(cString: ares_system_extensions(ctx, system))
+        let exts = String(cString: emu_system_extensions(ctx, system))
         emuLock.unlock()
         return exts.isEmpty ? [] : exts.components(separatedBy: ",")
     }
@@ -127,7 +127,7 @@ final class EmulatorRenderer: UIView {
 
         emuLock.lock()
         let result = romData.withUnsafeBytes {
-            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count,
+            emu_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count,
                           savePrefix, stagedRegion, stagedPreferredRegions)
         }
         // Fresh screen nodes boot with ares defaults — reapply the surface's
@@ -165,20 +165,20 @@ final class EmulatorRenderer: UIView {
     // MARK: - Lifecycle
 
     func pauseEmulation() {
-        ares_pause(ctx)
+        emu_pause(ctx)
         flushSaves()
         currentStatus = "paused"
         eventListener?.onPaused()
     }
 
     func resumeEmulation() {
-        ares_resume(ctx)
+        emu_resume(ctx)
         currentStatus = "running"
         eventListener?.onResumed()
     }
 
     /// Stop emulation and tear down the ares core — Android cycles the
-    /// platform via destroy()+init(); ares_reset does the same in place, so a
+    /// platform via destroy()+init(); emu_reset does the same in place, so a
     /// follow-up loadSystem starts from factory state (system switching goes
     /// through here).
     func stopEmulation() {
@@ -188,8 +188,8 @@ final class EmulatorRenderer: UIView {
         hapticEngine?.stop()
         lastRumbleState = 0
         emuLock.lock()
-        _ = ares_flush_saves(ctx)
-        ares_reset(ctx)
+        _ = emu_flush_saves(ctx)
+        emu_reset(ctx)
         emuLock.unlock()
         loadedSystem = ""
         pendingStarted = false
@@ -197,11 +197,11 @@ final class EmulatorRenderer: UIView {
         eventListener?.onStopped()
     }
 
-    /// Write battery-backed memory to disk (see ares_flush_saves). Safe from
+    /// Write battery-backed memory to disk (see emu_flush_saves). Safe from
     /// any thread — serialized on emuLock like every other ctx access.
     func flushSaves() {
         emuLock.lock()
-        _ = ares_flush_saves(ctx)
+        _ = emu_flush_saves(ctx)
         emuLock.unlock()
     }
 
@@ -211,7 +211,7 @@ final class EmulatorRenderer: UIView {
     func setAudioOptions(volume: Float? = nil, balance: Float? = nil) {
         if let volume { audioVolume = volume }
         if let balance { audioBalance = balance }
-        ares_set_audio(ctx, audioVolume, audioBalance)
+        emu_set_audio(ctx, audioVolume, audioBalance)
     }
 
     private var audioVolume: Float = 1
@@ -243,7 +243,7 @@ final class EmulatorRenderer: UIView {
 
     /// Push the merged screen-node options into ares. Callers hold emuLock.
     private func applyVideoOptions() {
-        ares_set_video(
+        emu_set_video(
             ctx, videoOptions.luminance, videoOptions.saturation, videoOptions.gamma,
             videoOptions.colorBleed, videoOptions.overscan)
     }
@@ -263,14 +263,14 @@ final class EmulatorRenderer: UIView {
         for (key, value) in options where coreOptions.keys.contains(key) {
             coreOptions[key] = value
             // No-ops natively when no core is loaded yet; reapplied at boot.
-            ares_set_core_boolean(ctx, key, value)
+            emu_set_core_boolean(ctx, key, value)
         }
         emuLock.unlock()
     }
 
     /// Reapply all toggles to a freshly booted core. Callers hold emuLock.
     private func applyCoreOptions() {
-        for (key, value) in coreOptions { ares_set_core_boolean(ctx, key, value) }
+        for (key, value) in coreOptions { emu_set_core_boolean(ctx, key, value) }
     }
 
     // MARK: - Memory
@@ -282,7 +282,7 @@ final class EmulatorRenderer: UIView {
         var buf = [UInt8](repeating: 0, count: length)
         emuLock.lock()
         let written = buf.withUnsafeMutableBufferPointer {
-            ares_read_memory(ctx, address, $0.baseAddress, Int32(length))
+            emu_read_memory(ctx, address, $0.baseAddress, Int32(length))
         }
         emuLock.unlock()
         guard written >= 0 else { return nil }
@@ -293,7 +293,7 @@ final class EmulatorRenderer: UIView {
         guard !bytes.isEmpty else { return }
         emuLock.lock()
         bytes.withUnsafeBufferPointer {
-            ares_write_memory(ctx, address, $0.baseAddress, Int32(bytes.count))
+            emu_write_memory(ctx, address, $0.baseAddress, Int32(bytes.count))
         }
         emuLock.unlock()
     }
@@ -306,7 +306,7 @@ final class EmulatorRenderer: UIView {
     /// Gate rumble forwarding from ares' motor nodes. Safe from any thread.
     func setRumbleEnabled(_ enabled: Bool) {
         emuLock.lock()
-        ares_set_rumble_enabled(ctx, enabled)
+        emu_set_rumble_enabled(ctx, enabled)
         emuLock.unlock()
         if !enabled {
             lastRumbleState = 0
@@ -354,7 +354,7 @@ final class EmulatorRenderer: UIView {
 
     /// Poll the packed motor state (atomic native-side; no lock needed).
     func pollRumble() {
-        let state = ares_get_rumble_state(ctx)
+        let state = emu_get_rumble_state(ctx)
         if state != lastRumbleState {
             lastRumbleState = state
             applyRumble(state)
@@ -363,10 +363,10 @@ final class EmulatorRenderer: UIView {
 
     // MARK: - Rewind / run-ahead
 
-    /// Enable/disable rewind capture (see ares_configure_rewind). Serialized on emuLock.
+    /// Enable/disable rewind capture (see emu_configure_rewind). Serialized on emuLock.
     func configureRewind(enabled: Bool, bufferSeconds: Int) {
         emuLock.lock()
-        ares_configure_rewind(ctx, enabled, Int32(bufferSeconds))
+        emu_configure_rewind(ctx, enabled, Int32(bufferSeconds))
         emuLock.unlock()
     }
 
@@ -374,21 +374,21 @@ final class EmulatorRenderer: UIView {
     func toggleRewind() -> Int {
         emuLock.lock()
         defer { emuLock.unlock() }
-        return Int(ares_toggle_rewind(ctx))
+        return Int(emu_toggle_rewind(ctx))
     }
 
-    /// Enable/disable one-frame run-ahead (see ares_set_run_ahead). Serialized on emuLock.
+    /// Enable/disable one-frame run-ahead (see emu_set_run_ahead). Serialized on emuLock.
     func setRunAhead(enabled: Bool) {
         emuLock.lock()
-        ares_set_run_ahead(ctx, enabled)
+        emu_set_run_ahead(ctx, enabled)
         emuLock.unlock()
     }
 
-    /// Enable/disable dynamic rate control (see ares_set_dynamic_rate_control).
+    /// Enable/disable dynamic rate control (see emu_set_dynamic_rate_control).
     /// Serialized on emuLock.
     func setDynamicRateControl(enabled: Bool) {
         emuLock.lock()
-        ares_set_dynamic_rate_control(ctx, enabled)
+        emu_set_dynamic_rate_control(ctx, enabled)
         emuLock.unlock()
     }
 
@@ -399,19 +399,19 @@ final class EmulatorRenderer: UIView {
     func addCheat(code: String) -> Bool {
         emuLock.lock()
         defer { emuLock.unlock() }
-        return ares_add_cheat(ctx, code)
+        return emu_add_cheat(ctx, code)
     }
 
     /// Remove a cheat by exact code string. Returns false when it wasn't active.
     func removeCheat(code: String) -> Bool {
         emuLock.lock()
         defer { emuLock.unlock() }
-        return ares_remove_cheat(ctx, code)
+        return emu_remove_cheat(ctx, code)
     }
 
     func clearCheats() {
         emuLock.lock()
-        ares_clear_cheats(ctx)
+        emu_clear_cheats(ctx)
         emuLock.unlock()
     }
 
@@ -442,13 +442,13 @@ final class EmulatorRenderer: UIView {
     func syncStateSave(path: String) -> Bool {
         emuLock.lock()
         defer { emuLock.unlock() }
-        return ares_state_save(ctx, path)
+        return emu_state_save(ctx, path)
     }
 
     func syncStateLoad(path: String) -> Bool {
         emuLock.lock()
         defer { emuLock.unlock() }
-        return ares_state_load(ctx, path)
+        return emu_state_load(ctx, path)
     }
 
     // MARK: - Metadata
@@ -456,13 +456,13 @@ final class EmulatorRenderer: UIView {
     func getRegion() -> String {
         emuLock.lock()
         defer { emuLock.unlock() }
-        return String(cString: ares_get_region(ctx))
+        return String(cString: emu_get_region(ctx))
     }
 
     func getPortsJson() -> String {
         emuLock.lock()
         defer { emuLock.unlock() }
-        return String(cString: ares_get_ports_json(ctx))
+        return String(cString: emu_get_ports_json(ctx))
     }
 
     // MARK: - Devices + input (device-handle model)
@@ -474,7 +474,7 @@ final class EmulatorRenderer: UIView {
     func connectDevice(port: Int, device: String) -> String {
         emuLock.lock()
         defer { emuLock.unlock() }
-        return String(cString: ares_connect_device(ctx, stagedSystemId, Int32(port), device))
+        return String(cString: emu_connect_device(ctx, stagedSystemId, Int32(port), device))
     }
 
     /// The logical ports a physical port's registered device occupies
@@ -483,7 +483,7 @@ final class EmulatorRenderer: UIView {
         var out = [Int32](repeating: 0, count: 5)
         emuLock.lock()
         let count = out.withUnsafeMutableBufferPointer {
-            ares_device_ports(ctx, stagedSystemId, Int32(port), $0.baseAddress, Int32($0.count))
+            emu_device_ports(ctx, stagedSystemId, Int32(port), $0.baseAddress, Int32($0.count))
         }
         emuLock.unlock()
         return out.prefix(Int(count)).map(Int.init)
@@ -491,31 +491,31 @@ final class EmulatorRenderer: UIView {
 
     /// Set or clear one software button on a logical port, resolved against the
     /// connected device. Returns "" or a category-A error code.
-    /// Buttons held on a port, from any source. See `ares_get_pressed_buttons`.
+    /// Buttons held on a port, from any source. See `emu_get_pressed_buttons`.
     func pressedButtons(port: Int) -> String {
         emuLock.lock()
         defer { emuLock.unlock() }
-        return String(cString: ares_get_pressed_buttons(ctx, Int32(port)))
+        return String(cString: emu_get_pressed_buttons(ctx, Int32(port)))
     }
 
     func pressButton(port: Int, name: String, down: Bool) -> String {
         emuLock.lock()
         defer { emuLock.unlock() }
-        return String(cString: ares_press_button(ctx, Int32(port), name, down))
+        return String(cString: emu_press_button(ctx, Int32(port), name, down))
     }
 
     /// Accumulate a relative axis delta (mouse / light-gun X/Y).
     func setAxis(port: Int, name: String, value: Int) -> String {
         emuLock.lock()
         defer { emuLock.unlock() }
-        return String(cString: ares_set_axis(ctx, Int32(port), name, Int32(value)))
+        return String(cString: emu_set_axis(ctx, Int32(port), name, Int32(value)))
     }
 
     /// Aim a light-gun at an absolute normalized (0..1) screen position.
     func aimAt(port: Int, x: Float, y: Float) -> String {
         emuLock.lock()
         defer { emuLock.unlock() }
-        return String(cString: ares_aim_at(ctx, Int32(port), x, y))
+        return String(cString: emu_aim_at(ctx, Int32(port), x, y))
     }
 
     /// Merge a per-port controller remap; empty arrays reset to defaults.
@@ -530,7 +530,7 @@ final class EmulatorRenderer: UIView {
         }
         var emuC: [UnsafePointer<CChar>?] = emuDup.map { UnsafePointer($0) }
         var srcC: [UnsafePointer<CChar>?] = srcDup.map { UnsafePointer($0) }
-        let result = ares_set_input_mapping(ctx, Int32(port), &emuC, &srcC, Int32(emulated.count))
+        let result = emu_set_input_mapping(ctx, Int32(port), &emuC, &srcC, Int32(emulated.count))
         return String(cString: result!)
     }
 
@@ -539,7 +539,7 @@ final class EmulatorRenderer: UIView {
     func stageSlot(index: Int, rom: Data) {
         emuLock.lock()
         rom.withUnsafeBytes {
-            ares_stage_slot(ctx, Int32(index),
+            emu_stage_slot(ctx, Int32(index),
                             $0.bindMemory(to: UInt8.self).baseAddress, $0.count)
         }
         emuLock.unlock()
@@ -559,11 +559,11 @@ final class EmulatorRenderer: UIView {
 
         emuLock.lock()
         var w: UInt32 = 0, h: UInt32 = 0
-        ares_get_frame(ctx, nil, 0, &w, &h)
+        emu_get_frame(ctx, nil, 0, &w, &h)
         guard w > 0, h > 0 else { emuLock.unlock(); return nil }
         var pixels = [UInt32](repeating: 0, count: Int(w * h))
         let ok = pixels.withUnsafeMutableBufferPointer {
-            ares_get_frame(ctx, $0.baseAddress, $0.count, &w, &h)
+            emu_get_frame(ctx, $0.baseAddress, $0.count, &w, &h)
         }
         emuLock.unlock()
         guard ok else { return nil }
@@ -655,7 +655,7 @@ final class EmulatorRenderer: UIView {
         guard let device = MTLCreateSystemDefaultDevice() else {
             fatalError("Metal not available")
         }
-        ctx = ares_create()!
+        ctx = emu_create()!
 
         metalView = MTKView(frame: .zero, device: device)
         metalView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -734,7 +734,7 @@ final class EmulatorRenderer: UIView {
                 Double(now.uptimeNanoseconds - lastTick.uptimeNanoseconds) / 1e9, 0.25)
             lastTick = now
             let speed = fastForward ? 4.0 : speedMultiplier
-            let hint = ares_get_refresh_rate_hint(ctx)
+            let hint = emu_get_refresh_rate_hint(ctx)
             let targetFps = hint > 0 ? hint : fallbackFps
             accumulator += elapsed * targetFps * speed
             var ticks = Int(accumulator)
@@ -750,24 +750,24 @@ final class EmulatorRenderer: UIView {
             var geometry = [Double](repeating: 0, count: 7)
             if ticks > 0 {
                 emuLock.lock()
-                for _ in 0..<ticks { ares_tick(ctx) }
+                for _ in 0..<ticks { emu_tick(ctx) }
 
                 // Periodic battery-save flush (30 s, ares' desktop cadence).
                 if autoSave,
                    DispatchTime.now().uptimeNanoseconds - lastAutoSave.uptimeNanoseconds
                        >= 30_000_000_000 {
                     lastAutoSave = DispatchTime.now()
-                    _ = ares_flush_saves(ctx)
+                    _ = emu_flush_saves(ctx)
                 }
 
-                // Copy latest frame while holding the lock — ares_get_frame reads ctx.
-                ares_get_frame(ctx, nil, 0, &w, &h)
+                // Copy latest frame while holding the lock — emu_get_frame reads ctx.
+                emu_get_frame(ctx, nil, 0, &w, &h)
                 if w > 0 && h > 0 {
                     pixels = [UInt32](repeating: 0, count: Int(w * h))
                     pixels.withUnsafeMutableBufferPointer {
-                        _ = ares_get_frame(ctx, $0.baseAddress, $0.count, &w, &h)
+                        _ = emu_get_frame(ctx, $0.baseAddress, $0.count, &w, &h)
                     }
-                    ares_get_video_geometry(ctx, &geometry)
+                    emu_get_video_geometry(ctx, &geometry)
                 }
                 emuLock.unlock()
 

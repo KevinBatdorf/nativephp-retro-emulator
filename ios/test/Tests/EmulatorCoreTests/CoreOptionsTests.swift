@@ -12,37 +12,37 @@ final class CoreOptionsTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        ctx = ares_create()
+        ctx = emu_create()
         XCTAssertNotNil(ctx)
     }
 
     override func tearDown() {
-        ares_destroy(ctx)
+        emu_destroy(ctx)
         ctx = nil
         super.tearDown()
     }
 
     func testDeepBlackBoostTogglesOnSnesAndIsAbsentElsewhere() {
-        XCTAssertTrue(ares_load_system(ctx, "sfc", nil))
+        XCTAssertTrue(emu_load_system(ctx, "sfc", nil))
         let rom = BootTests.makeMinimalLoRom()
         let ok = rom.withUnsafeBytes {
-            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil, nil, nil) == 1
+            emu_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil, nil, nil) == 1
         }
         XCTAssertTrue(ok)
-        for _ in 0..<5 { _ = ares_tick(ctx) }
+        for _ in 0..<5 { _ = emu_tick(ctx) }
 
         // ares' sfc core registers Deep Black Boost defaulting on.
-        XCTAssertEqual(ares_get_core_boolean(ctx, "deepBlackBoost"), 1,
+        XCTAssertEqual(emu_get_core_boolean(ctx, "deepBlackBoost"), 1,
                        "sfc core should boot with Deep Black Boost on (ares default)")
-        ares_set_core_boolean(ctx, "deepBlackBoost", false)
-        XCTAssertEqual(ares_get_core_boolean(ctx, "deepBlackBoost"), 0, "false must apply")
-        ares_set_core_boolean(ctx, "deepBlackBoost", true)
-        XCTAssertEqual(ares_get_core_boolean(ctx, "deepBlackBoost"), 1, "true must apply")
+        emu_set_core_boolean(ctx, "deepBlackBoost", false)
+        XCTAssertEqual(emu_get_core_boolean(ctx, "deepBlackBoost"), 0, "false must apply")
+        emu_set_core_boolean(ctx, "deepBlackBoost", true)
+        XCTAssertEqual(emu_get_core_boolean(ctx, "deepBlackBoost"), 1, "true must apply")
 
         // Keys the sfc core doesn't declare, and an unknown key, report absent
         // so the applier no-ops instead of erroring.
-        XCTAssertEqual(ares_get_core_boolean(ctx, "colorEmulation"), -1, "sfc has no Color Emulation node")
-        XCTAssertEqual(ares_get_core_boolean(ctx, "interframeBlending"), -1, "sfc has no Interframe Blending node")
-        XCTAssertEqual(ares_get_core_boolean(ctx, "bogusKey"), -1, "unknown key is absent")
+        XCTAssertEqual(emu_get_core_boolean(ctx, "colorEmulation"), -1, "sfc has no Color Emulation node")
+        XCTAssertEqual(emu_get_core_boolean(ctx, "interframeBlending"), -1, "sfc has no Interframe Blending node")
+        XCTAssertEqual(emu_get_core_boolean(ctx, "bogusKey"), -1, "unknown key is absent")
     }
 }

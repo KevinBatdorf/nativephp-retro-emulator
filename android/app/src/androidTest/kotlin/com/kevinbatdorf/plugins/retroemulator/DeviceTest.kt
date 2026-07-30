@@ -16,11 +16,11 @@ class DeviceTest {
 
     @Test
     fun mouseConnectsExposesButtonsAndAxes() {
-        val core = AresCore()
+        val core = EmulatorCore()
         try {
             assert(core.init())
             assert(core.loadSystem("sfc"))
-            assert(core.loadRom(makeLoRom(), null) == AresCore.LOAD_OK)
+            assert(core.loadRom(makeLoRom(), null) == EmulatorCore.LOAD_OK)
 
             // Port 1 boots with the system's default gamepad (auto-connected).
             core.tick()
@@ -50,7 +50,7 @@ class DeviceTest {
 
     @Test
     fun connectRejectsUnsupportedAndSwapsDevices() {
-        val core = AresCore()
+        val core = EmulatorCore()
         try {
             assert(core.init())
 
@@ -58,7 +58,7 @@ class DeviceTest {
             assert(core.connectDevice("", 1, "Mouse") == "SYSTEM_NOT_LOADED") { "no system" }
 
             assert(core.loadSystem("sfc"))
-            assert(core.loadRom(makeLoRom(), null) == AresCore.LOAD_OK)
+            assert(core.loadRom(makeLoRom(), null) == EmulatorCore.LOAD_OK)
 
             // A device the system doesn't support (Twin Tap is deliberately not
             // in our table).
@@ -80,11 +80,11 @@ class DeviceTest {
 
     @Test
     fun lightgunConnectsAndAims() {
-        val core = AresCore()
+        val core = EmulatorCore()
         try {
             assert(core.init())
             assert(core.loadSystem("sfc"))
-            assert(core.loadRom(makeLoRom(), null) == AresCore.LOAD_OK)
+            assert(core.loadRom(makeLoRom(), null) == EmulatorCore.LOAD_OK)
 
             // Super Scope on port 2 (ares wires the beam latch there).
             assert(core.connectDevice("sfc", 2, "Super Scope").isEmpty()) { "connect scope" }
@@ -121,11 +121,11 @@ class DeviceTest {
 
     @Test
     fun multitapFansOutToFourPlayers() {
-        val core = AresCore()
+        val core = EmulatorCore()
         try {
             assert(core.init())
             assert(core.loadSystem("sfc"))
-            assert(core.loadRom(makeLoRom(), null) == AresCore.LOAD_OK)
+            assert(core.loadRom(makeLoRom(), null) == EmulatorCore.LOAD_OK)
 
             // Player 1 pad on port 1; multitap on port 2 → players 2,3,4,5.
             assert(core.connectDevice("sfc", 1, "Gamepad").isEmpty())

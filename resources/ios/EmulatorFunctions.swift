@@ -340,7 +340,7 @@ enum EmulatorFunctions {
             guard renderer.loadSystem(system,
                                       biosPath: config["biosPath"] as? String,
                                       bootOptions: bootOptions) else {
-                return BridgeResponse.error(code: "LOAD_FAILED", message: "ares_load_system failed for '\(system)'")
+                return BridgeResponse.error(code: "LOAD_FAILED", message: "emu_load_system failed for '\(system)'")
             }
 
             return BridgeResponse.success(data: ["status": "staged", "system": system])

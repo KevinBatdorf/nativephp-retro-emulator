@@ -14,7 +14,7 @@ import android.view.Surface
  * Lifecycle:
  *   init() → surfaceCreated() → loadSystem() → loadRom() → tick()/presentFrame() … → destroy()
  */
-class AresCore {
+class EmulatorCore {
 
     companion object {
         // loadRom result codes — see nativeLoadRom in ares_jni.cpp.

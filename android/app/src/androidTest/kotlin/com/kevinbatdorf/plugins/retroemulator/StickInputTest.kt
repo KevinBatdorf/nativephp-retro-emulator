@@ -23,12 +23,12 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class StickInputTest {
 
-    private lateinit var core: AresCore
+    private lateinit var core: EmulatorCore
     private lateinit var input: EmulatorInput
 
     @Before
     fun setUp() {
-        core = AresCore()
+        core = EmulatorCore()
         assertTrue(core.init())
         input = EmulatorInput(core)
     }

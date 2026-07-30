@@ -14,12 +14,12 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class PressedButtonsTest {
 
-    private fun pressed(core: AresCore, port: Int = 1) =
+    private fun pressed(core: EmulatorCore, port: Int = 1) =
         core.getPressedButtons(port).split(',').filter { it.isNotEmpty() }.toSet()
 
     @Test
     fun reportsSoftwarePressesByName() {
-        val core = AresCore()
+        val core = EmulatorCore()
         try {
             assertTrue(core.init())
             assertTrue(core.loadSystem("sfc"))
@@ -37,7 +37,7 @@ class PressedButtonsTest {
 
     @Test
     fun reportsNothingForAnEmptyPort() {
-        val core = AresCore()
+        val core = EmulatorCore()
         try {
             assertTrue(core.init())
             assertTrue(core.loadSystem("sfc"))
@@ -50,7 +50,7 @@ class PressedButtonsTest {
 
     @Test
     fun reportsNothingBeforeASystemIsLoaded() {
-        val core = AresCore()
+        val core = EmulatorCore()
         try {
             assertTrue(core.init())
 
@@ -63,7 +63,7 @@ class PressedButtonsTest {
     /** Names come from the port's own device, not a fixed d-pad list. */
     @Test
     fun namesFollowTheConnectedDevice() {
-        val core = AresCore()
+        val core = EmulatorCore()
         try {
             assertTrue(core.init())
             assertTrue(core.loadSystem("sfc"))

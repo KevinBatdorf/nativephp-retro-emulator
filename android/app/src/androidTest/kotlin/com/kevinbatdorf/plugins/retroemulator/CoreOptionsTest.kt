@@ -17,11 +17,11 @@ class CoreOptionsTest {
 
     @Test
     fun deepBlackBoostTogglesOnSnesAndIsAbsentElsewhere() {
-        val core = AresCore()
+        val core = EmulatorCore()
         try {
             assert(core.init())
             assert(core.loadSystem("sfc"))
-            assert(core.loadRom(makeLoRom(), null) == AresCore.LOAD_OK)
+            assert(core.loadRom(makeLoRom(), null) == EmulatorCore.LOAD_OK)
             core.tick()
 
             // ares' sfc core registers Deep Black Boost defaulting on.
@@ -51,11 +51,11 @@ class CoreOptionsTest {
             return
         }
 
-        val core = AresCore()
+        val core = EmulatorCore()
         try {
             assert(core.init())
             assert(core.loadSystem("gb"))
-            assert(core.loadRom(romFile.readBytes()) == AresCore.LOAD_OK)
+            assert(core.loadRom(romFile.readBytes()) == EmulatorCore.LOAD_OK)
             core.tick()
 
             // Interframe Blending is a Boolean node on the Game Boy core.

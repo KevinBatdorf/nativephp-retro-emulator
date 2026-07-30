@@ -2,7 +2,7 @@ import XCTest
 import RetroEmulator
 
 /// Boot tests — exercise the full emulation path:
-/// ares_load_system → ares_load_rom → ares_tick → ares_get_frame.
+/// emu_load_system → emu_load_rom → emu_tick → emu_get_frame.
 ///
 /// System firmware (SFC ipl.rom + boards.bml, GB boot ROM, MD TMSS) is
 /// embedded in the native library — no fixtures needed.
@@ -15,11 +15,11 @@ final class BootTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        ctx = ares_create()
+        ctx = emu_create()
     }
 
     override func tearDown() {
-        ares_destroy(ctx)
+        emu_destroy(ctx)
         ctx = nil
         super.tearDown()
     }
@@ -27,25 +27,25 @@ final class BootTests: XCTestCase {
     // MARK: - System load
 
     func testLoadSystemSucceeds() {
-        XCTAssertTrue(ares_load_system(ctx, "sfc", nil),
-                      "ares_load_system(\"sfc\") must return true")
+        XCTAssertTrue(emu_load_system(ctx, "sfc", nil),
+                      "emu_load_system(\"sfc\") must return true")
     }
 
     func testLoadSystemIsIdempotent() {
-        XCTAssertTrue(ares_load_system(ctx, "sfc", nil))
+        XCTAssertTrue(emu_load_system(ctx, "sfc", nil))
         // Second call should be a no-op and return true.
-        XCTAssertTrue(ares_load_system(ctx, "sfc", nil))
+        XCTAssertTrue(emu_load_system(ctx, "sfc", nil))
     }
 
     func testLoadSystemFailsWithUnknownId() {
         // "saturn" has no ares core in this tree, so it is never registered —
         // an id absent from the registry must be rejected.
-        XCTAssertFalse(ares_load_system(ctx, "saturn", nil),
+        XCTAssertFalse(emu_load_system(ctx, "saturn", nil),
                        "systems not compiled into this build must be rejected")
     }
 
     func testSupportedSystemsAreReported() {
-        let ids = String(cString: ares_supported_systems()).components(separatedBy: ",")
+        let ids = String(cString: emu_supported_systems()).components(separatedBy: ",")
         for id in ["fc", "sfc", "gb", "md"] {
             XCTAssertTrue(ids.contains(id), "'\(id)' must be supported, got \(ids)")
         }
@@ -57,42 +57,42 @@ final class BootTests: XCTestCase {
         // Each system loads its core and reports controller buttons. Sequential
         // load/teardown in one process mirrors the Android multi-system test.
         for id in ["fc", "sfc", "gb", "md"] {
-            let localCtx = ares_create()
-            XCTAssertTrue(ares_load_system(localCtx, id, nil), "\(id): loadSystem failed")
-            let json = String(cString: ares_get_ports_json(localCtx))
+            let localCtx = emu_create()
+            XCTAssertTrue(emu_load_system(localCtx, id, nil), "\(id): loadSystem failed")
+            let json = String(cString: emu_get_ports_json(localCtx))
             XCTAssertTrue(json.contains("buttons"), "\(id): unexpected ports JSON \(json)")
-            ares_destroy(localCtx)
+            emu_destroy(localCtx)
         }
         // Re-create for tearDown symmetry.
-        ctx = ares_create()
+        ctx = emu_create()
     }
 
     // MARK: - ROM load
 
     func testLoadRomSucceedsWithSyntheticLoRom() {
-        XCTAssertTrue(ares_load_system(ctx, "sfc", nil))
+        XCTAssertTrue(emu_load_system(ctx, "sfc", nil))
 
         let rom = Self.makeMinimalLoRom()
         let ok  = rom.withUnsafeBytes {
-            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil, nil, nil) == 1
+            emu_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil, nil, nil) == 1
         }
-        XCTAssertTrue(ok, "ares_load_rom() must accept a valid synthetic LoROM")
+        XCTAssertTrue(ok, "emu_load_rom() must accept a valid synthetic LoROM")
     }
 
     func testLoadRomFailsWithoutSystem() {
         let rom = Self.makeMinimalLoRom()
         let ok  = rom.withUnsafeBytes {
-            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil, nil, nil) == 1
+            emu_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil, nil, nil) == 1
         }
-        XCTAssertFalse(ok, "ares_load_rom() must fail when no system is staged")
+        XCTAssertFalse(ok, "emu_load_rom() must fail when no system is staged")
     }
 
     func testLoadRomFailsWithTooSmallData() {
-        XCTAssertTrue(ares_load_system(ctx, "sfc", nil))
+        XCTAssertTrue(emu_load_system(ctx, "sfc", nil))
 
         let tiny = Data(count: 100)
         let ok   = tiny.withUnsafeBytes {
-            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil, nil, nil) == 1
+            emu_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil, nil, nil) == 1
         }
         XCTAssertFalse(ok)
     }
@@ -101,7 +101,7 @@ final class BootTests: XCTestCase {
 
     func testTickReturnsTrueAfterBoot() {
         boot()
-        XCTAssertTrue(ares_tick(ctx), "ares_tick() must return true when a ROM is running")
+        XCTAssertTrue(emu_tick(ctx), "emu_tick() must return true when a ROM is running")
     }
 
     func testFrameIsProduced() {
@@ -127,11 +127,11 @@ final class BootTests: XCTestCase {
 
         var pixels = [UInt32](repeating: 0xDEADBEEF, count: Int(w * h))
         pixels.withUnsafeMutableBufferPointer {
-            _ = ares_get_frame(ctx, $0.baseAddress, $0.count, &w, &h)
+            _ = emu_get_frame(ctx, $0.baseAddress, $0.count, &w, &h)
         }
         // All pixels were overwritten (no 0xDEADBEEF sentinel remaining).
         XCTAssertFalse(pixels.contains(0xDEADBEEF),
-                       "ares_get_frame() must overwrite all pixel slots")
+                       "emu_get_frame() must overwrite all pixel slots")
     }
 
     /// The screen node delivers frames from its own worker thread, so the first
@@ -139,8 +139,8 @@ final class BootTests: XCTestCase {
     private func tickUntilFrame(_ maxTicks: Int = 120) -> (w: UInt32, h: UInt32) {
         var w: UInt32 = 0, h: UInt32 = 0
         for _ in 0..<maxTicks {
-            _ = ares_tick(ctx)
-            if ares_get_frame(ctx, nil, 0, &w, &h), w > 0 { return (w, h) }
+            _ = emu_tick(ctx)
+            if emu_get_frame(ctx, nil, 0, &w, &h), w > 0 { return (w, h) }
             usleep(2_000)
         }
         return (w, h)
@@ -149,7 +149,7 @@ final class BootTests: XCTestCase {
     func testMultipleTicksDoNotCrash() {
         boot()
         for _ in 0..<10 {
-            XCTAssertTrue(ares_tick(ctx))
+            XCTAssertTrue(emu_tick(ctx))
         }
     }
 
@@ -157,7 +157,7 @@ final class BootTests: XCTestCase {
 
     func testGetRegionAfterRomLoad() {
         boot()
-        let region = String(cString: ares_get_region(ctx))
+        let region = String(cString: emu_get_region(ctx))
         // Our synthetic ROM declares country $01 (USA → NTSC).
         XCTAssertFalse(region.isEmpty, "region must not be empty after ROM load")
     }
@@ -165,20 +165,20 @@ final class BootTests: XCTestCase {
     // MARK: - Refresh rate hint
 
     func testRefreshRateHintZeroBeforeSystemLoad() {
-        XCTAssertEqual(ares_get_refresh_rate_hint(ctx), 0.0,
+        XCTAssertEqual(emu_get_refresh_rate_hint(ctx), 0.0,
                        "hint must be 0 before a system loads")
     }
 
     func testRefreshRateHintArrivesAtBootAndStagingLeavesItZero() {
-        // Under ROM-first boot screens register inside ares_load_rom
+        // Under ROM-first boot screens register inside emu_load_rom
         // — staging must leave the hint at 0. Expected value follows the core
         // formula at the pinned submodule (sfc/ppu/ppu.cpp:47, NTSC 262 lines).
-        XCTAssertEqual(ares_get_refresh_rate_hint(ctx), 0.0)
-        XCTAssertTrue(ares_load_system(ctx, "sfc", nil))
-        XCTAssertEqual(ares_get_refresh_rate_hint(ctx), 0.0,
+        XCTAssertEqual(emu_get_refresh_rate_hint(ctx), 0.0)
+        XCTAssertTrue(emu_load_system(ctx, "sfc", nil))
+        XCTAssertEqual(emu_get_refresh_rate_hint(ctx), 0.0,
                        "staging must not boot a core")
         boot()
-        XCTAssertEqual(ares_get_refresh_rate_hint(ctx), 60.09848,
+        XCTAssertEqual(emu_get_refresh_rate_hint(ctx), 60.09848,
                        accuracy: 0.001, "sfc NTSC refresh hint")
     }
 
@@ -188,35 +188,35 @@ final class BootTests: XCTestCase {
         // ($02 = Europe → PAL, sfc_pak region detection); PAL SFC refresh =
         // cpuFrequency(PAL colorburst · 4.8) / (1364 · 312) ≈ 50.0070
         // (sfc/ppu/ppu.cpp, 312-line PAL frame).
-        XCTAssertTrue(ares_load_system(ctx, "sfc", nil))
+        XCTAssertTrue(emu_load_system(ctx, "sfc", nil))
         let rom = Self.makeMinimalLoRom(region: .pal)
         let ok = rom.withUnsafeBytes {
-            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil, nil, nil) == 1
+            emu_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil, nil, nil) == 1
         }
         XCTAssertTrue(ok, "PAL LoROM must load")
-        XCTAssertEqual(String(cString: ares_get_region(ctx)), "PAL")
-        XCTAssertEqual(ares_get_refresh_rate_hint(ctx), 50.0070,
+        XCTAssertEqual(String(cString: emu_get_region(ctx)), "PAL")
+        XCTAssertEqual(emu_get_refresh_rate_hint(ctx), 50.0070,
                        accuracy: 0.001, "PAL boot must run PAL timing")
     }
 
     func testRegionOverrideWinsOverAnalysis() {
         // Explicit region override (dev knows best — junk homebrew headers):
         // an NTSC-headered ROM forced to PAL must boot PAL.
-        XCTAssertTrue(ares_load_system(ctx, "sfc", nil))
+        XCTAssertTrue(emu_load_system(ctx, "sfc", nil))
         let rom = Self.makeMinimalLoRom()
         let ok = rom.withUnsafeBytes {
-            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil, "PAL", nil) == 1
+            emu_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil, "PAL", nil) == 1
         }
         XCTAssertTrue(ok)
-        XCTAssertEqual(String(cString: ares_get_region(ctx)), "PAL")
-        XCTAssertEqual(ares_get_refresh_rate_hint(ctx), 50.0070, accuracy: 0.001)
+        XCTAssertEqual(String(cString: emu_get_region(ctx)), "PAL")
+        XCTAssertEqual(emu_get_refresh_rate_hint(ctx), 50.0070, accuracy: 0.001)
     }
 
     // MARK: - Ports JSON
 
     func testGetPortsJsonAfterSystemLoad() {
-        XCTAssertTrue(ares_load_system(ctx, "sfc", nil))
-        let json = String(cString: ares_get_ports_json(ctx))
+        XCTAssertTrue(emu_load_system(ctx, "sfc", nil))
+        let json = String(cString: emu_get_ports_json(ctx))
         XCTAssertTrue(json.contains("buttons"), "ports JSON must list buttons")
     }
 
@@ -224,11 +224,11 @@ final class BootTests: XCTestCase {
 
     private func boot() {
         let rom = Self.makeMinimalLoRom()
-        XCTAssertTrue(ares_load_system(ctx, "sfc", nil))
+        XCTAssertTrue(emu_load_system(ctx, "sfc", nil))
         let ok = rom.withUnsafeBytes {
-            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil, nil, nil) == 1
+            emu_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil, nil, nil) == 1
         }
-        XCTAssertTrue(ok, "boot() failed at ares_load_rom()")
+        XCTAssertTrue(ok, "boot() failed at emu_load_rom()")
     }
 
     // MARK: - Battery-save persistence
@@ -242,15 +242,15 @@ final class BootTests: XCTestCase {
         let pattern = Data(repeating: 0xAB, count: 8192)
         try pattern.write(to: URL(fileURLWithPath: savePath))
 
-        XCTAssertTrue(ares_load_system(ctx, "sfc", nil))
+        XCTAssertTrue(emu_load_system(ctx, "sfc", nil))
         let rom = Self.makeMinimalLoRom(withSram: true)
         let ok = rom.withUnsafeBytes {
-            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, prefix, nil, nil) == 1
+            emu_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, prefix, nil, nil) == 1
         }
         XCTAssertTrue(ok, "SRAM LoROM must load")
 
-        _ = ares_tick(ctx)
-        XCTAssertTrue(ares_flush_saves(ctx), "flush must succeed with a save prefix")
+        _ = emu_tick(ctx)
+        XCTAssertTrue(emu_flush_saves(ctx), "flush must succeed with a save prefix")
 
         let flushed = try Data(contentsOf: URL(fileURLWithPath: savePath))
         XCTAssertEqual(flushed.count, 8192)
@@ -259,12 +259,12 @@ final class BootTests: XCTestCase {
     }
 
     func testFlushWithoutPrefixReturnsFalse() {
-        XCTAssertTrue(ares_load_system(ctx, "sfc", nil))
+        XCTAssertTrue(emu_load_system(ctx, "sfc", nil))
         let rom = Self.makeMinimalLoRom()
         _ = rom.withUnsafeBytes {
-            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil, nil, nil) == 1
+            emu_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil, nil, nil) == 1
         }
-        XCTAssertFalse(ares_flush_saves(ctx), "no prefix → nothing persisted")
+        XCTAssertFalse(emu_flush_saves(ctx), "no prefix → nothing persisted")
     }
 
     // MARK: - Minimal synthetic LoROM

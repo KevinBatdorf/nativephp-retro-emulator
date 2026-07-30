@@ -9,7 +9,7 @@ private const val TAG = "EmulatorAudio"
 private const val SAMPLE_RATE = 48000
 
 /**
- * Streams mixed stereo audio from [AresCore]'s native ring buffer into an
+ * Streams mixed stereo audio from [EmulatorCore]'s native ring buffer into an
  * [AudioTrack] running in streaming mode.
  *
  * Lifecycle: call [start] after a ROM loads and [stop] on teardown — in that
@@ -18,7 +18,7 @@ private const val SAMPLE_RATE = 48000
  * audio). [start] and [stop] are not thread-safe with respect to each other —
  * call them sequentially.
  */
-class EmulatorAudio(private val core: AresCore) {
+class EmulatorAudio(private val core: EmulatorCore) {
 
     private val minBufBytes = AudioTrack.getMinBufferSize(
         SAMPLE_RATE,

@@ -3,7 +3,7 @@ import RetroEmulator
 
 /// Streams audio from the ares ring buffer into AVAudioEngine.
 ///
-/// ares_read_audio() returns interleaved stereo floats (L,R,L,R,...) at 48 kHz.
+/// emu_read_audio() returns interleaved stereo floats (L,R,L,R,...) at 48 kHz.
 /// AVAudioEngine expects non-interleaved (planar) PCM, so we deinterleave on pull.
 final class EmulatorAudio {
 
@@ -56,7 +56,7 @@ final class EmulatorAudio {
         var count = 0
         if let ctx {
             count = interleaved.withUnsafeMutableBufferPointer {
-                ares_read_audio(ctx, $0.baseAddress, $0.count)
+                emu_read_audio(ctx, $0.baseAddress, $0.count)
             }
         }
 

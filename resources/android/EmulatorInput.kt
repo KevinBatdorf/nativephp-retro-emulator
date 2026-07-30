@@ -6,17 +6,17 @@ import android.view.MotionEvent
 
 /**
  * Translates Android gamepad events into SNES button bitmasks and writes them
- * to the ares input state via [AresCore.setInputState].
+ * to the ares input state via [EmulatorCore.setInputState].
  *
  * All methods must be called from the UI thread (the same thread that delivers
  * [KeyEvent] and [MotionEvent] via dispatchKeyEvent / dispatchGenericMotionEvent).
- * [AresCore.setInputState] is thread-safe and may be called from any thread.
+ * [EmulatorCore.setInputState] is thread-safe and may be called from any thread.
  *
  * Button layout (SNES face buttons use Nintendo's positional convention):
  *   Android A → SNES B (bottom)   Android B → SNES A (right)
  *   Android X → SNES Y (left)     Android Y → SNES X (top)
  */
-class EmulatorInput(private val core: AresCore) {
+class EmulatorInput(private val core: EmulatorCore) {
 
     companion object {
         // Bit positions — must match the kSnesButtons map in ares_jni.cpp.

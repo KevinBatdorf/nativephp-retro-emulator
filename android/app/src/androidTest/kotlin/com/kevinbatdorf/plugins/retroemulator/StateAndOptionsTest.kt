@@ -24,11 +24,11 @@ class StateAndOptionsTest {
     fun stateSaveRoundTripsWramContents() {
         val statePath = File(context.cacheDir, "state-${System.nanoTime()}.bst").absolutePath
 
-        val core = AresCore()
+        val core = EmulatorCore()
         try {
             assert(core.init())
             assert(core.loadSystem("sfc"))
-            assert(core.loadRom(makeLoRom(), null) == AresCore.LOAD_OK)
+            assert(core.loadRom(makeLoRom(), null) == EmulatorCore.LOAD_OK)
             repeat(5) { core.tick() }
 
             core.writeMemory(scratch, byteArrayOf(0x5A, 0x3C))
@@ -52,11 +52,11 @@ class StateAndOptionsTest {
 
     @Test
     fun stateLoadFailsForMissingFile() {
-        val core = AresCore()
+        val core = EmulatorCore()
         try {
             assert(core.init())
             assert(core.loadSystem("sfc"))
-            assert(core.loadRom(makeLoRom(), null) == AresCore.LOAD_OK)
+            assert(core.loadRom(makeLoRom(), null) == EmulatorCore.LOAD_OK)
             core.tick()
             assert(!core.stateLoad(File(context.cacheDir, "does-not-exist.bst").absolutePath)) {
                 "loading a missing state must fail, not crash"
@@ -68,11 +68,11 @@ class StateAndOptionsTest {
 
     @Test
     fun audioAndVideoOptionsApplyWhileRunning() {
-        val core = AresCore()
+        val core = EmulatorCore()
         try {
             assert(core.init())
             assert(core.loadSystem("sfc"))
-            assert(core.loadRom(makeLoRom(), null) == AresCore.LOAD_OK)
+            assert(core.loadRom(makeLoRom(), null) == EmulatorCore.LOAD_OK)
             core.tick()
 
             core.setAudio(volume = 0.5f, balance = -1.0f)

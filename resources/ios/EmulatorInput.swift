@@ -3,7 +3,7 @@ import RetroEmulator
 
 /// Maps GCController face buttons and d-pad to the ares HARDWARE input bitmask
 /// for logical port 1. Software input (developer overlays) goes through the
-/// native per-port path (`ares_press_button`), resolved against the connected
+/// native per-port path (`emu_press_button`), resolved against the connected
 /// device — the two masks are OR'd natively at poll time, so neither source can
 /// clobber the other (mirrors Android's hwMask/swMask merge).
 ///
@@ -58,7 +58,7 @@ final class EmulatorInput {
             nc.addObserver(forName: .GCControllerDidDisconnect, object: nil, queue: .main) {
                 [weak self] _ in
                 guard let self else { return }
-                ares_set_input(self.ctx, 1, 0)
+                emu_set_input(self.ctx, 1, 0)
             }
         )
         GCController.controllers().first.map { wire($0) }
@@ -95,7 +95,7 @@ final class EmulatorInput {
             if pad.buttonOptions?.isPressed == true { mask |= Self.select }
             if pad.buttonMenu.isPressed             { mask |= Self.start }
 
-            ares_set_input(self.ctx, 1, mask)
+            emu_set_input(self.ctx, 1, mask)
         }
     }
 }

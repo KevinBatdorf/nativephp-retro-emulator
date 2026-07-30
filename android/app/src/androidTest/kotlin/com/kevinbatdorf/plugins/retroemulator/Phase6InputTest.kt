@@ -20,7 +20,7 @@ class Phase6InputTest {
 
     @Test
     fun setInputStateDoesNotCrash() {
-        val core = AresCore()
+        val core = EmulatorCore()
         core.init()
         core.setInputState(1, 0)
         core.setInputState(1, EmulatorInput.BTN_A or EmulatorInput.BTN_B)
@@ -32,7 +32,7 @@ class Phase6InputTest {
 
     @Test
     fun knownGamepadKeycodeIsConsumed() {
-        val core = AresCore()
+        val core = EmulatorCore()
         val input = EmulatorInput(core)
 
         val knownKeycodes = listOf(
@@ -61,7 +61,7 @@ class Phase6InputTest {
 
     @Test
     fun unknownKeycodeIsNotConsumed() {
-        val core = AresCore()
+        val core = EmulatorCore()
         val input = EmulatorInput(core)
 
         val unknownKeycodes = listOf(
@@ -79,7 +79,7 @@ class Phase6InputTest {
 
     @Test
     fun motionEventFromNonGamepadSourceIsNotConsumed() {
-        val core = AresCore()
+        val core = EmulatorCore()
         val input = EmulatorInput(core)
 
         // A plain touch event (SOURCE_TOUCHSCREEN) should be rejected.
@@ -92,7 +92,7 @@ class Phase6InputTest {
 
     @Test
     fun resetClearsAllButtonState() {
-        val core = AresCore()
+        val core = EmulatorCore()
         val input = EmulatorInput(core)
 
         // Press a button then reset — must not crash and setInputState(1,0) is called.

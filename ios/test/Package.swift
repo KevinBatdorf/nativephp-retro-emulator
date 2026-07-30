@@ -11,9 +11,9 @@ let package = Package(
             path: "../../build/RetroEmulator.xcframework"
         ),
         .testTarget(
-            name: "AresCoreTests",
+            name: "EmulatorCoreTests",
             dependencies: ["RetroEmulator"],
-            path: "Tests/AresCoreTests",
+            path: "Tests/EmulatorCoreTests",
             linkerSettings: [
                 .linkedLibrary("c++"),
                 // The framework binary now carries librashader's Metal runtime.

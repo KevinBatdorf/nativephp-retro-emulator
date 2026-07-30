@@ -311,7 +311,7 @@ target_link_libraries(emu_host PRIVATE log)
 # load whatever engine modules they need.
 # ---------------------------------------------------------------------------
 add_library(retro_emulator SHARED
-    "${CMAKE_CURRENT_SOURCE_DIR}/ares_jni.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/emulator_jni.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/vulkan_renderer.cpp"
 )
 target_include_directories(retro_emulator PRIVATE

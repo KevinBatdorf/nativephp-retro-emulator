@@ -23,11 +23,11 @@ class InputLatchTest {
 
     @Test
     fun subFrameTapIsHeldUntilSampledThenReleased() {
-        val core = AresCore()
+        val core = EmulatorCore()
         try {
             assertTrue(core.init())
             assertTrue(core.loadSystem("sfc"))
-            assertEquals(AresCore.LOAD_OK, core.loadRom(makePollingRom(), null))
+            assertEquals(EmulatorCore.LOAD_OK, core.loadRom(makePollingRom(), null))
             repeat(3) { core.tick() }   // boot far enough that auto-poll runs
 
             val bit = core.getButtonBit(1, "Start")
@@ -50,11 +50,11 @@ class InputLatchTest {
 
     @Test
     fun sampledPressReleasesImmediately() {
-        val core = AresCore()
+        val core = EmulatorCore()
         try {
             assertTrue(core.init())
             assertTrue(core.loadSystem("sfc"))
-            assertEquals(AresCore.LOAD_OK, core.loadRom(makePollingRom(), null))
+            assertEquals(EmulatorCore.LOAD_OK, core.loadRom(makePollingRom(), null))
             repeat(3) { core.tick() }
 
             val bit = core.getButtonBit(1, "Start")

@@ -299,8 +299,8 @@ describe('Error handling', function () {
             .file_get_contents(dirname(__DIR__).'/resources/android/EmulatorRenderer.kt')
             .file_get_contents(dirname(__DIR__).'/resources/ios/EmulatorFunctions.swift')
             .file_get_contents(dirname(__DIR__).'/resources/ios/EmulatorRenderer.swift')
-            .file_get_contents(dirname(__DIR__).'/android/app/src/main/cpp/ares_jni.cpp')
-            .file_get_contents(dirname(__DIR__).'/ios/ares_ios_api.cpp')
+            .file_get_contents(dirname(__DIR__).'/android/app/src/main/cpp/emulator_jni.cpp')
+            .file_get_contents(dirname(__DIR__).'/ios/emulator_api.cpp')
             .file_get_contents(dirname(__DIR__).'/native/host/emulator_host.cpp');
 
         // Codes surface as a bridge error (code is arg 1, or iOS's `code:`

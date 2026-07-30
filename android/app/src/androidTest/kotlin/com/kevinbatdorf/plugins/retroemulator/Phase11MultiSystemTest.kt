@@ -55,11 +55,11 @@ class Phase11MultiSystemTest {
                 continue
             }
 
-            val core = AresCore()
+            val core = EmulatorCore()
             try {
                 assert(core.init()) { "${case.id}: init failed" }
                 assert(core.loadSystem(case.id)) { "${case.id}: loadSystem failed" }
-                assert(core.loadRom(romFile.readBytes()) == AresCore.LOAD_OK) { "${case.id}: loadRom failed" }
+                assert(core.loadRom(romFile.readBytes()) == EmulatorCore.LOAD_OK) { "${case.id}: loadRom failed" }
 
                 repeat(120) { core.tick() }
 
@@ -86,7 +86,7 @@ class Phase11MultiSystemTest {
 
     @Test
     fun unknownSystemIsRejected() {
-        val core = AresCore()
+        val core = EmulatorCore()
         try {
             assert(core.init())
             // "pce" is a valid ares id but not compiled into this build.

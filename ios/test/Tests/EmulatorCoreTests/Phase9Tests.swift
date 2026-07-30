@@ -90,7 +90,7 @@ final class Phase9Tests: XCTestCase {
     // MARK: - Input bitmask
 
     func testSnesButtonBitmaskLayout() {
-        // Verify the bit positions match kSnesButtons in ares_ios_api.cpp.
+        // Verify the bit positions match kSnesButtons in the system catalog (native/host/system_catalog.cpp).
         let B: UInt32      = 1 << 0
         let Y: UInt32      = 1 << 1
         let select: UInt32 = 1 << 2
@@ -110,10 +110,10 @@ final class Phase9Tests: XCTestCase {
     }
 
     func testSetInputDoesNotCrashOnSimulator() {
-        let ctx = ares_create()!
-        ares_set_input(ctx, 1, 0xFF)  // all face buttons + dpad pressed
-        ares_set_input(ctx, 1, 0x00)  // released
-        ares_destroy(ctx)
+        let ctx = emu_create()!
+        emu_set_input(ctx, 1, 0xFF)  // all face buttons + dpad pressed
+        emu_set_input(ctx, 1, 0x00)  // released
+        emu_destroy(ctx)
     }
 
     // MARK: - Frame pixel format

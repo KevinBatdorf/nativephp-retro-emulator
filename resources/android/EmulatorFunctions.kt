@@ -339,7 +339,7 @@ object EmulatorFunctions {
             if (err != null) return err
 
             val system = parameters["system"] as? String ?: "sfc"
-            val supported = AresCore().supportedSystems().split(",")
+            val supported = EmulatorCore().supportedSystems().split(",")
             if (system !in supported) {
                 return BridgeResponse.error(
                     "UNSUPPORTED_SYSTEM",
@@ -415,7 +415,7 @@ object EmulatorFunctions {
             if (system.isEmpty()) {
                 return BridgeResponse.error("SYSTEM_NOT_LOADED", "Call LoadSystem before LoadRom")
             }
-            val extensions = AresCore().systemExtensions(system).split(",")
+            val extensions = EmulatorCore().systemExtensions(system).split(",")
             val ext = file.extension.lowercase()
             if (ext !in extensions) {
                 return operationalError(
@@ -1218,7 +1218,7 @@ object EmulatorFunctions {
 
     /**
      * Return controller ports and available button names for the loaded system.
-     * Parsed from the JSON built during [AresCore.loadSystem].
+     * Parsed from the JSON built during [EmulatorCore.loadSystem].
      */
     class GetPorts(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
@@ -1256,7 +1256,7 @@ object EmulatorFunctions {
      */
     class GetSystems(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
-            val compiled = AresCore().supportedSystems().split(",").toSet()
+            val compiled = EmulatorCore().supportedSystems().split(",").toSet()
             val systems = listOf(
                 system("fc",  "NES / Famicom",             stable = true,  compiled),
                 system("sfc", "SNES / Super Famicom",      stable = true,  compiled),

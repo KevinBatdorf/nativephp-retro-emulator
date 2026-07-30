@@ -12,24 +12,24 @@ final class StateAndOptionsTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        ctx = ares_create()
+        ctx = emu_create()
         XCTAssertNotNil(ctx)
     }
 
     override func tearDown() {
-        ares_destroy(ctx)
+        emu_destroy(ctx)
         ctx = nil
         super.tearDown()
     }
 
     private func boot() {
-        XCTAssertTrue(ares_load_system(ctx, "sfc", nil))
+        XCTAssertTrue(emu_load_system(ctx, "sfc", nil))
         let rom = BootTests.makeMinimalLoRom()
         let ok = rom.withUnsafeBytes {
-            ares_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil, nil, nil) == 1
+            emu_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, nil, nil, nil) == 1
         }
         XCTAssertTrue(ok)
-        for _ in 0..<5 { _ = ares_tick(ctx) }
+        for _ in 0..<5 { _ = emu_tick(ctx) }
     }
 
     func testStateSaveRoundTripsWramContents() {
@@ -38,24 +38,24 @@ final class StateAndOptionsTests: XCTestCase {
         defer { try? FileManager.default.removeItem(atPath: path) }
 
         var marker: [UInt8] = [0x5A, 0x3C]
-        ares_write_memory(ctx, scratch, &marker, 2)
-        _ = ares_tick(ctx)
-        XCTAssertTrue(ares_state_save(ctx, path), "stateSave must succeed while running")
+        emu_write_memory(ctx, scratch, &marker, 2)
+        _ = emu_tick(ctx)
+        XCTAssertTrue(emu_state_save(ctx, path), "stateSave must succeed while running")
 
         var zeros: [UInt8] = [0x00, 0x00]
-        ares_write_memory(ctx, scratch, &zeros, 2)
-        _ = ares_tick(ctx)
-        XCTAssertTrue(ares_state_load(ctx, path), "stateLoad must succeed")
+        emu_write_memory(ctx, scratch, &zeros, 2)
+        _ = emu_tick(ctx)
+        XCTAssertTrue(emu_state_load(ctx, path), "stateLoad must succeed")
 
         var out = [UInt8](repeating: 0, count: 2)
-        XCTAssertEqual(ares_read_memory(ctx, scratch, &out, 2), 2)
+        XCTAssertEqual(emu_read_memory(ctx, scratch, &out, 2), 2)
         XCTAssertEqual(out, [0x5A, 0x3C], "WRAM must match the snapshot")
     }
 
     func testStateLoadFailsForMissingFile() {
         boot()
         XCTAssertFalse(
-            ares_state_load(ctx, NSTemporaryDirectory() + "does-not-exist.bst"),
+            emu_state_load(ctx, NSTemporaryDirectory() + "does-not-exist.bst"),
             "loading a missing state must fail, not crash"
         )
     }
@@ -63,24 +63,24 @@ final class StateAndOptionsTests: XCTestCase {
     func testAudioAndVideoOptionsApplyWhileRunning() {
         boot()
 
-        ares_set_audio(ctx, 0.5, -1.0)
-        ares_set_audio(ctx, 1.0, 1.0)
-        ares_set_video(ctx, 0.5, 0.5, 1.5, true, false)
-        for _ in 0..<5 { _ = ares_tick(ctx) }
+        emu_set_audio(ctx, 0.5, -1.0)
+        emu_set_audio(ctx, 1.0, 1.0)
+        emu_set_video(ctx, 0.5, 0.5, 1.5, true, false)
+        for _ in 0..<5 { _ = emu_tick(ctx) }
 
         var width: UInt32 = 0
         var height: UInt32 = 0
         var buffer = [UInt32](repeating: 0, count: 1024 * 1024)
-        _ = ares_get_frame(ctx, &buffer, buffer.count, &width, &height)
+        _ = emu_get_frame(ctx, &buffer, buffer.count, &width, &height)
         XCTAssertGreaterThan(width, 0, "frame must still be produced with options applied")
     }
 
     func testOverscanIsTrimmedByDefault() {
         boot()
-        for _ in 0..<10 { _ = ares_tick(ctx) }
+        for _ in 0..<10 { _ = emu_tick(ctx) }
 
         var g = [Double](repeating: 0, count: 7)
-        ares_get_video_geometry(ctx, &g)
+        emu_get_video_geometry(ctx, &g)
         // 564 is the full SFC overscan canvas; trimmed NTSC is 512×224.
         XCTAssertEqual(g[0], 512.0, "node width must be trimmed to 512")
         XCTAssertEqual(g[1], 224.0, "node height must be trimmed to 224")
@@ -90,13 +90,13 @@ final class StateAndOptionsTests: XCTestCase {
 
     func testOverscanToggleShowsFullCanvas() {
         boot()
-        for _ in 0..<10 { _ = ares_tick(ctx) }
+        for _ in 0..<10 { _ = emu_tick(ctx) }
 
-        ares_set_video(ctx, 1.0, 1.0, 1.0, false, true)
-        for _ in 0..<5 { _ = ares_tick(ctx) }
+        emu_set_video(ctx, 1.0, 1.0, 1.0, false, true)
+        for _ in 0..<5 { _ = emu_tick(ctx) }
 
         var g = [Double](repeating: 0, count: 7)
-        ares_get_video_geometry(ctx, &g)
+        emu_get_video_geometry(ctx, &g)
         XCTAssertEqual(g[0], 564.0, "overscan: true must show the 564-wide canvas")
     }
 }

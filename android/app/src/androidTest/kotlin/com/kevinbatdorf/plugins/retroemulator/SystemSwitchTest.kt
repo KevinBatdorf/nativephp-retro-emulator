@@ -18,7 +18,7 @@ class SystemSwitchTest {
 
     @Test
     fun coreSurvivesStopStyleSwitchAcrossAllSystems() {
-        val core = AresCore()
+        val core = EmulatorCore()
         try {
             assert(core.init())
             val systems = core.supportedSystems().split(",")
@@ -33,7 +33,7 @@ class SystemSwitchTest {
                 assert(core.loadSystem(system)) { "loadSystem($system) after ${previous ?: "fresh init"}" }
                 val rom = romFor(system)
                 if (rom != null) {
-                    assert(core.loadRom(rom, null) == AresCore.LOAD_OK) { "loadRom($system)" }
+                    assert(core.loadRom(rom, null) == EmulatorCore.LOAD_OK) { "loadRom($system)" }
                     repeat(10) { core.tick() }
                 }
                 previous = system

@@ -21,11 +21,11 @@ import kotlin.math.abs
 @RunWith(AndroidJUnit4::class)
 class PalBootTest {
 
-    private lateinit var core: AresCore
+    private lateinit var core: EmulatorCore
 
     @Before
     fun setUp() {
-        core = AresCore()
+        core = EmulatorCore()
         assertTrue(core.init())
     }
 
@@ -38,7 +38,7 @@ class PalBootTest {
     fun palRomBootsPalCore() {
         assertTrue(core.loadSystem("sfc"))
         assertEquals(0.0, core.refreshRateHint(), 0.0)
-        assertEquals(AresCore.LOAD_OK, core.loadRom(makeLoRom(pal = true)))
+        assertEquals(EmulatorCore.LOAD_OK, core.loadRom(makeLoRom(pal = true)))
         assertEquals("PAL", core.getRegion())
         assertTrue(
             "PAL boot must run PAL timing, got ${core.refreshRateHint()}",
@@ -49,7 +49,7 @@ class PalBootTest {
     @Test
     fun ntscRomStillBootsNtsc() {
         assertTrue(core.loadSystem("sfc"))
-        assertEquals(AresCore.LOAD_OK, core.loadRom(makeLoRom(pal = false)))
+        assertEquals(EmulatorCore.LOAD_OK, core.loadRom(makeLoRom(pal = false)))
         assertEquals("NTSC", core.getRegion())
         assertTrue(abs(core.refreshRateHint() - 60.09848) < 0.001)
     }
@@ -57,7 +57,7 @@ class PalBootTest {
     @Test
     fun regionOverrideWinsOverAnalysis() {
         assertTrue(core.loadSystem("sfc"))
-        assertEquals(AresCore.LOAD_OK, core.loadRom(makeLoRom(pal = false), region = "PAL"))
+        assertEquals(EmulatorCore.LOAD_OK, core.loadRom(makeLoRom(pal = false), region = "PAL"))
         assertEquals("PAL", core.getRegion())
         assertTrue(abs(core.refreshRateHint() - 50.0070) < 0.001)
     }
@@ -65,11 +65,11 @@ class PalBootTest {
     @Test
     fun romSwapAcrossRegionsRebootsTheRightVariant() {
         assertTrue(core.loadSystem("sfc"))
-        assertEquals(AresCore.LOAD_OK, core.loadRom(makeLoRom(pal = false)))
+        assertEquals(EmulatorCore.LOAD_OK, core.loadRom(makeLoRom(pal = false)))
         repeat(5) { core.tick() }
         assertEquals("NTSC", core.getRegion())
 
-        assertEquals(AresCore.LOAD_OK, core.loadRom(makeLoRom(pal = true)))
+        assertEquals(EmulatorCore.LOAD_OK, core.loadRom(makeLoRom(pal = true)))
         repeat(5) { core.tick() }
         assertEquals("PAL", core.getRegion())
         assertTrue(abs(core.refreshRateHint() - 50.0070) < 0.001)
@@ -86,11 +86,11 @@ class PalBootTest {
     @Test
     fun rejectedRomLeavesTheRunningGameUntouched() {
         assertTrue(core.loadSystem("sfc"))
-        assertEquals(AresCore.LOAD_OK, core.loadRom(makeLoRom(pal = false)))
+        assertEquals(EmulatorCore.LOAD_OK, core.loadRom(makeLoRom(pal = false)))
         repeat(5) { core.tick() }
 
         // Garbage that fails the sfc analyzer — pre-teardown rejection.
-        assertEquals(AresCore.LOAD_REJECTED, core.loadRom(ByteArray(100)))
+        assertEquals(EmulatorCore.LOAD_REJECTED, core.loadRom(ByteArray(100)))
         assertEquals("NTSC", core.getRegion())
         core.tick()
         assertTrue(core.refreshRateHint() > 0.0)

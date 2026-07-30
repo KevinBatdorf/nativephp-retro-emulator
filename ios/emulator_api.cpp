@@ -3,7 +3,7 @@
 // This file is Swift-facing plumbing only: pointer/string conversion and the
 // static-link anchors that force the compiled cores (and the ares backend)
 // into the image.
-#include "ares_ios_api.h"
+#include "emulator_api.h"
 
 #include "host/backend_registry.hpp"
 #include "host/emulator_host.hpp"
@@ -13,13 +13,13 @@
 #include <string>
 #include <vector>
 
-// Opaque context handed to Swift — wraps the host so ares_reset can restore
+// Opaque context handed to Swift — wraps the host so emu_reset can restore
 // factory state while the pointer the host layers stored stays valid.
-struct AresContext {
+struct EmuContext {
     EmuHost::EmulatorHost host;
 };
 
-static AresContext* g_ctx = nullptr;
+static EmuContext* g_ctx = nullptr;
 
 // Status-string returns share one thread-local buffer (copied by the caller
 // before the next call on the same thread, per the header contract).
@@ -42,41 +42,41 @@ extern "C" {
 
 extern "C" int retro_emulator_static_cores();
 
-AresContext* ares_create(void) {
+EmuContext* emu_create(void) {
     // Forces the statically-linked core objects (and their Registrars) plus
     // the ares backend into the image — see core_link.cpp.
     (void)retro_emulator_static_cores();
     if (!g_ctx) {
-        g_ctx = new AresContext{};
+        g_ctx = new EmuContext{};
     }
     return g_ctx;
 }
 
-void ares_destroy(AresContext* ctx) {
+void emu_destroy(EmuContext* ctx) {
     if (!ctx || ctx != g_ctx) return;
     delete g_ctx;   // the host destructor unloads any running game
     g_ctx = nullptr;
 }
 
-void ares_reset(AresContext* ctx) {
+void emu_reset(EmuContext* ctx) {
     if (!ctx || ctx != g_ctx) return;
     // Factory state in place — matches Android's destroy()+init() cycle
     // while keeping the pointer the host (audio/input) stored valid.
     ctx->host.reset();
 }
 
-const char* ares_supported_systems(void) {
+const char* emu_supported_systems(void) {
     static thread_local std::string ids;
     ids = joinCsv(EmuHost::Backends::availableSystems());
     return ids.c_str();
 }
 
-bool ares_load_system(AresContext* ctx, const char* system_id, const char* bios_path) {
+bool emu_load_system(EmuContext* ctx, const char* system_id, const char* bios_path) {
     if (!ctx || !system_id) return false;
     return ctx->host.stageSystem(system_id, bios_path ? bios_path : "");
 }
 
-int ares_load_rom(AresContext* ctx, const uint8_t* rom, size_t rom_size,
+int emu_load_rom(EmuContext* ctx, const uint8_t* rom, size_t rom_size,
                   const char* save_prefix,
                   const char* region_override, const char* preferred_regions) {
     if (!ctx) return 0;
@@ -86,127 +86,127 @@ int ares_load_rom(AresContext* ctx, const uint8_t* rom, size_t rom_size,
                              preferred_regions ? preferred_regions : "");
 }
 
-const char* ares_system_extensions(AresContext*, const char* system_id) {
+const char* emu_system_extensions(EmuContext*, const char* system_id) {
     static thread_local std::string exts;
     exts = joinCsv(EmuHost::EmulatorHost::systemExtensionsFor(system_id ? system_id : ""));
     return exts.c_str();
 }
 
-bool ares_add_cheat(AresContext* ctx, const char* code) {
+bool emu_add_cheat(EmuContext* ctx, const char* code) {
     if (!ctx || !code) return false;
     return ctx->host.addCheat(code);
 }
 
-bool ares_remove_cheat(AresContext* ctx, const char* code) {
+bool emu_remove_cheat(EmuContext* ctx, const char* code) {
     if (!ctx || !code) return false;
     return ctx->host.removeCheat(code);
 }
 
-void ares_clear_cheats(AresContext* ctx) {
+void emu_clear_cheats(EmuContext* ctx) {
     if (ctx) ctx->host.clearCheats();
 }
 
-void ares_set_audio(AresContext* ctx, float volume, float balance) {
+void emu_set_audio(EmuContext* ctx, float volume, float balance) {
     if (ctx) ctx->host.setAudio(volume, balance);
 }
 
-void ares_set_video(AresContext* ctx, float luminance, float saturation,
+void emu_set_video(EmuContext* ctx, float luminance, float saturation,
                     float gamma, bool color_bleed, bool overscan) {
     if (ctx) ctx->host.setVideo(luminance, saturation, gamma, color_bleed, overscan);
 }
 
-void ares_set_core_boolean(AresContext* ctx, const char* key, bool value) {
+void emu_set_core_boolean(EmuContext* ctx, const char* key, bool value) {
     if (!ctx || !key) return;
     ctx->host.setCoreBoolean(key, value);
 }
 
-int ares_get_core_boolean(AresContext* ctx, const char* key) {
+int emu_get_core_boolean(EmuContext* ctx, const char* key) {
     if (!ctx || !key) return -1;
     return ctx->host.coreBoolean(key);
 }
 
-double ares_get_refresh_rate_hint(AresContext* ctx) {
+double emu_get_refresh_rate_hint(EmuContext* ctx) {
     return ctx ? ctx->host.refreshRateHint() : 0.0;
 }
 
-void ares_get_video_geometry(AresContext* ctx, double out[7]) {
+void emu_get_video_geometry(EmuContext* ctx, double out[7]) {
     out[0] = 0; out[1] = 0; out[2] = 1; out[3] = 1;
     out[4] = 1; out[5] = 1; out[6] = 0;
     if (ctx) ctx->host.videoGeometry(out);
 }
 
-bool ares_flush_saves(AresContext* ctx) {
+bool emu_flush_saves(EmuContext* ctx) {
     return ctx ? ctx->host.flushSaves() : false;
 }
 
-bool ares_tick(AresContext* ctx) {
+bool emu_tick(EmuContext* ctx) {
     return ctx ? ctx->host.tick() : false;
 }
 
-void ares_configure_rewind(AresContext* ctx, bool enabled, int buffer_seconds) {
+void emu_configure_rewind(EmuContext* ctx, bool enabled, int buffer_seconds) {
     if (ctx) ctx->host.configureRewind(enabled, buffer_seconds);
 }
 
-int ares_toggle_rewind(AresContext* ctx) {
+int emu_toggle_rewind(EmuContext* ctx) {
     return ctx ? ctx->host.toggleRewind() : -1;
 }
 
-void ares_set_run_ahead(AresContext* ctx, bool enabled) {
+void emu_set_run_ahead(EmuContext* ctx, bool enabled) {
     if (ctx) ctx->host.setRunAhead(enabled);
 }
 
-void ares_set_fast_forward(AresContext* ctx, bool active) {
+void emu_set_fast_forward(EmuContext* ctx, bool active) {
     if (ctx) ctx->host.setFastForward(active);
 }
 
-void ares_set_dynamic_rate_control(AresContext* ctx, bool enabled) {
+void emu_set_dynamic_rate_control(EmuContext* ctx, bool enabled) {
     if (ctx) ctx->host.setDynamicRateControl(enabled);
 }
 
-void ares_set_rumble_enabled(AresContext* ctx, bool enabled) {
+void emu_set_rumble_enabled(EmuContext* ctx, bool enabled) {
     if (ctx) ctx->host.setRumbleEnabled(enabled);
 }
 
-uint32_t ares_get_rumble_state(AresContext* ctx) {
+uint32_t emu_get_rumble_state(EmuContext* ctx) {
     return ctx ? ctx->host.rumbleState() : 0;
 }
 
-void ares_set_input(AresContext* ctx, int port, uint32_t bits) {
+void emu_set_input(EmuContext* ctx, int port, uint32_t bits) {
     if (ctx) ctx->host.setInput(port, bits);
 }
 
-uint32_t ares_get_input(AresContext* ctx, int port) {
+uint32_t emu_get_input(EmuContext* ctx, int port) {
     return ctx ? ctx->host.combinedInput(port) : 0;
 }
 
-void ares_stage_slot(AresContext* ctx, int index, const uint8_t* rom, size_t rom_size) {
+void emu_stage_slot(EmuContext* ctx, int index, const uint8_t* rom, size_t rom_size) {
     if (ctx) ctx->host.stageSlot(index, rom, rom_size);
 }
 
-bool ares_is_slot_connected(AresContext* ctx, int index) {
+bool emu_is_slot_connected(EmuContext* ctx, int index) {
     return ctx ? ctx->host.isSlotConnected(index) : false;
 }
 
-void ares_stage_boot_option(AresContext* ctx, const char* name, const char* value) {
+void emu_stage_boot_option(EmuContext* ctx, const char* name, const char* value) {
     if (!ctx || !name || !value) return;
     ctx->host.stageBootOption(name, value);
 }
 
-const char* ares_get_boot_option(AresContext* ctx, const char* name) {
+const char* emu_get_boot_option(EmuContext* ctx, const char* name) {
     if (!ctx || !name) return "";
     static thread_local std::string value;
     value = ctx->host.readBootOption(name);
     return value.c_str();
 }
 
-const char* ares_connect_device(AresContext* ctx, const char* system_id,
+const char* emu_connect_device(EmuContext* ctx, const char* system_id,
                                 int port, const char* device) {
     if (!ctx) return statusRet("SYSTEM_NOT_LOADED");
     return statusRet(ctx->host.connectDevice(system_id ? system_id : "", port,
                                              device ? device : ""));
 }
 
-int ares_device_ports(AresContext* ctx, const char* system_id,
+int emu_device_ports(EmuContext* ctx, const char* system_id,
                       int physical, int* out, int capacity) {
     if (!ctx || !out || capacity <= 0) return 0;
     auto ports = ctx->host.devicePorts(system_id ? system_id : "", physical);
@@ -218,23 +218,23 @@ int ares_device_ports(AresContext* ctx, const char* system_id,
     return count;
 }
 
-const char* ares_press_button(AresContext* ctx, int port,
+const char* emu_press_button(EmuContext* ctx, int port,
                               const char* name, bool down) {
     if (!ctx) return statusRet("SYSTEM_NOT_LOADED");
     return statusRet(ctx->host.pressButton(port, name ? name : "", down));
 }
 
-const char* ares_set_axis(AresContext* ctx, int port, const char* name, int value) {
+const char* emu_set_axis(EmuContext* ctx, int port, const char* name, int value) {
     if (!ctx) return statusRet("SYSTEM_NOT_LOADED");
     return statusRet(ctx->host.setAxis(port, name ? name : "", value));
 }
 
-const char* ares_aim_at(AresContext* ctx, int port, float nx, float ny) {
+const char* emu_aim_at(EmuContext* ctx, int port, float nx, float ny) {
     if (!ctx) return statusRet("SYSTEM_NOT_LOADED");
     return statusRet(ctx->host.aimAt(port, nx, ny));
 }
 
-const char* ares_set_input_mapping(AresContext* ctx, int port,
+const char* emu_set_input_mapping(EmuContext* ctx, int port,
                                    const char* const* emulated,
                                    const char* const* source, int count) {
     // Staged-system gate precedes shape validation: callers key on
@@ -253,17 +253,17 @@ const char* ares_set_input_mapping(AresContext* ctx, int port,
     return statusRet(ctx->host.setInputMapping(port, emulatedNames, sourceNames));
 }
 
-int ares_get_button_bit(AresContext* ctx, int port, const char* name) {
+int emu_get_button_bit(EmuContext* ctx, int port, const char* name) {
     if (!ctx || !name) return -1;
     return ctx->host.getButtonBit(port, name);
 }
 
-int ares_get_axis_accum(AresContext* ctx, int port, const char* name) {
+int emu_get_axis_accum(EmuContext* ctx, int port, const char* name) {
     if (!ctx || !name) return 0;
     return ctx->host.getAxisAccum(port, name);
 }
 
-bool ares_get_frame(AresContext* ctx,
+bool emu_get_frame(EmuContext* ctx,
                     uint32_t* out_buf, size_t buf_capacity,
                     uint32_t* out_width, uint32_t* out_height)
 {
@@ -275,41 +275,41 @@ bool ares_get_frame(AresContext* ctx,
     return ctx->host.copyLatestFrame(out_buf, buf_capacity, out_width, out_height);
 }
 
-size_t ares_read_audio(AresContext* ctx, float* out, size_t capacity) {
+size_t emu_read_audio(EmuContext* ctx, float* out, size_t capacity) {
     return ctx ? ctx->host.readAudio(out, capacity) : 0;
 }
 
-void ares_pause(AresContext* ctx) {
+void emu_pause(EmuContext* ctx) {
     if (ctx) ctx->host.pause();
 }
 
-void ares_resume(AresContext* ctx) {
+void emu_resume(EmuContext* ctx) {
     if (ctx) ctx->host.resume();
 }
 
-bool ares_state_save(AresContext* ctx, const char* path) {
+bool emu_state_save(EmuContext* ctx, const char* path) {
     if (!ctx || !path) return false;
     return ctx->host.stateSave(path);
 }
 
-bool ares_state_load(AresContext* ctx, const char* path) {
+bool emu_state_load(EmuContext* ctx, const char* path) {
     if (!ctx || !path) return false;
     return ctx->host.stateLoad(path);
 }
 
-int ares_read_memory(AresContext* ctx, uint32_t address, uint8_t* out, int length) {
+int emu_read_memory(EmuContext* ctx, uint32_t address, uint8_t* out, int length) {
     if (!ctx || !out || length <= 0) return -1;
     return ctx->host.readMemory(address, out, (uint32_t)length);
 }
 
-void ares_write_memory(AresContext* ctx, uint32_t address,
+void emu_write_memory(EmuContext* ctx, uint32_t address,
                        const uint8_t* bytes, int length)
 {
     if (!ctx || !bytes || length <= 0) return;
     ctx->host.writeMemory(address, bytes, (uint32_t)length);
 }
 
-const char* ares_get_region(AresContext* ctx) {
+const char* emu_get_region(EmuContext* ctx) {
     if (!ctx) return "";
     static thread_local std::string region;
     region = ctx->host.region();
@@ -317,13 +317,13 @@ const char* ares_get_region(AresContext* ctx) {
 }
 
 /** Buttons held on a port, comma-joined. Mirrors the Android JNI function. */
-const char* ares_get_pressed_buttons(AresContext* ctx, int port) {
+const char* emu_get_pressed_buttons(EmuContext* ctx, int port) {
     static thread_local std::string out;
     out = ctx ? ctx->host.pressedButtons(port) : "";
     return out.c_str();
 }
 
-const char* ares_get_ports_json(AresContext* ctx) {
+const char* emu_get_ports_json(EmuContext* ctx) {
     // Catalog data + registrations — available from staging on, no booted
     // core required. Thread-local storage, same contract as other strings.
     if (!ctx) return "[]";

@@ -4,8 +4,8 @@
 
 #if defined(__ANDROID__)
 #include <android/log.h>
-#define EMUHOST_LOGI(...) __android_log_print(ANDROID_LOG_INFO,  "AresCore", __VA_ARGS__)
-#define EMUHOST_LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "AresCore", __VA_ARGS__)
+#define EMUHOST_LOGI(...) __android_log_print(ANDROID_LOG_INFO,  "EmulatorCore", __VA_ARGS__)
+#define EMUHOST_LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "EmulatorCore", __VA_ARGS__)
 #else
 #include <cstdio>
 #define EMUHOST_LOGI(...) (std::fprintf(stderr, __VA_ARGS__), std::fprintf(stderr, "\n"))

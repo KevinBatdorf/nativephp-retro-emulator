@@ -53,7 +53,7 @@ class Phase4RenderingTest {
 
     @Test
     fun coreInitialisesWithoutCrash() {
-        val core = AresCore()
+        val core = EmulatorCore()
         assert(core.init()) { "nativeInit() must return true" }
         assert(core.version().isNotEmpty()) { "version must be non-empty" }
         core.destroy()
@@ -62,7 +62,7 @@ class Phase4RenderingTest {
     @Test
     fun supportedSystemsAreReported() {
         // Verify the four Phase 11 systems are compiled into the native library.
-        val supported = AresCore().supportedSystems().split(",")
+        val supported = EmulatorCore().supportedSystems().split(",")
         for (id in listOf("fc", "sfc", "gb", "md")) {
             assert(id in supported) { "system '$id' must be supported, got: $supported" }
         }

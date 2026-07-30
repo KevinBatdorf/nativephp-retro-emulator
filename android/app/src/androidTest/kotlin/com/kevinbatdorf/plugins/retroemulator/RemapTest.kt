@@ -15,11 +15,11 @@ class RemapTest {
 
     @Test
     fun remapSwapsMergesAndResets() {
-        val core = AresCore()
+        val core = EmulatorCore()
         try {
             assert(core.init())
             assert(core.loadSystem("sfc"))
-            assert(core.loadRom(makeLoRom(), null) == AresCore.LOAD_OK)
+            assert(core.loadRom(makeLoRom(), null) == EmulatorCore.LOAD_OK)
             // Controllers are explicit — register a gamepad on port 1 first.
             assert(core.connectDevice("sfc", 1, "Gamepad").isEmpty()) { "connect gamepad" }
             core.tick()
@@ -59,7 +59,7 @@ class RemapTest {
 
     @Test
     fun remapRejectsBadInput() {
-        val core = AresCore()
+        val core = EmulatorCore()
         try {
             assert(core.init())
 
@@ -69,7 +69,7 @@ class RemapTest {
             }
 
             assert(core.loadSystem("sfc"))
-            assert(core.loadRom(makeLoRom(), null) == AresCore.LOAD_OK)
+            assert(core.loadRom(makeLoRom(), null) == EmulatorCore.LOAD_OK)
             core.tick()
 
             // Port 2 has no controller registered (port 1 auto-defaults to the

@@ -232,7 +232,7 @@ find_package(Threads REQUIRED)
 # self-contained: the host app only needs to link -lretro_emulator_ios.
 # ---------------------------------------------------------------------------
 add_library(retro_emulator_ios STATIC
-    "${CMAKE_CURRENT_SOURCE_DIR}/ares_ios_api.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/emulator_api.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/librashader_metal_shim.mm"
     "${CMAKE_CURRENT_SOURCE_DIR}/core_link.cpp"
     "${NATIVE_ROOT}/host/backend_registry.cpp"

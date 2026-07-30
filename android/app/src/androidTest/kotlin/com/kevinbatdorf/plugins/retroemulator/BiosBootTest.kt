@@ -28,11 +28,11 @@ class BiosBootTest {
         val romBytes = rom.readBytes()
 
         // No biosPath → the embedded open BIOS boots and runs.
-        AresCore().run {
+        EmulatorCore().run {
             try {
                 assert(init()) { "gba: init failed" }
                 assert(loadSystem("gba")) { "gba: loadSystem failed" }
-                assert(loadRom(romBytes) == AresCore.LOAD_OK) {
+                assert(loadRom(romBytes) == EmulatorCore.LOAD_OK) {
                     "gba: embedded BIOS should boot with no biosPath"
                 }
                 repeat(180) { tick() }
@@ -44,11 +44,11 @@ class BiosBootTest {
         // A dev-supplied BIOS overrides the embedded one — still boots.
         val bios = File("/data/local/tmp/gba-bios.rom")
         if (bios.exists()) {
-            AresCore().run {
+            EmulatorCore().run {
                 try {
                     assert(init()) { "gba: init failed (override)" }
                     assert(loadSystem("gba", bios.absolutePath)) { "gba: loadSystem+bios failed" }
-                    assert(loadRom(romBytes) == AresCore.LOAD_OK) {
+                    assert(loadRom(romBytes) == EmulatorCore.LOAD_OK) {
                         "gba: override BIOS should boot"
                     }
                     repeat(180) { tick() }

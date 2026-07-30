@@ -26,11 +26,11 @@ class Phase13SaveTest {
         val pattern = ByteArray(8192) { 0xAB.toByte() }
         saveFile.writeBytes(pattern)
 
-        val core = AresCore()
+        val core = EmulatorCore()
         try {
             assert(core.init())
             assert(core.loadSystem("sfc")) { "loadSystem failed" }
-            assert(core.loadRom(makeSramLoRom(), prefix) == AresCore.LOAD_OK) { "SRAM LoROM must load" }
+            assert(core.loadRom(makeSramLoRom(), prefix) == EmulatorCore.LOAD_OK) { "SRAM LoROM must load" }
             core.tick()
             assert(core.flushSaves()) { "flush must succeed with a save prefix" }
 
@@ -45,11 +45,11 @@ class Phase13SaveTest {
 
     @Test
     fun flushWithoutPrefixReturnsFalse() {
-        val core = AresCore()
+        val core = EmulatorCore()
         try {
             assert(core.init())
             assert(core.loadSystem("sfc"))
-            assert(core.loadRom(makeSramLoRom(), null) == AresCore.LOAD_OK)
+            assert(core.loadRom(makeSramLoRom(), null) == EmulatorCore.LOAD_OK)
             assert(!core.flushSaves()) { "no prefix → nothing persisted" }
         } finally {
             core.destroy()
