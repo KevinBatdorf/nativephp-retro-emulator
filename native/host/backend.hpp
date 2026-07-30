@@ -106,6 +106,7 @@ struct OptionInfo {
     enum class Stage { Boot, Runtime } stage = Stage::Runtime;
     enum class Kind  { Boolean, Number, Enum, String } kind = Kind::Boolean;
     std::vector<std::string> values;       // Enum choices, else empty
+    std::string current;                   // live value where the engine tracks one
 };
 struct Capabilities {
     bool serialize     = false;   // save states + host rewind + host run-ahead
@@ -237,6 +238,24 @@ public:
         (void)name; (void)systemId;
         return false;
     }
+
+    // Engine-declared options — the escape hatch for keys only the engine
+    // knows (libretro core options). A set is legal only when the engine
+    // itself declares the key AND the value; behavior belongs to the core
+    // author. Returns "" on success, else the human-readable refusal the
+    // bridge surfaces as UNSUPPORTED_OPTION. `staged` targets the engine the
+    // next boot uses; false targets the running one.
+    virtual std::string setEngineOption(const std::string& key, const std::string& value,
+                                        bool staged) {
+        (void)key; (void)value; (void)staged;
+        return std::string(name()) + " declares no engine options — its settings are the "
+               "typed config keys";
+    }
+
+    // The engine-declared schema behind setEngineOption, each entry carrying
+    // its live value in `current`. Empty for engines whose settings are the
+    // typed config.
+    virtual std::vector<OptionInfo> engineOptions() const { return {}; }
 };
 
 } // namespace EmuHost

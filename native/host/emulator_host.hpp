@@ -159,6 +159,12 @@ public:
     // {"gb":{"backends":["ares","sameboy"],"default":"sameboy"}, …} for every
     // available system — the introspection the PHP layer surfaces.
     static std::string backendsJson();
+    // Engine-declared options (libretro cores). Set returns "" or the
+    // refusal message the bridge surfaces as UNSUPPORTED_OPTION; `staged`
+    // targets the engine the next boot uses. The JSON lists the schema:
+    // [{"key","choices",[…],"default","current"}, …].
+    std::string setEngineOption(const std::string& key, const std::string& value, bool staged);
+    std::string engineOptionsJson() const;
 
     // Metadata ---------------------------------------------------------------
     std::string region() const;

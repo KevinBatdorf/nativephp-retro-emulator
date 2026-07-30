@@ -276,6 +276,24 @@ Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeToggleSupported(
         ? JNI_TRUE : JNI_FALSE;
 }
 
+JNIEXPORT jstring JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeSetEngineOption(
+    JNIEnv* env, jobject, jstring keyStr, jstring valueStr, jboolean staged)
+{
+    if (!g_host) return env->NewStringUTF("emulator not initialized");
+    auto error = g_host->setEngineOption(jstringToString(env, keyStr),
+                                         jstringToString(env, valueStr),
+                                         staged == JNI_TRUE);
+    return env->NewStringUTF(error.c_str());
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeGetEngineOptionsJson(
+    JNIEnv* env, jobject)
+{
+    return env->NewStringUTF(g_host ? g_host->engineOptionsJson().c_str() : "[]");
+}
+
 /**
  * Stage a Sufami Turbo slot ROM (index 0 = Slot A, 1 = Slot B) to be inserted
  * at the next nativeLoadRom, whose base must be an ST-LOROM cart. Empty bytes

@@ -40,6 +40,7 @@ class GbConfig extends SystemConfig
         ?bool $pixelAccuracy = null,
         ?string $biosPath = null,
         Backend|string|null $backend = null,
+        array $engineOptions = [],
         public ?bool $colorEmulation = null,
         public ?bool $interframeBlending = null,
     ) {
@@ -67,6 +68,7 @@ class GbConfig extends SystemConfig
             pixelAccuracy: $pixelAccuracy,
             biosPath: $biosPath,
             backend: $backend,
+            engineOptions: $engineOptions,
         );
     }
 

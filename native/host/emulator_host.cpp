@@ -1105,6 +1105,46 @@ std::string EmulatorHost::backendName() const {
     return "";
 }
 
+std::string EmulatorHost::setEngineOption(const std::string& key, const std::string& value,
+                                          bool staged) {
+    auto* backend = staged ? (stagedBackend_ ? stagedBackend_ : activeBackend_)
+                           : activeBackend_;
+    if (!backend) return staged ? "no system is staged" : "no system is loaded";
+    return backend->setEngineOption(key, value, staged);
+}
+
+namespace {
+// Core-authored strings (option keys/choices) can carry anything.
+auto jsonEscape(const std::string& raw) -> std::string {
+    std::string out;
+    for (char c : raw) {
+        if (c == '"' || c == '\\') { out += '\\'; out += c; }
+        else if ((unsigned char)c < 0x20) { out += ' '; }
+        else out += c;
+    }
+    return out;
+}
+} // namespace
+
+std::string EmulatorHost::engineOptionsJson() const {
+    auto* backend = activeBackend_ ? activeBackend_ : stagedBackend_;
+    std::string json = "[";
+    if (backend) {
+        for (auto& option : backend->engineOptions()) {
+            if (json.size() > 1) json += ",";
+            json += "{\"key\":\"" + jsonEscape(option.key) + "\",\"choices\":[";
+            for (size_t i = 0; i < option.values.size(); i++) {
+                if (i) json += ",";
+                json += "\"" + jsonEscape(option.values[i]) + "\"";
+            }
+            json += "],\"default\":\""
+                 + jsonEscape(option.values.empty() ? "" : option.values.front())
+                 + "\",\"current\":\"" + jsonEscape(option.current) + "\"}";
+        }
+    }
+    return json + "]";
+}
+
 std::string EmulatorHost::backendsJson() {
     // Root "engines" lists every REGISTERED backend, claimant or not — the
     // only observable proof the libretro loader (which claims no system)

@@ -632,6 +632,20 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     }
 
     /**
+     * Set an engine-declared option. Blocks ≤2 s; returns the refusal message
+     * ("" = applied, null on timeout). Runs where the core reads options —
+     * a running core re-reads them between frames on this thread.
+     */
+    fun syncSetEngineOption(key: String, value: String, staged: Boolean): String? {
+        val t = renderThread
+        return if (t == null || !t.isAlive) {
+            core.setEngineOption(key, value, staged)
+        } else {
+            syncOnGlThread { core.setEngineOption(key, value, staged) }
+        }
+    }
+
+    /**
      * Queue a ROM load; it executes on the next render-loop pass after a system
      * is staged. This is the one boot path — a running game is torn down and
      * a fresh core boots with the region resolved from this ROM.

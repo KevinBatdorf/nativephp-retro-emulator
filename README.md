@@ -238,26 +238,85 @@ option the active engine lacks (e.g. `interframeBlending` on SameBoy) throws
 
 Any [libretro](https://www.libretro.com) core can serve a supported system —
 the plugin bundles a loader (not an engine) that adopts a core when you name
-it as the backend. On Android, drop the core into your app and name it:
-
-```
-resources/emulator-cores/android/arm64-v8a/snes9x_libretro_android.so
-```
+it as the backend:
 
 ```php
 Emulator::surface()->loadSystem(System::Sfc, new SfcConfig(backend: 'snes9x'));
 ```
 
-`copy-assets` packages everything under `resources/emulator-cores/android/<abi>/`
-into the app (grab `.so` files from the
-[libretro buildbot](https://buildbot.libretro.com/nightly/android/latest/) —
-filenames ship as-is). The name you pass is the file's core name; a full
-filesystem path also works. If no bundled engine or packaged core answers the
-name, `loadSystem` throws `UNSUPPORTED_BACKEND` naming what's available.
+#### Verified cores
+
+These cores are exercised by this repo's own device test suite — each one
+must adopt, boot a real ROM, render, and round-trip a save state on hardware
+before it earns a row. One speed-focused and one accuracy-focused pick per
+system:
+
+| System | Speed pick | Accuracy pick |
+|---|---|---|
+| NES | FCEUmm — GPL-2.0 — 6.9% of one core | Mesen — GPL-3.0 — 15.0% |
+| SNES | Snes9x — non-commercial only — 8.1% | bsnes — GPL-3.0 — 18.5% |
+| Genesis | PicoDrive — MAME-style non-commercial — 7.0% | Genesis Plus GX — non-commercial — 8.6% |
+| GB / GBC | *bundled:* SameBoy (Expat) — the community's speed **and** accuracy pick | |
+| GBA | *bundled:* mGBA (MPL-2.0) — same story | |
+
+CPU numbers are the same Thor measurement as the Engines section (ares on
+the same scenes: NES 28.6%, SNES 20.6–29.5%, Genesis 45.0%). Genesis is the
+starkest case — no bundled fast core, and either verified pick runs ~5–6×
+lighter than ares.
+
+**Every other libretro core is supported through the same loader but not
+necessarily tested.** If it speaks libretro API v1 and renders in software,
+it should work — cores demanding hardware GL contexts won't. You own the
+testing (and the licence) for anything outside this table.
+
+#### Adding a core
+
+1. Fetch it — either command below lands the `.so` in
+   `resources/emulator-cores/android/<abi>/`, where `copy-assets` packages
+   it into your app and prints its licence line at build time:
+
+```bash
+php artisan retro-emulator:fetch-core mesen
+```
+
+   or grab it yourself from the
+   [libretro buildbot](https://buildbot.libretro.com/nightly/android/latest/)
+   and drop it in that directory — filenames ship as-is.
+
+2. Name it per boot (`new FcConfig(backend: 'mesen')`) or app-wide in
+   `config/retro-emulator.php` (`'backends' => ['fc' => 'mesen']`). The name
+   is the file's core name; a full filesystem path also works. If no bundled
+   engine or packaged core answers the name, `loadSystem` throws
+   `UNSUPPORTED_BACKEND` naming what's available.
 
 BYO cores pay off the same way the bundled ones do (same device, method, and
 scenes as above): Snes9x runs SNES at 8.1% of one core where ares needs
 20.6%, and FCEUmm runs NES at 6.9% where ares needs 28.6%.
+
+#### Engine options
+
+Libretro cores declare their own settings, and `engineOptions` passes them
+through — validated, never blind:
+
+```php
+Emulator::surface()->loadSystem(System::Sfc, new SfcConfig(
+    backend: 'snes9x',
+    engineOptions: ['snes9x_region' => 'pal'],
+));
+
+Emulator::surface()->engineOptions();
+// [['key' => 'snes9x_region', 'choices' => ['auto', 'ntsc', 'pal'],
+//   'default' => 'auto', 'current' => 'pal'], …]
+
+Emulator::surface()->configure(['engineOptions' => ['snes9x_region' => 'ntsc']]);
+```
+
+A key the core doesn't declare, or a value outside its declared choices,
+throws `UNSUPPORTED_OPTION` echoing the legal set — a typo errors, it never
+silently no-ops. What a declared option *does* is the core author's contract,
+not this plugin's: use at your own risk. The bundled engines declare no
+engine options (their settings are the typed config keys), so any
+`engineOptions` on ares/SameBoy/mGBA throws `UNSUPPORTED_OPTION` too.
 
 What a BYO core gets: the same host as bundled engines — save states, rewind,
 run-ahead, battery saves, cheats (as RAM patches), memory read/write on the

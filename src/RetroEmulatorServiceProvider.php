@@ -4,6 +4,7 @@ namespace KevinBatdorf\RetroEmulator;
 
 use Illuminate\Support\ServiceProvider;
 use KevinBatdorf\RetroEmulator\Commands\CopyAssetsCommand;
+use KevinBatdorf\RetroEmulator\Commands\FetchCoreCommand;
 
 class RetroEmulatorServiceProvider extends ServiceProvider
 {
@@ -23,6 +24,7 @@ class RetroEmulatorServiceProvider extends ServiceProvider
 
             $this->commands([
                 CopyAssetsCommand::class,
+                FetchCoreCommand::class,
             ]);
         }
     }

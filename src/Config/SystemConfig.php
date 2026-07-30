@@ -16,6 +16,20 @@ use KevinBatdorf\RetroEmulator\VideoOutput;
  */
 abstract class SystemConfig extends Config
 {
+    /**
+     * Engine-declared options (libretro core options), key => value string,
+     * e.g. ['snes9x_overclock' => '150%']. Validated when the system loads
+     * against the schema the core itself declares — an undeclared key or
+     * value throws UNSUPPORTED_OPTION naming the legal set; it never
+     * silently no-ops. What a declared option DOES is the core author's
+     * contract, not this plugin's — use at your own risk. Bundled engines
+     * (ares, SameBoy, mGBA) declare none; their settings are the typed keys
+     * on this config.
+     *
+     * @var array<string, string>
+     */
+    public array $engineOptions = [];
+
     public function __construct(
         ?int $luminance = null,
         ?int $saturation = null,
@@ -40,7 +54,17 @@ abstract class SystemConfig extends Config
         ?bool $pixelAccuracy = null,
         public ?string $biosPath = null,
         public Backend|string|null $backend = null,
+        array $engineOptions = [],
     ) {
+        foreach ($engineOptions as $key => $value) {
+            if (! is_string($key) || ! (is_string($value) || is_int($value) || is_float($value))) {
+                throw new \InvalidArgumentException(
+                    "engineOptions must map option keys to string values — ['{$key}' => …] is not; "
+                    ."pass the exact value string the core declares (e.g. 'enabled')"
+                );
+            }
+            $this->engineOptions[$key] = (string) $value;
+        }
         parent::__construct(
             luminance: $luminance,
             saturation: $saturation,
@@ -74,6 +98,7 @@ abstract class SystemConfig extends Config
             'backend' => $this->backend instanceof Backend
                 ? $this->backend->value
                 : $this->backend,
+            'engineOptions' => $this->engineOptions !== [] ? $this->engineOptions : null,
         ], fn ($value) => $value !== null);
     }
 }

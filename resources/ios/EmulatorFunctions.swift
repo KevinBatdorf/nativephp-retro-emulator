@@ -370,6 +370,18 @@ enum EmulatorFunctions {
                 return BridgeResponse.error(code: "UNSUPPORTED_SYSTEM", message: "System '\(system)' failed to stage — no engine claimed it")
             }
 
+            // Engine-declared options validate against the schema the staged
+            // core itself declared — a typo'd key or undeclared value errors
+            // here at the call site, never a silent no-op.
+            if let engineOptions = config["engineOptions"] as? [String: Any] {
+                for (key, value) in engineOptions {
+                    let refusal = renderer.setEngineOption(key, "\(value)", staged: true)
+                    if !refusal.isEmpty {
+                        return BridgeResponse.error(code: "UNSUPPORTED_OPTION", message: refusal)
+                    }
+                }
+            }
+
             // Staging is synchronous, so the toggles validate against the
             // engine that will actually serve this system. Only ENABLING an
             // absent feature is an error; disabling one the engine never had
@@ -819,7 +831,30 @@ enum EmulatorFunctions {
             if let speed = (options["speed"] as? NSNumber)?.doubleValue {
                 renderer.speedMultiplier = min(max(speed, 0.25), 4.0)
             }
+
+            // Runtime engine-option changes: cores re-read declared options
+            // between frames, so a running game picks these up next tick.
+            if let engineOptions = options["engineOptions"] as? [String: Any] {
+                for (key, value) in engineOptions {
+                    let refusal = renderer.setEngineOption(key, "\(value)", staged: false)
+                    if !refusal.isEmpty {
+                        return BridgeResponse.error(code: "UNSUPPORTED_OPTION", message: refusal)
+                    }
+                }
+            }
             return BridgeResponse.success(data: ["status": "ok"])
+        }
+    }
+
+    /// The engine-declared option schema of the staged/active engine —
+    /// empty for bundled engines, whose settings are the typed config. Each
+    /// entry: key, choices, default, current.
+    class GetEngineOptions: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
+            let data = renderer.engineOptionsJson().data(using: .utf8) ?? Data()
+            let options = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]] ?? []
+            return BridgeResponse.success(data: ["options": options])
         }
     }
 

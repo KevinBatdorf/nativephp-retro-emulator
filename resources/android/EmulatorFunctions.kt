@@ -418,6 +418,22 @@ object EmulatorFunctions {
                 }
             }
 
+            // Engine-declared options validate against the schema the staged
+            // core itself declared — a typo'd key or undeclared value errors
+            // here at the call site, never a silent no-op.
+            val engineOptions = (config["engineOptions"] as? Map<*, *>).orEmpty()
+            for ((key, value) in engineOptions) {
+                val refusal = renderer.syncSetEngineOption(
+                    key.toString(), value.toString(), staged = true,
+                )
+                if (refusal == null || refusal.isNotEmpty()) {
+                    return BridgeResponse.error(
+                        "UNSUPPORTED_OPTION",
+                        refusal ?: "engine option '$key' timed out applying",
+                    )
+                }
+            }
+
             val coreToggles = CORE_TOGGLE_KEYS
                 .mapNotNull { key -> (config[key] as? Boolean)?.let { key to it } }
                 .toMap()
@@ -929,7 +945,45 @@ object EmulatorFunctions {
                 entry!!.renderer.speedMultiplier = speed.coerceIn(0.25, 4.0)
             }
 
+            // Runtime engine-option changes: cores re-read declared options
+            // between frames, so a running game picks these up next tick.
+            val engineOptions = (options["engineOptions"] as? Map<*, *>).orEmpty()
+            for ((key, value) in engineOptions) {
+                val refusal = entry!!.renderer.syncSetEngineOption(
+                    key.toString(), value.toString(), staged = false,
+                )
+                if (refusal == null || refusal.isNotEmpty()) {
+                    return BridgeResponse.error(
+                        "UNSUPPORTED_OPTION",
+                        refusal ?: "engine option '$key' timed out applying",
+                    )
+                }
+            }
+
             return BridgeResponse.success(mapOf("status" to "ok"))
+        }
+    }
+
+    /**
+     * The engine-declared option schema of the staged/active engine —
+     * empty for bundled engines, whose settings are the typed config. Each
+     * entry: key, choices, default, current.
+     */
+    class GetEngineOptions(private val activity: FragmentActivity) : BridgeFunction {
+        override fun execute(parameters: Map<String, Any>): Map<String, Any> {
+            val list = org.json.JSONArray(EmulatorCore().engineOptionsJson())
+            val options = (0 until list.length()).map { i ->
+                val entry = list.getJSONObject(i)
+                mapOf(
+                    "key" to entry.getString("key"),
+                    "choices" to entry.getJSONArray("choices").let { choices ->
+                        (0 until choices.length()).map { choices.getString(it) }
+                    },
+                    "default" to entry.getString("default"),
+                    "current" to entry.getString("current"),
+                )
+            }
+            return BridgeResponse.success(mapOf("options" to options))
         }
     }
 

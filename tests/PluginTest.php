@@ -8,6 +8,7 @@ use KevinBatdorf\RetroEmulator\Buttons\GbaButton;
 use KevinBatdorf\RetroEmulator\Buttons\GbButton;
 use KevinBatdorf\RetroEmulator\Buttons\MdButton;
 use KevinBatdorf\RetroEmulator\Buttons\SfcButton;
+use KevinBatdorf\RetroEmulator\Commands\CopyAssetsCommand;
 use KevinBatdorf\RetroEmulator\Components\Emulator as EmulatorComponent;
 use KevinBatdorf\RetroEmulator\Config\Config;
 use KevinBatdorf\RetroEmulator\Config\FcConfig;
@@ -680,6 +681,66 @@ describe('Typed layer', function () {
         expect($config->toArray()['backend'])->toBe('ares');
         expect((new GbConfig)->toArray())->not->toHaveKey('backend');
         expect((new GbConfig(backend: 'quicknes'))->toArray()['backend'])->toBe('quicknes');
+    });
+
+    it('serializes engineOptions as declared value strings and omits when empty', function () {
+        $config = new SfcConfig(backend: 'snes9x', engineOptions: [
+            'snes9x_overclock' => '150%',
+            'snes9x_randomize_memory' => 1,
+        ]);
+
+        expect($config->toArray()['engineOptions'])->toBe([
+            'snes9x_overclock' => '150%',
+            'snes9x_randomize_memory' => '1',
+        ]);
+        expect((new SfcConfig)->toArray())->not->toHaveKey('engineOptions');
+    });
+
+    it('rejects engineOptions values that are not value strings', function () {
+        new SfcConfig(engineOptions: ['snes9x_overscan' => true]);
+    })->throws(InvalidArgumentException::class);
+
+    it('routes runtime engineOptions through Configure', function () {
+        $GLOBALS['__nativephp_calls'] = [];
+
+        Emulator::surface('main')->configure(['engineOptions' => ['snes9x_region' => 'pal']]);
+
+        $call = end($GLOBALS['__nativephp_calls']);
+        expect($call['function'])->toBe('Emulator.Configure');
+        expect($call['payload']['options']['engineOptions'])->toBe(['snes9x_region' => 'pal']);
+    });
+
+    it('lists the engine-declared schema via engineOptions()', function () {
+        $GLOBALS['__nativephp_mock']['Emulator.GetEngineOptions'] = json_encode([
+            'status' => 'ok',
+            'options' => [[
+                'key' => 'snes9x_region',
+                'choices' => ['auto', 'ntsc', 'pal'],
+                'default' => 'auto',
+                'current' => 'pal',
+            ]],
+        ]);
+
+        try {
+            $options = Emulator::surface('main')->engineOptions();
+
+            expect($options)->toHaveCount(1);
+            expect($options[0]['key'])->toBe('snes9x_region');
+            expect($options[0]['choices'])->toBe(['auto', 'ntsc', 'pal']);
+            expect($options[0]['current'])->toBe('pal');
+        } finally {
+            unset($GLOBALS['__nativephp_mock']['Emulator.GetEngineOptions']);
+        }
+    });
+
+    it('names a licence for every core in the verified table', function () {
+        foreach (['snes9x', 'bsnes', 'fceumm', 'mesen', 'picodrive', 'genesis_plus_gx'] as $core) {
+            expect(CopyAssetsCommand::coreLicenceNote("{$core}_libretro_android.so"))
+                ->not->toContain('licence unknown');
+        }
+
+        expect(CopyAssetsCommand::coreLicenceNote('mystery_core.so'))
+            ->toContain('licence unknown');
     });
 
     it('resolves the engine: explicit config beats the app map beats native default', function () {

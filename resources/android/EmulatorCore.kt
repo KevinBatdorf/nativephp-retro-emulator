@@ -114,6 +114,19 @@ class EmulatorCore {
     fun toggleSupported(key: String): Boolean = nativeToggleSupported(key)
 
     /**
+     * Set an engine-declared option (libretro core options). Legal only when
+     * the core declares both the key and the value; behavior is the core
+     * author's. Returns "" on success, else the refusal message. [staged]
+     * targets the engine the next boot uses; call on the render thread —
+     * the running core reads these between frames.
+     */
+    fun setEngineOption(key: String, value: String, staged: Boolean): String =
+        nativeSetEngineOption(key, value, staged)
+
+    /** The engine-declared option schema: [{key, choices, default, current}]. */
+    fun engineOptionsJson(): String = nativeGetEngineOptionsJson()
+
+    /**
      * Boot the staged system with this ROM — the ONE boot path, first load and
      * every swap alike. Analyzes the ROM, resolves the region variant like
      * desktop-ares (ROM region list × preference, override wins), tears down
@@ -438,6 +451,8 @@ class EmulatorCore {
     private external fun nativeGetBackendsJson(): String
     private external fun nativeVideoSettingsSupported(): Boolean
     private external fun nativeToggleSupported(key: String): Boolean
+    private external fun nativeSetEngineOption(key: String, value: String, staged: Boolean): String
+    private external fun nativeGetEngineOptionsJson(): String
 
     private external fun nativeLoadRom(
         romBytes: ByteArray, savePrefix: String?,

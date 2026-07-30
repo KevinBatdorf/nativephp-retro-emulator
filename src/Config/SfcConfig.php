@@ -39,6 +39,7 @@ class SfcConfig extends RegionalSystemConfig
         ?bool $pixelAccuracy = null,
         ?string $biosPath = null,
         Backend|string|null $backend = null,
+        array $engineOptions = [],
         ?Region $region = null,
         ?array $preferredRegions = null,
         public ?bool $deepBlackBoost = null,
@@ -67,6 +68,7 @@ class SfcConfig extends RegionalSystemConfig
             pixelAccuracy: $pixelAccuracy,
             biosPath: $biosPath,
             backend: $backend,
+            engineOptions: $engineOptions,
             region: $region,
             preferredRegions: $preferredRegions,
         );

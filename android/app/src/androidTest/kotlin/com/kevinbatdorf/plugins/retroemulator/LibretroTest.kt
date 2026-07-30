@@ -131,6 +131,147 @@ class LibretroTest {
     }
 
     @Test
+    fun engineOptionFlipsARealSnes9xOption() {
+        val corePath = corePathOrSkip("snes9x") ?: return
+        val rom = romOrSkip("/data/local/tmp/test-sfc.rom", "sfc ROM") ?: return
+        val core = EmulatorCore()
+        try {
+            assert(core.init())
+            assert(core.loadSystem("sfc", backend = corePath))
+
+            // The schema exists at stage time (retro_init runs at adoption);
+            // enumerate rather than trust remembered key names.
+            val schema = org.json.JSONArray(core.engineOptionsJson())
+            assert(schema.length() > 0) { "snes9x must declare options at stage time" }
+            val region = (0 until schema.length())
+                .map { schema.getJSONObject(it) }
+                .firstOrNull { it.getString("key") == "snes9x_region" }
+            if (region == null) {
+                android.util.Log.w("LibretroTest", "Skipping flip: no snes9x_region option")
+                return
+            }
+            val choices = region.getJSONArray("choices").let { list ->
+                (0 until list.length()).map { list.getString(it) }
+            }
+            assert("pal" in choices) { "snes9x_region must declare 'pal' — got $choices" }
+
+            assert(core.setEngineOption("snes9x_region", "pal", staged = true) == "") {
+                "declared key + declared value must apply"
+            }
+            assert(core.loadRom(rom) == EmulatorCore.LOAD_OK)
+            repeat(30) { core.tick() }
+            val palHint = core.refreshRateHint()
+            assert(palHint in 49.0..51.0) {
+                "forcing snes9x_region=pal must produce a ~50 Hz core — got $palHint"
+            }
+
+            // The introspection reflects the applied value.
+            val current = org.json.JSONArray(core.engineOptionsJson()).let { list ->
+                (0 until list.length()).map { list.getJSONObject(it) }
+                    .first { it.getString("key") == "snes9x_region" }
+                    .getString("current")
+            }
+            assert(current == "pal") { "current must reflect the applied value — got $current" }
+
+            // Runtime path: flip back while running; the core re-reads
+            // between frames, and the next boot returns to ~60 Hz NTSC.
+            assert(core.setEngineOption("snes9x_region", "ntsc", staged = false) == "")
+            assert(core.loadRom(rom) == EmulatorCore.LOAD_OK)
+            repeat(30) { core.tick() }
+            val ntscHint = core.refreshRateHint()
+            assert(ntscHint in 59.0..61.0) {
+                "snes9x_region=ntsc must return the core to ~60 Hz — got $ntscHint"
+            }
+        } finally {
+            core.destroy()
+        }
+    }
+
+    @Test
+    fun typoKeyAndIllegalValueErrorLoudly() {
+        val corePath = corePathOrSkip("snes9x") ?: return
+        val core = EmulatorCore()
+        try {
+            assert(core.init())
+            assert(core.loadSystem("sfc", backend = corePath))
+
+            val typo = core.setEngineOption("snes9x_definitely_not_real", "enabled", staged = true)
+            assert(typo.isNotEmpty() && "not an option" in typo && "snes9x" in typo) {
+                "a typo'd key must error naming the core — got '$typo'"
+            }
+
+            val schema = org.json.JSONArray(core.engineOptionsJson())
+            val firstKey = schema.getJSONObject(0).getString("key")
+            val illegal = core.setEngineOption(firstKey, "not_a_declared_value_zzz", staged = true)
+            assert(illegal.isNotEmpty() && "not a value" in illegal) {
+                "an undeclared value must error echoing the legal list — got '$illegal'"
+            }
+        } finally {
+            core.destroy()
+        }
+    }
+
+    @Test
+    fun verifiedCoreTableBootsEveryListedCore() {
+        // The README's verified table: every listed core must adopt, boot a
+        // real ROM, render, and round-trip a state — or it doesn't get
+        // listed. Perf/accuracy pairs per system with no bundled fast core.
+        val table = listOf(
+            Triple("mesen", "fc", "/data/local/tmp/test-fc.rom"),
+            Triple("bsnes", "sfc", "/data/local/tmp/test-sfc.rom"),
+            Triple("picodrive", "md", "/data/local/tmp/test-md.rom"),
+            Triple("genesis_plus_gx", "md", "/data/local/tmp/test-md.rom"),
+        )
+        val prefix = InstrumentationRegistry.getInstrumentation()
+            .targetContext.cacheDir.absolutePath + "/verified-core"
+        for ((name, system, romPath) in table) {
+            val corePath = corePathOrSkip(name) ?: continue
+            val rom = romOrSkip(romPath, "$system ROM") ?: continue
+            val core = EmulatorCore()
+            try {
+                assert(core.init())
+                assert(core.loadSystem(system, backend = corePath)) { "$name failed to stage" }
+                assert(core.backendName() == name) { "$name identity drifted" }
+                assert(core.loadRom(rom, savePrefix = "$prefix-$name") == EmulatorCore.LOAD_OK) {
+                    "$name rejected the $system ROM"
+                }
+                repeat(90) { core.tick() }
+                assert(core.getFrameWidth() > 0 && core.getFrameHeight() > 0) {
+                    "$name produced no frame"
+                }
+                val state = File.createTempFile(name, ".state")
+                try {
+                    assert(core.stateSave(state.absolutePath)) { "$name stateSave failed" }
+                    repeat(15) { core.tick() }
+                    assert(core.stateLoad(state.absolutePath)) { "$name stateLoad failed" }
+                } finally {
+                    state.delete()
+                }
+            } finally {
+                core.destroy()
+            }
+        }
+    }
+
+    @Test
+    fun bundledEnginesRefuseEngineOptions() {
+        val core = EmulatorCore()
+        try {
+            assert(core.init())
+            assert(core.loadSystem("gb"))   // sameboy by default
+            val refusal = core.setEngineOption("some_key", "some_value", staged = true)
+            assert(refusal.isNotEmpty() && "typed config" in refusal) {
+                "bundled engines must refuse engine options — got '$refusal'"
+            }
+            assert(core.engineOptionsJson() == "[]") {
+                "bundled engines declare no engine options"
+            }
+        } finally {
+            core.destroy()
+        }
+    }
+
+    @Test
     fun missingCoreFailsLoudly() {
         val core = EmulatorCore()
         try {

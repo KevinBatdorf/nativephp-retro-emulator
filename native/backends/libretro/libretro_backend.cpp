@@ -69,8 +69,18 @@ EmuHost::Capabilities LibretroBackend::capabilities(const std::string& systemId)
     caps.cheats       = true;
     caps.memoryAccess = true;
     caps.rateControl  = true;
-    caps.options = optionInfos_;
+    caps.options = (loaded_ ? current_ : bootTarget()).optionInfos;
     return caps;
+}
+
+std::vector<EmuHost::OptionInfo> LibretroBackend::engineOptions() const {
+    const CoreRef& ref = loaded_ ? current_ : bootTarget();
+    auto options = ref.optionInfos;
+    for (auto& info : options) {
+        auto it = ref.optionValues.find(info.key);
+        if (it != ref.optionValues.end()) info.current = it->second;
+    }
+    return options;
 }
 
 LibretroBackend::CoreApi* LibretroBackend::loadCoreSymbols(void* handle) {
@@ -116,6 +126,7 @@ LibretroBackend::CoreApi* LibretroBackend::loadCoreSymbols(void* handle) {
 }
 
 void LibretroBackend::closeCore(CoreRef& core) {
+    if (envTarget_ == &core) envTarget_ = nullptr;
     if (core.initialized) core.api->deinit();
     if (core.handle) dlclose(core.handle);
     delete core.api;
@@ -179,10 +190,31 @@ bool LibretroBackend::probeCore(const std::string& name, CoreRef& out) {
     out.libraryName    = info.library_name ? info.library_name : out.coreName;
     out.libraryVersion = info.library_version ? info.library_version : "";
     out.needFullpath   = info.need_fullpath;
-    EMUHOST_LOGI("libretro: adopted %s %s as '%s' (extensions: %s)",
+    out.pixelFormat    = RETRO_PIXEL_FORMAT_0RGB1555;
+    std::string extensions = info.valid_extensions ? info.valid_extensions : "";
+    for (size_t start = 0; start <= extensions.size();) {
+        auto bar = extensions.find('|', start);
+        if (bar == std::string::npos) bar = extensions.size();
+        if (bar > start) out.extensions.push_back(extensions.substr(start, bar - start));
+        start = bar + 1;
+    }
+
+    // retro_init runs here, not at boot, so the option schema the core
+    // declares (SET_VARIABLES) exists while loadSystem is still staging —
+    // engineOptions validate synchronously at the call site.
+    sActive = this;
+    auto* prevTarget = envTarget_;
+    envTarget_ = &out;
+    api->setEnvironment((retro_environment_t)onEnvironment);
+    api->init();
+    out.initialized = true;
+    envTarget_ = prevTarget;
+
+    EMUHOST_LOGI("libretro: adopted %s %s as '%s' (extensions: %s, %zu options)",
                  out.libraryName.c_str(), out.libraryVersion.c_str(),
                  out.coreName.c_str(),
-                 info.valid_extensions ? info.valid_extensions : "");
+                 info.valid_extensions ? info.valid_extensions : "",
+                 out.optionInfos.size());
     return true;
 }
 
@@ -237,20 +269,30 @@ EmuHost::Analysis LibretroBackend::analyze(const std::string& systemId,
 bool LibretroBackend::onEnvironment(unsigned cmd, void* data) {
     auto* self = sActive;
     if (!self) return false;
+    // Option/format state is per-core: the probing core's retro_init and
+    // the running core's retro_run each read/write their own CoreRef.
+    auto* ref = self->envTarget_;
     switch (cmd) {
     case RETRO_ENVIRONMENT_SET_PIXEL_FORMAT: {
+        if (!ref) return false;
         int format = *(const int*)data;
         if (format != RETRO_PIXEL_FORMAT_0RGB1555 &&
             format != RETRO_PIXEL_FORMAT_XRGB8888 &&
             format != RETRO_PIXEL_FORMAT_RGB565) {
             return false;
         }
-        self->pixelFormat_ = format;
+        ref->pixelFormat = format;
         return true;
     }
     case RETRO_ENVIRONMENT_GET_CAN_DUPE:
         *(bool*)data = true;
         return true;
+    case RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY:
+    case RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY: {
+        if (self->systemDir_.empty()) return false;
+        *(const char**)data = self->systemDir_.c_str();
+        return true;
+    }
     case RETRO_ENVIRONMENT_GET_LOG_INTERFACE: {
         auto* callback = (retro_log_callback*)data;
         callback->log = (retro_log_printf_t)onLog;
@@ -259,6 +301,11 @@ bool LibretroBackend::onEnvironment(unsigned cmd, void* data) {
     // GET_CORE_OPTIONS_VERSION stays unanswered, pinning cores to this
     // legacy SET_VARIABLES path — one parser covers every core.
     case RETRO_ENVIRONMENT_SET_VARIABLES: {
+        if (!ref) return false;
+        // A re-declaration replaces the schema; keep values the new schema
+        // still declares (a core re-listing options must not reset a dev's
+        // engineOptions).
+        ref->optionInfos.clear();
         for (auto* var = (const retro_variable*)data; var->key; var++) {
             // Value format: "Description; default|choice|choice".
             std::string value = var->value ? var->value : "";
@@ -276,23 +323,25 @@ bool LibretroBackend::onEnvironment(unsigned cmd, void* data) {
                 if (bar > start) info.values.push_back(choices.substr(start, bar - start));
                 start = bar + 1;
             }
-            if (!info.values.empty()) {
-                self->optionValues_[info.key] = info.values.front();
+            if (!info.values.empty() && !ref->optionValues.count(info.key)) {
+                ref->optionValues[info.key] = info.values.front();
             }
-            self->optionInfos_.push_back(std::move(info));
+            ref->optionInfos.push_back(std::move(info));
         }
         return true;
     }
     case RETRO_ENVIRONMENT_GET_VARIABLE: {
+        if (!ref) return false;
         auto* var = (retro_variable*)data;
-        auto it = self->optionValues_.find(var->key ? var->key : "");
-        if (it == self->optionValues_.end()) return false;
+        auto it = ref->optionValues.find(var->key ? var->key : "");
+        if (it == ref->optionValues.end()) return false;
         var->value = it->second.c_str();
         return true;
     }
     case RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE:
-        *(bool*)data = self->optionsUpdated_;
-        self->optionsUpdated_ = false;
+        if (!ref) return false;
+        *(bool*)data = ref->optionsUpdated;
+        ref->optionsUpdated = false;
         return true;
     case RETRO_ENVIRONMENT_SET_GEOMETRY:
     case RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO: {
@@ -333,7 +382,7 @@ void LibretroBackend::onVideoRefresh(const void* data, unsigned width, unsigned 
     }
 
     self->converted_.resize((size_t)width * height);
-    if (self->pixelFormat_ == RETRO_PIXEL_FORMAT_XRGB8888) {
+    if (self->current_.pixelFormat == RETRO_PIXEL_FORMAT_XRGB8888) {
         auto* pixels = (const uint32_t*)data;
         size_t strideWords = pitch / sizeof(uint32_t);
         for (unsigned y = 0; y < height; y++) {
@@ -342,7 +391,7 @@ void LibretroBackend::onVideoRefresh(const void* data, unsigned width, unsigned 
                     0xFF000000u | (pixels[(size_t)y * strideWords + x] & 0x00FFFFFFu);
             }
         }
-    } else if (self->pixelFormat_ == RETRO_PIXEL_FORMAT_RGB565) {
+    } else if (self->current_.pixelFormat == RETRO_PIXEL_FORMAT_RGB565) {
         auto* pixels = (const uint16_t*)data;
         size_t strideWords = pitch / sizeof(uint16_t);
         for (unsigned y = 0; y < height; y++) {
@@ -450,19 +499,14 @@ EmuHost::BootResult LibretroBackend::boot(const EmuHost::BootSpec& spec,
 
     host_ = &host;
     sActive = this;
+    envTarget_ = &current_;
     hidden_ = false;
-    pixelFormat_ = RETRO_PIXEL_FORMAT_0RGB1555;
     resamplePhase_ = 0;
     havePrev_ = false;
     drcRate_ = 48000.0;
-    optionValues_.clear();
-    optionInfos_.clear();
 
-    current_.api->setEnvironment((retro_environment_t)onEnvironment);
-    if (!current_.initialized) {
-        current_.api->init();
-        current_.initialized = true;
-    }
+    // Environment + retro_init already ran at probe time (the schema must
+    // exist during staging); the remaining callbacks bind pre-load.
     current_.api->setVideoRefresh(onVideoRefresh);
     current_.api->setAudioSample(onAudioSample);
     current_.api->setAudioSampleBatch(onAudioBatch);
@@ -471,27 +515,43 @@ EmuHost::BootResult LibretroBackend::boot(const EmuHost::BootSpec& spec,
 
     retro_game_info game {};
     game.size = rom->size();
-    std::string stagedPath;
-    if (current_.needFullpath) {
-        // The core reads media by path: stage the bytes beside the game's
-        // saves, under the system's canonical extension (cores sniff it).
-        // The file stays while loaded (disk-swap cores re-read it) and is
-        // overwritten on the next such boot.
-        auto* sys = SystemCatalog::find(systemId_);
-        std::string staged = "rom."
-            + (sys && !sys->extensions.empty() ? sys->extensions.front()
-                                               : std::string("bin"));
-        stagedPath = saves.pathFor(staged);
-        if (stagedPath.empty() || !saves.write(staged, rom->data(), rom->size())) {
-            EMUHOST_LOGE("libretro: %s needs a ROM file (need_fullpath) and no "
-                         "save path is configured to stage one",
-                         current_.libraryName.c_str());
-            return result;
+    // Every boot stages the ROM beside the game's saves and passes its path
+    // even when the core also gets the bytes — cores identify formats by
+    // the path's extension (Mesen rejects extensionless memory loads), and
+    // the extension must be one the CORE declares, not the catalog's first
+    // (Mesen: .nes but never .fc). The file stays while loaded (disk-swap
+    // cores re-read it) and is overwritten on the next boot.
+    auto* sys = SystemCatalog::find(systemId_);
+    std::string ext;
+    for (auto& coreExt : current_.extensions) {
+        if (sys && SystemCatalog::extensionSupported(*sys, coreExt)) {
+            ext = coreExt;
+            break;
         }
-        game.path = stagedPath.c_str();
-    } else {
-        game.data = rom->data();
     }
+    if (ext.empty()) {
+        ext = !current_.extensions.empty() ? current_.extensions.front()
+            : (sys && !sys->extensions.empty() ? sys->extensions.front()
+                                               : std::string("bin"));
+    }
+    std::string staged = "rom." + ext;
+    std::string stagedPath = saves.pathFor(staged);
+    if (!stagedPath.empty() && saves.write(staged, rom->data(), rom->size())) {
+        game.path = stagedPath.c_str();
+        auto slash = stagedPath.find_last_of('/');
+        if (slash != std::string::npos) {
+            systemDir_ = stagedPath.substr(0, slash);
+        }
+    } else {
+        stagedPath.clear();
+    }
+    if (current_.needFullpath && stagedPath.empty()) {
+        EMUHOST_LOGE("libretro: %s needs a ROM file (need_fullpath) and no "
+                     "save path is configured to stage one",
+                     current_.libraryName.c_str());
+        return result;
+    }
+    if (!current_.needFullpath) game.data = rom->data();
     if (!current_.api->loadGame(&game)) {
         EMUHOST_LOGE("libretro: %s rejected the ROM", current_.libraryName.c_str());
         return result;
@@ -653,6 +713,48 @@ void LibretroBackend::syncCheats(const std::unordered_map<uint32_t, uint32_t>& t
     for (auto& [address, value] : table) {
         cheatWrites_.push_back({address, (uint8_t)value});
     }
+}
+
+std::string LibretroBackend::setEngineOption(const std::string& key, const std::string& value,
+                                             bool staged) {
+    CoreRef& ref = staged ? bootTarget() : current_;
+    if (!ref.handle) return "no libretro core is adopted";
+    if (!staged && !loaded_) {
+        return "no game is running — set boot-time engine options in the loadSystem config";
+    }
+
+    const EmuHost::OptionInfo* match = nullptr;
+    for (auto& info : ref.optionInfos) {
+        if (info.key == key) { match = &info; break; }
+    }
+    if (!match) {
+        std::string declared;
+        size_t listed = 0;
+        for (auto& info : ref.optionInfos) {
+            if (listed == 12) { declared += ", …"; break; }
+            if (listed++) declared += ", ";
+            declared += info.key;
+        }
+        return "'" + key + "' is not an option " + ref.coreName + " declares — declared ("
+             + std::to_string(ref.optionInfos.size()) + "): " + declared;
+    }
+
+    bool legal = false;
+    std::string choices;
+    for (auto& choice : match->values) {
+        if (choice == value) { legal = true; break; }
+        if (!choices.empty()) choices += "|";
+        choices += choice;
+    }
+    if (!legal) {
+        return "'" + value + "' is not a value " + ref.coreName + " declares for '" + key
+             + "' — declared: " + choices;
+    }
+
+    ref.optionValues[key] = value;
+    // Cores re-read options on the next retro_run via GET_VARIABLE_UPDATE.
+    ref.optionsUpdated = true;
+    return "";
 }
 
 static EmuHost::BackendRegistrar kRegistrar{

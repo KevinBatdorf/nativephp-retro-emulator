@@ -116,6 +116,25 @@ final class EmulatorRenderer: UIView {
         return supported
     }
 
+    /// Set an engine-declared option (libretro core options). Legal only when
+    /// the core declares both the key and the value; behavior is the core
+    /// author's. Returns "" when applied, else the refusal message. `staged`
+    /// targets the engine the next boot uses.
+    func setEngineOption(_ key: String, _ value: String, staged: Bool) -> String {
+        emuLock.lock()
+        let refusal = String(cString: emu_set_engine_option(ctx, key, value, staged))
+        emuLock.unlock()
+        return refusal
+    }
+
+    /// The engine-declared option schema: [{key, choices, default, current}].
+    func engineOptionsJson() -> String {
+        emuLock.lock()
+        let json = String(cString: emu_get_engine_options_json(ctx))
+        emuLock.unlock()
+        return json
+    }
+
     /// Per-system engine availability + default pick, parsed from the native
     /// JSON: `["gb": (backends: [...], default: "sameboy"), …]`.
     static var backendsJson: [String: Any] {

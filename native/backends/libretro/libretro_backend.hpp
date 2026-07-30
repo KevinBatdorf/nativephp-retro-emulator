@@ -63,6 +63,9 @@ public:
     std::string readBootOption(const std::string&) override { return ""; }
     bool applyRateControl(double fillLevel) override;
     void syncCheats(const std::unordered_map<uint32_t, uint32_t>& table) override;
+    std::string setEngineOption(const std::string& key, const std::string& value,
+                                bool staged) override;
+    std::vector<EmuHost::OptionInfo> engineOptions() const override;
 
 private:
     // libretro's C callbacks carry no context — sActive is the adopted
@@ -79,9 +82,11 @@ private:
     struct CoreApi;
 
     // One dlopened core: handle, resolved entry points, self-reported
-    // identity. `current_` is the core that boots and ticks; `pending_`
-    // stages an adoption made while current_ still runs a game (the host
-    // unloads before boot — the swap completes there).
+    // identity, and the option schema it declared during retro_init (which
+    // runs at probe time so staging can validate engineOptions
+    // synchronously). `current_` is the core that boots and ticks;
+    // `pending_` stages an adoption made while current_ still runs a game
+    // (the host unloads before boot — the swap completes there).
     struct CoreRef {
         void* handle = nullptr;
         CoreApi* api = nullptr;
@@ -89,26 +94,42 @@ private:
         std::string coreName;         // display identity ("snes9x"), path-independent
         std::string libraryName;      // core-reported
         std::string libraryVersion;   // core-reported
+        std::vector<std::string> extensions;  // core-declared, in its order
         bool needFullpath = false;
         bool initialized = false;     // retro_init has run
+
+        int pixelFormat = 0;          // RETRO_PIXEL_FORMAT_*, core-chosen
+        // Option schema from SET_VARIABLES + the values answered back
+        // through GET_VARIABLE. Per-core: a pending adoption's schema must
+        // never clobber the running core's.
+        std::map<std::string, std::string> optionValues;
+        std::vector<EmuHost::OptionInfo> optionInfos;
+        bool optionsUpdated = false;  // GET_VARIABLE_UPDATE dirty flag
     };
 
     bool probeCore(const std::string& name, CoreRef& out);
     CoreApi* loadCoreSymbols(void* handle);
     void closeCore(CoreRef& core);
     const CoreRef& bootTarget() const { return pending_.handle ? pending_ : current_; }
+    CoreRef& bootTarget() { return pending_.handle ? pending_ : current_; }
     void pushResampled(const int16_t* frames, size_t count);
     void applyGeometry(const retro_game_geometry& geometry);
 
     CoreRef current_;
     CoreRef pending_;
+    // Which CoreRef environment callbacks read/write: the probing core
+    // during its retro_init, current_ from boot on. Never left pointing at
+    // probeCore's stack ref past the probe.
+    CoreRef* envTarget_ = nullptr;
     std::string systemId_;        // catalog system the adoption serves
     std::string versionString_;   // backing storage for version()
+    // Answer to GET_SYSTEM/SAVE_DIRECTORY: the game's save directory, set
+    // at boot before retro_load_game — Mesen refuses to load without one.
+    std::string systemDir_;
 
     bool loaded_ = false;         // a game is loaded on current_
 
     // Video
-    int pixelFormat_ = 0;         // RETRO_PIXEL_FORMAT_*, set via environment
     std::vector<uint32_t> converted_;
     double frameWidth_ = 0, frameHeight_ = 0, aspectRatio_ = 0;
 
@@ -119,13 +140,6 @@ private:
     double resamplePhase_ = 0;
     int16_t prevL_ = 0, prevR_ = 0;
     bool havePrev_ = false;
-
-    // Core options captured from SET_VARIABLES / SET_CORE_OPTIONS — value
-    // defaults are answered back through GET_VARIABLE and the definitions
-    // surface through capabilities().
-    std::map<std::string, std::string> optionValues_;
-    std::vector<EmuHost::OptionInfo> optionInfos_;
-    bool optionsUpdated_ = false;
 
     // Cheats as per-frame writes into the memory window (action-replay
     // semantics, uniform with the mGBA backend).

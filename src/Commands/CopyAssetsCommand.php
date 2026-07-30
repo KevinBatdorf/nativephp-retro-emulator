@@ -97,13 +97,13 @@ class CopyAssetsCommand extends NativePluginHookCommand
                 $target = str_starts_with($name, 'lib') ? $name : "lib{$name}";
                 $files->ensureDirectoryExists("$destination/$abi");
                 $files->copy($file->getPathname(), "$destination/$abi/$target");
-                $this->info("Bundled libretro core: {$name} ({$abi}) — ".$this->coreLicenceNote($name));
+                $this->info("Bundled libretro core: {$name} ({$abi}) — ".self::coreLicenceNote($name));
             }
         }
     }
 
     /** One honest line per core so a licence never ships unnoticed. */
-    private function coreLicenceNote(string $filename): string
+    public static function coreLicenceNote(string $filename): string
     {
         $core = preg_replace('/^lib|_libretro.*$/', '', basename($filename, '.so'));
 

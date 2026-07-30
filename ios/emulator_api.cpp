@@ -98,6 +98,23 @@ bool emu_toggle_supported(EmuContext* ctx, const char* key) {
     return ctx && key && ctx->host.toggleSupported(key);
 }
 
+const char* emu_set_engine_option(EmuContext* ctx, const char* key,
+                                  const char* value, bool staged) {
+    static thread_local std::string error;
+    if (!ctx || !key || !value) {
+        error = "emulator not initialized";
+    } else {
+        error = ctx->host.setEngineOption(key, value, staged);
+    }
+    return error.c_str();
+}
+
+const char* emu_get_engine_options_json(EmuContext* ctx) {
+    static thread_local std::string json;
+    json = ctx ? ctx->host.engineOptionsJson() : "[]";
+    return json.c_str();
+}
+
 int emu_load_rom(EmuContext* ctx, const uint8_t* rom, size_t rom_size,
                   const char* save_prefix,
                   const char* region_override, const char* preferred_regions) {

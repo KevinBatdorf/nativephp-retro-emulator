@@ -61,6 +61,15 @@ const char* emu_get_backends_json(void);
 bool emu_video_settings_supported(EmuContext* ctx);
 bool emu_toggle_supported(EmuContext* ctx, const char* key);
 
+// Engine-declared options (libretro core options). Set returns "" when
+// applied, else the refusal message the bridge surfaces as
+// UNSUPPORTED_OPTION; `staged` targets the engine the next boot uses. The
+// schema JSON lists [{"key","choices":[…],"default","current"}, …].
+// Thread-local storage — copy before the next call on the same thread.
+const char* emu_set_engine_option(EmuContext* ctx, const char* key,
+                                  const char* value, bool staged);
+const char* emu_get_engine_options_json(EmuContext* ctx);
+
 // Comma-separated ROM file extensions (no dots) valid for a system id —
 // the LoadRom family-mismatch gate.  Empty string for unknown ids.
 // Thread-local storage — copy before the next call on the same thread.

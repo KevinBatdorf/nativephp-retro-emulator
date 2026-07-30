@@ -48,4 +48,18 @@ final class LibretroTests: XCTestCase {
         XCTAssertFalse(emu_load_system(ctx, "sfc", nil, "sameboy"),
                        "a bundled engine that doesn't claim the system must fail")
     }
+
+    func testBundledEnginesRefuseEngineOptions() {
+        XCTAssertTrue(emu_load_system(ctx, "gb", nil, nil))   // sameboy default
+        let refusal = String(cString: emu_set_engine_option(ctx, "some_key", "v", true))
+        XCTAssertTrue(refusal.contains("typed config"),
+                      "bundled engines must refuse engine options — got '\(refusal)'")
+        XCTAssertEqual(String(cString: emu_get_engine_options_json(ctx)), "[]",
+                       "bundled engines declare no engine options")
+    }
+
+    func testEngineOptionWithNothingStagedErrors() {
+        let refusal = String(cString: emu_set_engine_option(ctx, "k", "v", true))
+        XCTAssertFalse(refusal.isEmpty, "no staged system must refuse, not no-op")
+    }
 }

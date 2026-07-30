@@ -41,6 +41,7 @@ abstract class RegionalSystemConfig extends SystemConfig
         ?bool $pixelAccuracy = null,
         ?string $biosPath = null,
         Backend|string|null $backend = null,
+        array $engineOptions = [],
         public ?Region $region = null,
         public ?array $preferredRegions = null,
     ) {
@@ -68,6 +69,7 @@ abstract class RegionalSystemConfig extends SystemConfig
             pixelAccuracy: $pixelAccuracy,
             biosPath: $biosPath,
             backend: $backend,
+            engineOptions: $engineOptions,
         );
     }
 

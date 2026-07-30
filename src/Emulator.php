@@ -372,7 +372,13 @@ class Emulator
      * 2× emulation cost. rewind toggles snapshot capture (rewindBufferSeconds
      * sizes the history, default ~16.7 s); play it back with toggleRewind().
      *
-     * @param  array{speed?: float, runAhead?: int, rewind?: bool, rewindBufferSeconds?: int}  $options
+     * engineOptions applies engine-declared options (libretro core options)
+     * to the running core, which re-reads them between frames — same
+     * validation and use-at-your-own-risk contract as the loadSystem config:
+     * an undeclared key or value throws UNSUPPORTED_OPTION, never a silent
+     * no-op. Enumerate what's declared with engineOptions().
+     *
+     * @param  array{speed?: float, runAhead?: int, rewind?: bool, rewindBufferSeconds?: int, engineOptions?: array<string, string>}  $options
      */
     public function configure(array $options): static
     {
@@ -657,6 +663,21 @@ class Emulator
         $result = $this->call('Emulator.GetRegion', ['surface' => $this->surface]);
 
         return $result['region'] ?? '';
+    }
+
+    /**
+     * The engine-declared option schema of the staged/active engine — the
+     * keys and values legal in `engineOptions`. Empty for the bundled
+     * engines (ares, SameBoy, mGBA), whose settings are the typed config;
+     * a libretro core reports every option it declares.
+     *
+     * @return array<int, array{key: string, choices: string[], default: string, current: string}>
+     */
+    public function engineOptions(): array
+    {
+        $result = $this->call('Emulator.GetEngineOptions', ['surface' => $this->surface]);
+
+        return $result['options'] ?? [];
     }
 
     /**

@@ -111,13 +111,13 @@
             "name": "Emulator.ReadMemory",
             "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.ReadMemory",
             "ios": "EmulatorFunctions.ReadMemory",
-            "description": "Sync RAM read \u2014 returns bytes directly"
+            "description": "Sync RAM read — returns bytes directly"
         },
         {
             "name": "Emulator.ReadMemoryAsync",
             "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.ReadMemoryAsync",
             "ios": "EmulatorFunctions.ReadMemoryAsync",
-            "description": "Async RAM read \u2014 dispatches MemoryRead event"
+            "description": "Async RAM read — dispatches MemoryRead event"
         },
         {
             "name": "Emulator.WriteMemory",
@@ -280,6 +280,12 @@
             "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.GetSystems",
             "ios": "EmulatorFunctions.GetSystems",
             "description": "Return all supported systems as rich objects"
+        },
+        {
+            "name": "Emulator.GetEngineOptions",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.GetEngineOptions",
+            "ios": "EmulatorFunctions.GetEngineOptions",
+            "description": "Schema of engine-declared options (libretro core options) on the staged/active engine: key, choices, default, current"
         },
         {
             "name": "Emulator.GetPressedButtons",
