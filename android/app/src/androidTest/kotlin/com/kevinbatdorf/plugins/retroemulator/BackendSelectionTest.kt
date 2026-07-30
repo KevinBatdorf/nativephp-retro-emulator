@@ -106,6 +106,64 @@ class BackendSelectionTest {
     }
 
     @Test
+    fun gbaDefaultsToMgba() {
+        val romFile = File("/data/local/tmp/test-gba.rom")
+        if (!romFile.exists()) {
+            android.util.Log.w("BackendSelectionTest", "Skipping gba: no ROM")
+            return
+        }
+        val core = EmulatorCore()
+        try {
+            assert(core.init())
+            assert(core.loadSystem("gba")) { "loadSystem failed" }
+            assert(core.backendName() == "mgba") {
+                "gba must default to the bundled fast core — got '${core.backendName()}'"
+            }
+            assert(core.loadRom(romFile.readBytes()) == EmulatorCore.LOAD_OK) {
+                "loadRom failed on mgba"
+            }
+            repeat(120) { core.tick() }
+
+            assert(core.getFrameWidth() == 240 && core.getFrameHeight() == 160) {
+                "mgba frame must be 240x160 — got ${core.getFrameWidth()}x${core.getFrameHeight()}"
+            }
+            val bytes = core.readMemory(0x02000000, 64)
+            assert(bytes != null && bytes.size == 64) { "EWRAM read failed on mgba" }
+
+            val state = File.createTempFile("mgba", ".state")
+            try {
+                assert(core.stateSave(state.absolutePath)) { "stateSave failed" }
+                repeat(30) { core.tick() }
+                assert(core.stateLoad(state.absolutePath)) { "stateLoad failed" }
+            } finally {
+                state.delete()
+            }
+        } finally {
+            core.destroy()
+        }
+    }
+
+    @Test
+    fun explicitAresStillServesGba() {
+        val romFile = File("/data/local/tmp/test-gba.rom")
+        if (!romFile.exists()) {
+            android.util.Log.w("BackendSelectionTest", "Skipping gba/ares: no ROM")
+            return
+        }
+        val core = EmulatorCore()
+        try {
+            assert(core.init())
+            assert(core.loadSystem("gba", backend = "ares")) { "loadSystem(ares) failed" }
+            assert(core.backendName() == "ares")
+            assert(core.loadRom(romFile.readBytes()) == EmulatorCore.LOAD_OK)
+            repeat(120) { core.tick() }
+            assert(core.getFrameWidth() == 240 && core.getFrameHeight() == 160)
+        } finally {
+            core.destroy()
+        }
+    }
+
+    @Test
     fun backendsJsonReportsClaimantsAndDefaults() {
         val core = EmulatorCore()
         try {
@@ -120,6 +178,9 @@ class BackendSelectionTest {
                 "gb must be claimed by both engines — got $gbBackends"
             }
             assert(gb.getString("default") == "sameboy") { "gb default must be sameboy" }
+
+            val gba = json.getJSONObject("gba")
+            assert(gba.getString("default") == "mgba") { "gba default must be mgba" }
 
             val sfc = json.getJSONObject("sfc")
             assert(sfc.getString("default") == "ares") { "sfc default must be ares" }

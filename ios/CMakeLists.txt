@@ -249,6 +249,39 @@ set_source_files_properties(${SAMEBOY_SOURCES} PROPERTIES
     COMPILE_OPTIONS "-DGB_INTERNAL;-std=gnu11;-D_GNU_SOURCE;-DGB_DISABLE_DEBUGGER;-DGB_DISABLE_CHEAT_SEARCH;-DGB_VERSION=\"1.0.3\""
 )
 
+# mGBA engine (MPL-2.0) through its own CMake — libmgba only, GBA core only.
+# The adapter must compile with exactly the library's config defines or
+# struct mCore's layout skews (see the Android module's note).
+get_filename_component(MGBA_ROOT
+    "${CMAKE_CURRENT_SOURCE_DIR}/../mgba"
+    ABSOLUTE
+)
+set(LIBMGBA_ONLY ON CACHE BOOL "" FORCE)
+set(M_CORE_GBA ON CACHE BOOL "" FORCE)
+set(M_CORE_GB OFF CACHE BOOL "" FORCE)
+set(USE_LZMA OFF CACHE BOOL "" FORCE)
+set(USE_SQLITE3 OFF CACHE BOOL "" FORCE)
+set(USE_PNG OFF CACHE BOOL "" FORCE)
+set(USE_LIBZIP OFF CACHE BOOL "" FORCE)
+set(USE_ELF OFF CACHE BOOL "" FORCE)
+set(USE_DEBUGGERS OFF CACHE BOOL "" FORCE)
+set(ENABLE_SCRIPTING OFF CACHE BOOL "" FORCE)
+add_subdirectory("${MGBA_ROOT}" mgba EXCLUDE_FROM_ALL)
+
+# The adapter compiles in its own object library so mGBA's config defines
+# reach it (struct mCore's layout depends on them) without leaking into the
+# ares/SameBoy/host translation units.
+add_library(mgba_adapter OBJECT
+    "${NATIVE_ROOT}/backends/mgba/mgba_backend.cpp"
+)
+target_include_directories(mgba_adapter PRIVATE
+    "${NATIVE_ROOT}"
+    "${MGBA_ROOT}/include"
+)
+target_compile_definitions(mgba_adapter PRIVATE
+    $<TARGET_PROPERTY:mgba,COMPILE_DEFINITIONS>
+)
+
 add_library(retro_emulator_ios STATIC
     "${CMAKE_CURRENT_SOURCE_DIR}/emulator_api.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/librashader_metal_shim.mm"
@@ -259,6 +292,7 @@ add_library(retro_emulator_ios STATIC
     "${NATIVE_ROOT}/backends/ares/ares_backend.cpp"
     "${NATIVE_ROOT}/backends/sameboy/sameboy_backend.cpp"
     ${SAMEBOY_SOURCES}
+    $<TARGET_OBJECTS:mgba_adapter>
     "${NATIVE_ROOT}/system_registry.cpp"
     "${NATIVE_ROOT}/cores/core_sfc.cpp"
     "${NATIVE_ROOT}/cores/core_fc.cpp"
@@ -300,6 +334,8 @@ set_source_files_properties(
     "${NATIVE_ROOT}/backends/sameboy/sameboy_backend.cpp"
     PROPERTIES COMPILE_OPTIONS "-DGB_VERSION=\"1.0.3\""
 )
+
+target_link_libraries(retro_emulator_ios PRIVATE mgba)
 
 # The librashader Metal shim needs ARC for the __bridge casts.
 set_source_files_properties(

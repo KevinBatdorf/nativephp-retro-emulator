@@ -399,6 +399,43 @@ target_compile_definitions(backend_sameboy PRIVATE GB_VERSION="1.0.3")
 target_link_libraries(backend_sameboy PRIVATE retro_emulator log)
 
 # ---------------------------------------------------------------------------
+# backend_mgba — the mGBA engine (MPL-2.0) + adapter: the bundled fast core
+# for gba. Built through mGBA's own CMake (libmgba only, GBA core only —
+# SameBoy owns gb/gbc); optional deps that the NDK lacks stay off.
+# ---------------------------------------------------------------------------
+get_filename_component(MGBA_ROOT
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../mgba"
+    ABSOLUTE
+)
+set(LIBMGBA_ONLY ON CACHE BOOL "" FORCE)
+set(M_CORE_GBA ON CACHE BOOL "" FORCE)
+set(M_CORE_GB OFF CACHE BOOL "" FORCE)
+set(USE_LZMA OFF CACHE BOOL "" FORCE)
+set(USE_SQLITE3 OFF CACHE BOOL "" FORCE)
+set(USE_PNG OFF CACHE BOOL "" FORCE)
+set(USE_LIBZIP OFF CACHE BOOL "" FORCE)
+set(USE_ELF OFF CACHE BOOL "" FORCE)
+set(USE_DEBUGGERS OFF CACHE BOOL "" FORCE)
+set(ENABLE_SCRIPTING OFF CACHE BOOL "" FORCE)
+add_subdirectory("${MGBA_ROOT}" mgba EXCLUDE_FROM_ALL)
+
+add_library(backend_mgba SHARED
+    "${NATIVE_ROOT}/backends/mgba/mgba_backend.cpp"
+)
+target_include_directories(backend_mgba PRIVATE
+    "${NATIVE_ROOT}"
+    "${MGBA_ROOT}/include"
+)
+# struct mCore's layout changes with mGBA's config defines (ENABLE_VFS,
+# MINIMAL_CORE, ENABLE_DEBUGGERS…). The adapter must compile with exactly
+# the set the library compiled with or every vtable-style call lands on the
+# wrong member (SIGBUS on device).
+target_compile_definitions(backend_mgba PRIVATE
+    $<TARGET_PROPERTY:mgba,COMPILE_DEFINITIONS>
+)
+target_link_libraries(backend_mgba PRIVATE mgba retro_emulator log)
+
+# ---------------------------------------------------------------------------
 # Per-core modules — each is its own shared library so the copy-assets hook
 # can bundle only the systems a host app declares. dlopen runs the module's
 # SystemRegistry::Registrar, so loading IS registering.

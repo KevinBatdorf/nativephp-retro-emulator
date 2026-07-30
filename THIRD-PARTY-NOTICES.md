@@ -16,6 +16,12 @@ unmodified from a tagged release of
 https://github.com/SnowflakePowered/librashader — that repository is the
 corresponding source under MPL-2.0 § 3.2.
 
+mGBA (the bundled Game Boy Advance fast engine) is included under MPL-2.0
+(file-level copyleft, like librashader). It is built unmodified from the
+pinned `mgba/` submodule of https://github.com/mgba-emu/mgba — that
+repository at the pinned commit is the corresponding source under
+MPL-2.0 § 3.2.
+
 SameBoy (the bundled Game Boy / Game Boy Color fast engine, including its
 boot ROMs vendored at native/firmware/sameboy_*_boot.bin) is included under
 the Expat License, built unmodified from the pinned `sameboy/` submodule of

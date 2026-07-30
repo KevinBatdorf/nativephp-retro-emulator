@@ -207,7 +207,7 @@ we consider not yet production-ready. Per-system game compatibility:
 | NES / Famicom | `fc` | ✅ | ares | |
 | SNES / Super Famicom | `sfc` | ✅ | ares | Full feature set, incl. peripherals + slotted media |
 | Game Boy / Game Boy Color | `gb` / `gbc` | ✅ | SameBoy | ares selectable for its node-tree feature set |
-| Game Boy Advance | `gba` | ✅ | ares | Boots on an embedded open BIOS; supply a real one via `biosPath` for accuracy |
+| Game Boy Advance | `gba` | ✅ | mGBA | HLE BIOS built in; supply a real one via `biosPath` for accuracy |
 | Mega Drive / Genesis | `md` | ✅ | ares | |
 
 Other ares systems appear in `Emulator::systems()` with `supported: false` —
@@ -217,8 +217,11 @@ they aren't compiled into the shipped binaries.
 
 Phones want speed: where the plugin bundles a permissively-licensed fast
 core, it is that system's default engine, and ares stays available as the
-accuracy option. `Emulator::systems()` reports each system's `backends` and
-`defaultBackend`. Pick per boot with the config —
+accuracy option. Measured on an AYN Thor (SD 8 Gen 2), same ROM and scene:
+SameBoy runs Game Boy at 8.4% of one core where ares needs 27.8%, and mGBA
+runs Game Boy Advance at 8.2% where ares needs 51.7%. `Emulator::systems()`
+reports each system's `backends` and `defaultBackend`. Pick per boot with
+the config —
 
 ```php
 use KevinBatdorf\RetroEmulator\Backend;

@@ -45,7 +45,12 @@ cmake_build() {
         "$@" >&2
     log "Building $label …"
     cmake --build "$build_dir" --parallel "$(sysctl -n hw.logicalcpu)" >&2
-    BUILT_LIB="$build_dir/libretro_emulator_ios.a"
+    # libmgba builds as its own archive; a static lib cannot absorb another,
+    # so merge here or every consumer link fails on the mGBA symbols.
+    libtool -static -o "$build_dir/libretro_emulator_ios_all.a" \
+        "$build_dir/libretro_emulator_ios.a" \
+        "$build_dir/mgba/libmgba.a"
+    BUILT_LIB="$build_dir/libretro_emulator_ios_all.a"
 }
 
 # make_xcframework OUTPUT -library <.a> -headers <dir> [-library ... -headers ...]

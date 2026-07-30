@@ -4,3 +4,6 @@
 [submodule "sameboy"]
 	path = sameboy
 	url = https://github.com/LIJI32/SameBoy.git
+[submodule "mgba"]
+	path = mgba
+	url = https://github.com/mgba-emu/mgba.git

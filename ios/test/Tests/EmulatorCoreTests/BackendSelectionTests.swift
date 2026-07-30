@@ -115,8 +115,62 @@ final class BackendSelectionTests: XCTestCase {
         XCTAssertTrue(engines.contains("ares") && engines.contains("sameboy"))
         XCTAssertEqual(gb["default"] as? String, "sameboy")
 
+        let gba = try XCTUnwrap(json["gba"] as? [String: Any])
+        XCTAssertEqual(gba["default"] as? String, "mgba")
+
         let sfc = try XCTUnwrap(json["sfc"] as? [String: Any])
         XCTAssertEqual(sfc["default"] as? String, "ares")
+    }
+
+    func testGbaDefaultsToMgba() {
+        XCTAssertTrue(emu_load_system(ctx, "gba", nil, nil))
+        XCTAssertEqual(String(cString: emu_get_backend_name(ctx)), "mgba",
+                       "gba must default to the bundled fast core")
+    }
+
+    func testMgbaBootsARom() {
+        let rom = Self.makeMinimalGbaRom()
+        XCTAssertTrue(emu_load_system(ctx, "gba", nil, "mgba"))
+        let ok = rom.withUnsafeBytes {
+            emu_load_rom(ctx, $0.bindMemory(to: UInt8.self).baseAddress, rom.count,
+                         nil, nil, nil)
+        }
+        XCTAssertEqual(ok, 1, "mgba must boot the synthetic ROM")
+
+        for _ in 0..<60 { _ = emu_tick(ctx) }
+
+        var width: UInt32 = 0
+        var height: UInt32 = 0
+        var pixels = [UInt32](repeating: 0, count: 240 * 160)
+        XCTAssertTrue(emu_get_frame(ctx, &pixels, pixels.count, &width, &height))
+        XCTAssertEqual(width, 240)
+        XCTAssertEqual(height, 160)
+
+        var ewram = [UInt8](repeating: 0, count: 2)
+        XCTAssertEqual(emu_read_memory(ctx, 0x02000000, &ewram, 2), 2)
+        XCTAssertEqual(Array(ewram), [0xA5, 0x5A],
+                       "the cartridge payload must have written its EWRAM signature")
+    }
+
+    /// Minimal GBA cartridge: entry branch to 0xC0, an ARM payload that
+    /// writes A5 5A to the start of EWRAM, then spins. mGBA's HLE BIOS jumps
+    /// to the entry point without checking the header logo.
+    private static func makeMinimalGbaRom() -> [UInt8] {
+        var rom = [UInt8](repeating: 0, count: 0x1000)
+        func put(_ word: UInt32, at offset: Int) {
+            rom[offset]     = UInt8(word & 0xFF)
+            rom[offset + 1] = UInt8((word >> 8) & 0xFF)
+            rom[offset + 2] = UInt8((word >> 16) & 0xFF)
+            rom[offset + 3] = UInt8((word >> 24) & 0xFF)
+        }
+        put(0xEA00002E, at: 0x00)   // b 0xC0
+        put(0xE3A00402, at: 0xC0)   // mov r0, #0x02000000
+        put(0xE3A010A5, at: 0xC4)   // mov r1, #0xA5
+        put(0xE5C01000, at: 0xC8)   // strb r1, [r0]
+        put(0xE3A0105A, at: 0xCC)   // mov r1, #0x5A
+        put(0xE5C01001, at: 0xD0)   // strb r1, [r0, #1]
+        put(0xEAFFFFFE, at: 0xD4)   // b . (spin)
+        return rom
     }
 
 }
