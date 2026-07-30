@@ -30,21 +30,8 @@ auto clearEntryPoints() -> void { ares::Famicom::Thread::EntryPoints().clear(); 
 
 const SystemDef kDef = {
     .id            = "fc",
-    .name          = "NES / Famicom",
     .loadNameBase  = "[Nintendo] Famicom",
-    .regions       = {"NTSC-J", "NTSC-U", "PAL"},
-    .extensions    = {"fc", "nes", "unf", "unif", "unh"},
-    .systemNode    = "Famicom",
     .cartridgeNode = "Famicom Cartridge",
-    .device        = "Gamepad",
-    .ports         = 2,
-    .buttons       = {
-        {"B", 1u << 0}, {"Select", 1u << 2}, {"Start", 1u << 3},
-        {"Up", 1u << 4}, {"Down", 1u << 5}, {"Left", 1u << 6}, {"Right", 1u << 7},
-        {"A", 1u << 8},
-    },
-    .memBase       = 0x0000u,
-    .memSize       = 0x800u,
     .load          = loadFc,
     .memRead       = memRead,
     .memWrite      = memWrite,

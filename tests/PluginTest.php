@@ -300,21 +300,26 @@ describe('Error handling', function () {
             .file_get_contents(dirname(__DIR__).'/resources/ios/EmulatorFunctions.swift')
             .file_get_contents(dirname(__DIR__).'/resources/ios/EmulatorRenderer.swift')
             .file_get_contents(dirname(__DIR__).'/android/app/src/main/cpp/ares_jni.cpp')
-            .file_get_contents(dirname(__DIR__).'/ios/ares_ios_api.cpp');
+            .file_get_contents(dirname(__DIR__).'/ios/ares_ios_api.cpp')
+            .file_get_contents(dirname(__DIR__).'/native/host/emulator_host.cpp');
 
         // Codes surface as a bridge error (code is arg 1, or iOS's `code:`
         // label), a direct onError (arg 1), operationalError(entry, code, …),
-        // or a native status-string return — the C layer's ret(...) /
-        // statusRet(...), where input-validation codes like UNKNOWN_BUTTON
-        // originate on both platforms. The enum is the union across platforms.
+        // an iOS statusRet(...) status-string, or a bare `return "CODE"` /
+        // NewStringUTF("CODE") in the shared host and JNI — the host is where
+        // input-validation codes like UNKNOWN_BUTTON originate. The enum is
+        // the union across platforms.
         preg_match_all(
             '/(?:BridgeResponse\.error|\.onError)\s*\(\s*(?:code:\s*)?"([A-Z_]+)"'
             .'|operationalError\([^,]+,\s*(?:code:\s*)?"([A-Z_]+)"'
-            .'|(?:statusRet|\bret)\s*\(\s*\(?\s*(?:std::string\s*\(\s*)?"([A-Z_]+)[":]/s',
+            .'|(?:statusRet|\bret)\s*\(\s*\(?\s*(?:std::string\s*\(\s*)?"([A-Z_]+)[":]'
+            // Bare returns require an underscore so region names ("NTSC")
+            // in the host's resolver don't read as codes.
+            .'|return\s+(?:env->NewStringUTF\s*\(\s*)?"([A-Z]+_[A-Z_]+)[":]/s',
             $sources,
             $m,
         );
-        $native = array_values(array_unique(array_filter(array_merge($m[1], $m[2], $m[3]))));
+        $native = array_values(array_unique(array_filter(array_merge($m[1], $m[2], $m[3], $m[4]))));
         $enum = array_map(fn ($case) => $case->value, EmulatorErrorCode::cases());
 
         sort($native);
@@ -616,16 +621,9 @@ describe('Typed layer', function () {
     });
 
     it('button enums match the native registry', function (string $systemId, string $enumClass) {
-        // Most ids map to core_<id>.cpp, but gbc rides core_gb.cpp — find the
-        // core file that actually declares `.id = "<id>"`.
-        $registry = '';
-        foreach (glob(dirname(__DIR__).'/native/cores/core_*.cpp') as $file) {
-            $contents = file_get_contents($file);
-            if (preg_match('/\.id\s*=\s*"'.$systemId.'"/', $contents)) {
-                $registry = $contents;
-                break;
-            }
-        }
+        // Button maps live in the engine-neutral system catalog; every
+        // `.id = "<id>"` entry is in this one file.
+        $registry = file_get_contents(dirname(__DIR__).'/native/host/system_catalog.cpp');
 
         preg_match(
             '/\.id\s*=\s*"'.$systemId.'".*?\.buttons\s*=\s*\{(.*?)\n\s*\},/s',

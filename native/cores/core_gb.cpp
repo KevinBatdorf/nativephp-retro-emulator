@@ -35,21 +35,8 @@ auto clearEntryPoints() -> void { ares::GameBoy::Thread::EntryPoints().clear(); 
 
 const SystemDef kDef = {
     .id            = "gb",
-    .name          = "Game Boy",
     .loadNameBase  = "[Nintendo] Game Boy",
-    .regions       = {},   // region-free handheld
-    .extensions    = {"gb"},
-    .systemNode    = "Game Boy",
     .cartridgeNode = "Game Boy Cartridge",
-    .device        = nullptr,   // controls live on the system node
-    .ports         = 0,
-    .buttons       = {
-        {"B", 1u << 0}, {"Select", 1u << 2}, {"Start", 1u << 3},
-        {"Up", 1u << 4}, {"Down", 1u << 5}, {"Left", 1u << 6}, {"Right", 1u << 7},
-        {"A", 1u << 8},
-    },
-    .memBase       = 0xC000u,
-    .memSize       = 0x2000u,
     .load          = loadGb,
     .memRead       = memRead,
     .memWrite      = memWrite,
@@ -63,21 +50,8 @@ const SystemDef kDef = {
 // "[Nintendo] Game Boy Color"); the pak carries the CGB boot ROM instead.
 const SystemDef kDefCgb = {
     .id            = "gbc",
-    .name          = "Game Boy Color",
     .loadNameBase  = "[Nintendo] Game Boy Color",
-    .regions       = {},
-    .extensions    = {"gbc"},
-    .systemNode    = "Game Boy Color",
     .cartridgeNode = "Game Boy Color Cartridge",
-    .device        = nullptr,
-    .ports         = 0,
-    .buttons       = {
-        {"B", 1u << 0}, {"Select", 1u << 2}, {"Start", 1u << 3},
-        {"Up", 1u << 4}, {"Down", 1u << 5}, {"Left", 1u << 6}, {"Right", 1u << 7},
-        {"A", 1u << 8},
-    },
-    .memBase       = 0xC000u,
-    .memSize       = 0x2000u,
     .load          = loadGb,
     .memRead       = memRead,
     .memWrite      = memWrite,

@@ -292,6 +292,19 @@ target_link_libraries(gba_core PUBLIC ares_iface)
 target_compile_definitions(gba_core PUBLIC CORE_GBA)
 
 # ---------------------------------------------------------------------------
+# emu_host — the engine-neutral emulator host (native/host/): backend seam,
+# system catalog, input/AV/state policy. Zero ares includes; compiled into
+# the frontend library.
+# ---------------------------------------------------------------------------
+add_library(emu_host OBJECT
+    "${NATIVE_ROOT}/host/backend_registry.cpp"
+    "${NATIVE_ROOT}/host/system_catalog.cpp"
+    "${NATIVE_ROOT}/host/emulator_host.cpp"
+)
+target_include_directories(emu_host PUBLIC "${NATIVE_ROOT}" "${NATIVE_ROOT}/host")
+target_link_libraries(emu_host PRIVATE log)
+
+# ---------------------------------------------------------------------------
 # retro_ares — the shared ares runtime, registry host, and pak/save plumbing.
 # Exactly ONE copy per process: the frontend and every dlopen'd core module
 # bind ares::platform, the node system, and the registry from here, so a core
@@ -352,12 +365,15 @@ retro_core_module(md)
 retro_core_module(gba)
 
 # ---------------------------------------------------------------------------
-# retro_emulator — JNI frontend + Vulkan renderer. Links no core: nativeInit
-# dlopens whichever retro_core_*.so modules the app bundled.
+# retro_emulator — JNI frontend + engine-neutral host + ares backend + Vulkan
+# renderer. Links no core: nativeInit dlopens whichever retro_core_*.so
+# modules the app bundled, and the ares backend registers itself with the
+# host at library load.
 # ---------------------------------------------------------------------------
 add_library(retro_emulator SHARED
     "${CMAKE_CURRENT_SOURCE_DIR}/ares_jni.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/vulkan_renderer.cpp"
+    "${NATIVE_ROOT}/backends/ares/ares_backend.cpp"
 )
 target_include_directories(retro_emulator PRIVATE
     "${ARES_ROOT}"
@@ -368,6 +384,7 @@ target_include_directories(retro_emulator PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}"
 )
 target_link_libraries(retro_emulator PRIVATE
+    emu_host
     retro_ares
     android
     log

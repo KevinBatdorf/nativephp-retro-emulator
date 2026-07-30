@@ -44,23 +44,8 @@ auto setOption(const std::string& name, const std::string& value) -> bool {
 
 const SystemDef kDef = {
     .id            = "md",
-    .name          = "Sega Mega Drive / Genesis",
     .loadNameBase  = "[Sega] Mega Drive",
-    .regions       = {"NTSC-J", "NTSC-U", "PAL"},
-    .extensions    = {"md", "gen", "bin"},
-    .systemNode    = "Mega Drive",
     .cartridgeNode = "Mega Drive Cartridge",
-    .device        = "Fighting Pad",
-    .ports         = 2,
-    // Follows the common libretro-style Genesis layout: A/B/C on
-    // west/south/east, X/Y/Z on north/L/R shoulders.
-    .buttons       = {
-        {"B", 1u << 0}, {"A", 1u << 1}, {"Mode", 1u << 2}, {"Start", 1u << 3},
-        {"Up", 1u << 4}, {"Down", 1u << 5}, {"Left", 1u << 6}, {"Right", 1u << 7},
-        {"C", 1u << 8}, {"X", 1u << 9}, {"Y", 1u << 10}, {"Z", 1u << 11},
-    },
-    .memBase       = 0xFF0000u,
-    .memSize       = 0x10000u,
     .load          = loadMd,
     .memRead       = memRead,
     .memWrite      = memWrite,

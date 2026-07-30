@@ -44,21 +44,8 @@ auto getOption(const std::string& name) -> std::string {
 
 const SystemDef kDef = {
     .id            = "gba",
-    .name          = "Game Boy Advance",
     .loadNameBase  = "[Nintendo] Game Boy Advance",
-    .regions       = {},   // region-free handheld
-    .extensions    = {"gba"},
-    .systemNode    = "Game Boy Advance",
     .cartridgeNode = "Game Boy Advance Cartridge",
-    .device        = nullptr,   // controls live on the system node
-    .ports         = 0,
-    .buttons       = {
-        {"B", 1u << 0}, {"Select", 1u << 2}, {"Start", 1u << 3},
-        {"Up", 1u << 4}, {"Down", 1u << 5}, {"Left", 1u << 6}, {"Right", 1u << 7},
-        {"A", 1u << 8}, {"L", 1u << 10}, {"R", 1u << 11},
-    },
-    .memBase       = 0x02000000u,
-    .memSize       = 0x40000u,
     .load          = loadGba,
     .memRead       = memRead,
     .memWrite      = memWrite,

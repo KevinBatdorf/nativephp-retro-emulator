@@ -65,21 +65,8 @@ auto clearEntryPoints() -> void { ares::SuperFamicom::Thread::EntryPoints().clea
 
 const SystemDef kDef = {
     .id            = "sfc",
-    .name          = "SNES / Super Famicom",
     .loadNameBase  = "[Nintendo] Super Famicom",
-    .regions       = {"NTSC", "PAL"},
-    .extensions    = {"sfc", "smc", "swc", "fig"},
-    .systemNode    = "Super Famicom",
     .cartridgeNode = "Super Famicom Cartridge",
-    .device        = "Gamepad",
-    .ports         = 2,
-    .buttons       = {
-        {"B", 1u << 0}, {"Y", 1u << 1}, {"Select", 1u << 2}, {"Start", 1u << 3},
-        {"Up", 1u << 4}, {"Down", 1u << 5}, {"Left", 1u << 6}, {"Right", 1u << 7},
-        {"A", 1u << 8}, {"X", 1u << 9}, {"L", 1u << 10}, {"R", 1u << 11},
-    },
-    .memBase       = 0x7E0000u,
-    .memSize       = 0x20000u,
     .load          = loadSfc,
     .memRead       = memRead,
     .memWrite      = memWrite,
