@@ -22,6 +22,13 @@ pinned `mgba/` submodule of https://github.com/mgba-emu/mgba — that
 repository at the pinned commit is the corresponding source under
 MPL-2.0 § 3.2.
 
+The libretro API header (`native/backends/libretro/libretro.h`, vendored from
+https://github.com/libretro/libretro-common) is included under its own
+MIT-style permission notice, reproduced at the top of that file:
+Copyright (C) 2010-2024 The RetroArch team. No libretro core is bundled —
+cores an app ships via `resources/emulator-cores/` carry their own licences,
+which remain the app author's responsibility.
+
 SameBoy (the bundled Game Boy / Game Boy Color fast engine, including its
 boot ROMs vendored at native/firmware/sameboy_*_boot.bin) is included under
 the Expat License, built unmodified from the pinned `sameboy/` submodule of

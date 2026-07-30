@@ -91,6 +91,9 @@ struct SaveMediaIO {
     virtual ~SaveMediaIO() = default;
     virtual std::vector<uint8_t> read(const std::string& name) = 0;
     virtual bool write(const std::string& name, const uint8_t* data, size_t size) = 0;
+    // Filesystem path a write(name, …) lands at, for engines that must read
+    // media by path (libretro need_fullpath cores). Empty = no file backing.
+    virtual std::string pathFor(const std::string& name) { return {}; }
 };
 
 // What a backend can do for a given system. The host consults this to gate
@@ -224,6 +227,16 @@ public:
     // this after every add/remove/clear and after boot. Default no-op serves
     // the pull style.
     virtual void syncCheats(const std::unordered_map<uint32_t, uint32_t>& table) { (void)table; }
+
+    // Bring-your-own engines: a requested backend name no registered engine
+    // answers to is offered to each backend as a dynamic core to adopt for
+    // `systemId` ("snes9x" → the loader probes libsnes9x_libretro_android.so).
+    // Return true only when the core loaded and can serve the system; the
+    // backend then boots that core until the next adoption or unload.
+    virtual bool adoptDynamicCore(const std::string& name, const std::string& systemId) {
+        (void)name; (void)systemId;
+        return false;
+    }
 };
 
 } // namespace EmuHost

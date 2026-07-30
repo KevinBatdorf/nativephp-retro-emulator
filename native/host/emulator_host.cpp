@@ -57,6 +57,10 @@ struct FileSaveMediaIO final : SaveMediaIO {
         if (prefix.empty()) return false;
         return writeFile(prefix + "." + name, data, size);
     }
+    std::string pathFor(const std::string& name) override {
+        if (prefix.empty()) return {};
+        return prefix + "." + name;
+    }
 };
 
 // nall::split_and_strip equivalent for the "NTSC-J, NTSC-U" CSV form used by
@@ -1102,7 +1106,16 @@ std::string EmulatorHost::backendName() const {
 }
 
 std::string EmulatorHost::backendsJson() {
-    std::string json = "{";
+    // Root "engines" lists every REGISTERED backend, claimant or not — the
+    // only observable proof the libretro loader (which claims no system)
+    // actually linked/loaded. Bridges treat root keys as systems and skip
+    // the array value safely.
+    std::string json = "{\"engines\":[";
+    for (auto& name : Backends::names()) {
+        if (json.back() != '[') json += ",";
+        json += "\"" + name + "\"";
+    }
+    json += "]";
     for (auto& id : Backends::availableSystems()) {
         std::string claimants;
         for (auto& name : Backends::names()) {
@@ -1114,8 +1127,7 @@ std::string EmulatorHost::backendsJson() {
             claimants += "\"" + name + "\"";
         }
         auto* preferred = Backends::forSystem(id);
-        if (json.size() > 1) json += ",";
-        json += "\"" + id + "\":{\"backends\":[" + claimants + "]"
+        json += ",\"" + id + "\":{\"backends\":[" + claimants + "]"
               + ",\"default\":\"" + (preferred ? preferred->name() : "") + "\"}";
     }
     return json + "}";

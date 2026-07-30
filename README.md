@@ -234,6 +234,49 @@ An engine that doesn't serve the system throws `UNSUPPORTED_BACKEND`, and an
 option the active engine lacks (e.g. `interframeBlending` on SameBoy) throws
 `UNSUPPORTED_OPTION` — never a silent no-op.
 
+### Bring your own libretro core
+
+Any [libretro](https://www.libretro.com) core can serve a supported system —
+the plugin bundles a loader (not an engine) that adopts a core when you name
+it as the backend. On Android, drop the core into your app and name it:
+
+```
+resources/emulator-cores/android/arm64-v8a/snes9x_libretro_android.so
+```
+
+```php
+Emulator::surface()->loadSystem(System::Sfc, new SfcConfig(backend: 'snes9x'));
+```
+
+`copy-assets` packages everything under `resources/emulator-cores/android/<abi>/`
+into the app (grab `.so` files from the
+[libretro buildbot](https://buildbot.libretro.com/nightly/android/latest/) —
+filenames ship as-is). The name you pass is the file's core name; a full
+filesystem path also works. If no bundled engine or packaged core answers the
+name, `loadSystem` throws `UNSUPPORTED_BACKEND` naming what's available.
+
+What a BYO core gets: the same host as bundled engines — save states, rewind,
+run-ahead, battery saves, cheats (as RAM patches), memory read/write on the
+catalog window, dynamic rate control, and the positional gamepad (RetroPad ids
+match the plugin's button bits). Cores that read media by path
+(`need_fullpath`, e.g. FCEUmm) work too — the ROM is staged to a file beside
+the game's saves automatically. What a BYO core doesn't get: the wrapper's
+per-engine options (`interframeBlending`, screen color settings, …) stay
+`UNSUPPORTED_OPTION` unless the engine is bundled.
+
+Licensing is yours to own when you ship a core. Two worked examples:
+**Snes9x** is non-commercial-only — fine for a personal build, not for a paid
+app; **fceumm** (and many others) are GPL, which obligates source availability
+for your combined app when distributed. `copy-assets` prints one licence line
+per core it bundles so nothing ships unnoticed. The bundled engines
+(ares ISC, SameBoy Expat, mGBA MPL-2.0) keep the plugin itself
+permissively licensed.
+
+On iOS there is no drop-in dir: iOS requires dynamic libraries to be embedded,
+signed frameworks, and the libretro buildbot doesn't publish iOS slices. The
+loader is compiled in and probes `<name>_libretro_ios.dylib` — embed a
+self-built core as a framework in your Xcode project and name it the same way.
+
 ## BIOS files
 
 No system needs a BIOS from you — all firmware is embedded in the native

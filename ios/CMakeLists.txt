@@ -291,6 +291,7 @@ add_library(retro_emulator_ios STATIC
     "${NATIVE_ROOT}/host/emulator_host.cpp"
     "${NATIVE_ROOT}/backends/ares/ares_backend.cpp"
     "${NATIVE_ROOT}/backends/sameboy/sameboy_backend.cpp"
+    "${NATIVE_ROOT}/backends/libretro/libretro_backend.cpp"
     ${SAMEBOY_SOURCES}
     $<TARGET_OBJECTS:mgba_adapter>
     "${NATIVE_ROOT}/system_registry.cpp"

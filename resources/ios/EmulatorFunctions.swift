@@ -332,13 +332,21 @@ enum EmulatorFunctions {
             // An explicitly requested engine must exist for this system —
             // a dev asking for one never silently gets another.
             let backend = config["backend"] as? String
+            var availableForSystem: [String] = []
             if let backend {
-                let entry = EmulatorRenderer.backendsJson[system] as? [String: Any]
-                let available = entry?["backends"] as? [String] ?? []
-                guard available.contains(backend) else {
+                let engines = EmulatorRenderer.backendsJson
+                let entry = engines[system] as? [String: Any]
+                availableForSystem = entry?["backends"] as? [String] ?? []
+                let bundled = Set(engines.values
+                    .compactMap { ($0 as? [String: Any])?["backends"] as? [String] }
+                    .flatMap { $0 })
+                // A bundled engine that doesn't claim this system is a firm
+                // no. Any other name continues to native, which probes it as
+                // a bring-your-own libretro core.
+                if bundled.contains(backend), !availableForSystem.contains(backend) {
                     return BridgeResponse.error(
                         code: "UNSUPPORTED_BACKEND",
-                        message: "Backend '\(backend)' does not serve '\(system)' in this build — available: \(available.joined(separator: ", "))"
+                        message: "Backend '\(backend)' does not serve '\(system)' in this build — available: \(availableForSystem.joined(separator: ", "))"
                     )
                 }
             }
@@ -353,6 +361,12 @@ enum EmulatorFunctions {
                                       biosPath: config["biosPath"] as? String,
                                       bootOptions: bootOptions,
                                       backend: backend) else {
+                if let backend, !availableForSystem.contains(backend) {
+                    return BridgeResponse.error(
+                        code: "UNSUPPORTED_BACKEND",
+                        message: "No libretro core named '\(backend)' could be loaded for '\(system)' — bundle it with the app or use a bundled engine: \(availableForSystem.joined(separator: ", "))"
+                    )
+                }
                 return BridgeResponse.error(code: "UNSUPPORTED_SYSTEM", message: "System '\(system)' failed to stage — no engine claimed it")
             }
 

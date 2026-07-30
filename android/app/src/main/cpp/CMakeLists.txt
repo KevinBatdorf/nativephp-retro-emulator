@@ -436,6 +436,19 @@ target_compile_definitions(backend_mgba PRIVATE
 target_link_libraries(backend_mgba PRIVATE mgba retro_emulator log)
 
 # ---------------------------------------------------------------------------
+# backend_libretro — the bring-your-own-core loader. No engine ships inside:
+# it dlopens libretro cores the app packages (resources/emulator-cores/) and
+# adapts the libretro ABI to the seam.
+# ---------------------------------------------------------------------------
+add_library(backend_libretro SHARED
+    "${NATIVE_ROOT}/backends/libretro/libretro_backend.cpp"
+)
+target_include_directories(backend_libretro PRIVATE
+    "${NATIVE_ROOT}"
+)
+target_link_libraries(backend_libretro PRIVATE retro_emulator log)
+
+# ---------------------------------------------------------------------------
 # Per-core modules — each is its own shared library so the copy-assets hook
 # can bundle only the systems a host app declares. dlopen runs the module's
 # SystemRegistry::Registrar, so loading IS registering.

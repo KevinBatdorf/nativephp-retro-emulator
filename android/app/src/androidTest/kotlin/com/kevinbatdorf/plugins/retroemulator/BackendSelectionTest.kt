@@ -170,6 +170,18 @@ class BackendSelectionTest {
             assert(core.init())
             val json = org.json.JSONObject(core.backendsJson())
 
+            // Registered engines, claimant or not — the loader claims no
+            // system, so this is the only proof its module loaded.
+            val engines = json.getJSONArray("engines").let { list ->
+                (0 until list.length()).map { list.getString(it) }
+            }
+            assert("libretro" in engines) {
+                "the BYO loader must be registered — got $engines"
+            }
+            assert(listOf("ares", "sameboy", "mgba").all { it in engines }) {
+                "all bundled engines must be registered — got $engines"
+            }
+
             val gb = json.getJSONObject("gb")
             val gbBackends = gb.getJSONArray("backends").let { list ->
                 (0 until list.length()).map { list.getString(it) }

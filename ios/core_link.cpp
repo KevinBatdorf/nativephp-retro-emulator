@@ -18,6 +18,7 @@ extern "C" int retro_emulator_core_gba_link;
 extern "C" int emu_backend_ares_link;
 extern "C" int emu_backend_sameboy_link;
 extern "C" int emu_backend_mgba_link;
+extern "C" int emu_backend_libretro_link;
 
 extern "C" int retro_emulator_static_cores() {
     return retro_emulator_core_sfc_link
@@ -27,5 +28,6 @@ extern "C" int retro_emulator_static_cores() {
          + retro_emulator_core_gba_link
          + emu_backend_ares_link
          + emu_backend_sameboy_link
-         + emu_backend_mgba_link;
+         + emu_backend_mgba_link
+         + emu_backend_libretro_link;
 }

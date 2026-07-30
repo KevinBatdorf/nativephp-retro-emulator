@@ -85,7 +85,15 @@ auto forSystem(const std::string& systemId,
 
     if (!preferred.empty()) {
         auto* backend = byName(preferred);
-        return claims(backend) ? backend : nullptr;
+        if (backend) return claims(backend) ? backend : nullptr;
+        // Not a registered engine name: offer it to each backend as a
+        // dynamic core (the libretro loader adopts "snes9x" by probing its
+        // .so). Still never a silent substitution — adoption is exact.
+        for (auto& entry : registry()) {
+            auto* candidate = instanceOf(entry);
+            if (candidate->adoptDynamicCore(preferred, systemId)) return candidate;
+        }
+        return nullptr;
     }
     for (auto* name : kDefaultOrder) {
         auto* backend = byName(name);

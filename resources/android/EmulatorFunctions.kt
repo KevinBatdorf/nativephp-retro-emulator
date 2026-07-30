@@ -375,15 +375,23 @@ object EmulatorFunctions {
             // An explicitly requested engine must exist for this system —
             // a dev asking for one never silently gets another.
             val backend = config["backend"] as? String
+            var availableForSystem = emptyList<String>()
             if (backend != null) {
-                val available = JSONObject(EmulatorCore().backendsJson())
-                    .optJSONObject(system)?.optJSONArray("backends")
+                val engines = JSONObject(EmulatorCore().backendsJson())
+                availableForSystem = engines.optJSONObject(system)?.optJSONArray("backends")
                     ?.let { list -> (0 until list.length()).map { list.getString(it) } }
                     ?: emptyList()
-                if (backend !in available) {
+                val bundled = engines.keys().asSequence()
+                    .mapNotNull { engines.optJSONObject(it)?.optJSONArray("backends") }
+                    .flatMap { list -> (0 until list.length()).map { list.getString(it) } }
+                    .toSet()
+                // A bundled engine that doesn't claim this system is a firm
+                // no. Any other name continues to native, which probes it as
+                // a bring-your-own libretro core.
+                if (backend in bundled && backend !in availableForSystem) {
                     return BridgeResponse.error(
                         "UNSUPPORTED_BACKEND",
-                        "Backend '$backend' does not serve '$system' in this build — available: ${available.joinToString(", ")}",
+                        "Backend '$backend' does not serve '$system' in this build — available: ${availableForSystem.joinToString(", ")}",
                     )
                 }
             }
@@ -397,10 +405,17 @@ object EmulatorFunctions {
             // Synchronous staging so everything below validates against the
             // engine that will actually serve this system.
             if (renderer.stageSystem(system, config["biosPath"] as? String, bootOptions, backend) != true) {
-                return BridgeResponse.error(
-                    "UNSUPPORTED_SYSTEM",
-                    "System '$system' failed to stage — no engine claimed it",
-                )
+                return if (backend != null && backend !in availableForSystem) {
+                    BridgeResponse.error(
+                        "UNSUPPORTED_BACKEND",
+                        "No libretro core named '$backend' could be loaded for '$system' — package it under resources/emulator-cores/android/<abi>/ or use a bundled engine: ${availableForSystem.joinToString(", ")}",
+                    )
+                } else {
+                    BridgeResponse.error(
+                        "UNSUPPORTED_SYSTEM",
+                        "System '$system' failed to stage — no engine claimed it",
+                    )
+                }
             }
 
             val coreToggles = CORE_TOGGLE_KEYS

@@ -42,3 +42,8 @@ ios/devharness/Tests/Resources/*
 
 # Engine source clones for the bundled fast-core builds (never vendored wholesale)
 /vendor-engines/
+
+# BYO libretro cores staged for instrumented tests — never committed
+android/app/src/androidTest/jniLibs/
+# BYO cores staged for dev-harness measurement runs — never committed
+android/app/src/main/jniLibs/

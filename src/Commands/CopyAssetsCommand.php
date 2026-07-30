@@ -65,7 +65,64 @@ class CopyAssetsCommand extends NativePluginHookCommand
 
         $this->info('Bundled native libraries: '.implode(', ', array_keys($bundled)));
 
+        $this->bundleDroppedInCores($files, $destination);
+
         return self::SUCCESS;
+    }
+
+    /**
+     * Bring-your-own libretro cores: everything under the app's
+     * resources/emulator-cores/android/<abi>/ ships into jniLibs. Files gain
+     * the "lib" prefix Android packaging requires; the native loader probes
+     * lib<core>_libretro_android.so when a config names the core.
+     */
+    private function bundleDroppedInCores(Filesystem $files, string $destination): void
+    {
+        $source = resource_path('emulator-cores/android');
+
+        if (! is_dir($source)) {
+            return;
+        }
+
+        foreach ($files->directories($source) as $abiDir) {
+            $abi = basename($abiDir);
+
+            foreach ($files->files($abiDir) as $file) {
+                $name = $file->getFilename();
+
+                if (! str_ends_with($name, '.so')) {
+                    continue;
+                }
+
+                $target = str_starts_with($name, 'lib') ? $name : "lib{$name}";
+                $files->ensureDirectoryExists("$destination/$abi");
+                $files->copy($file->getPathname(), "$destination/$abi/$target");
+                $this->info("Bundled libretro core: {$name} ({$abi}) — ".$this->coreLicenceNote($name));
+            }
+        }
+    }
+
+    /** One honest line per core so a licence never ships unnoticed. */
+    private function coreLicenceNote(string $filename): string
+    {
+        $core = preg_replace('/^lib|_libretro.*$/', '', basename($filename, '.so'));
+
+        $known = [
+            'snes9x' => 'Snes9x licence: non-commercial use only',
+            'snes9x2010' => 'Snes9x licence: non-commercial use only',
+            'bsnes' => 'GPL-3.0',
+            'fceumm' => 'GPL-2.0',
+            'nestopia' => 'GPL-2.0',
+            'mesen' => 'GPL-3.0',
+            'quicknes' => 'LGPL-2.1',
+            'gambatte' => 'GPL-2.0',
+            'genesis_plus_gx' => 'non-commercial licence',
+            'picodrive' => 'non-commercial (MAME-style) licence',
+        ];
+
+        $licence = $known[$core] ?? 'licence unknown';
+
+        return "{$licence} — you are responsible for complying when distributing your app";
     }
 
     /** Core ids present in the prebuilt set (from any ABI's module files). */
