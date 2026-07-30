@@ -255,6 +255,10 @@ filenames ship as-is). The name you pass is the file's core name; a full
 filesystem path also works. If no bundled engine or packaged core answers the
 name, `loadSystem` throws `UNSUPPORTED_BACKEND` naming what's available.
 
+BYO cores pay off the same way the bundled ones do (same device, method, and
+scenes as above): Snes9x runs SNES at 8.1% of one core where ares needs
+20.6%, and FCEUmm runs NES at 6.9% where ares needs 28.6%.
+
 What a BYO core gets: the same host as bundled engines — save states, rewind,
 run-ahead, battery saves, cheats (as RAM patches), memory read/write on the
 catalog window, dynamic rate control, and the positional gamepad (RetroPad ids
