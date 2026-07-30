@@ -1,7 +1,7 @@
 // JNI marshalling over the engine-neutral EmulatorHost (native/host/).
 // ares:: is deliberately absent from this file; what lives here is
 // platform-shaped only — JNI type conversion, the Vulkan display path, and
-// the dlopen of whichever core modules the host app bundled.
+// the dlopen of whichever backend modules the host app bundled.
 #include <jni.h>
 #include <android/log.h>
 #include <android/native_window_jni.h>
@@ -68,26 +68,26 @@ extern "C" {
 // Init/destroy/version -------------------------------------------
 
 /**
- * dlopen every bundled core module. Each module's SystemRegistry::Registrar
- * runs inside dlopen, so the ares backend ends up claiming exactly the
- * systems the host app shipped — the copy-assets hook decides that set, not
- * this code. Absent modules are skipped; ids no backend claims stay
- * UNSUPPORTED_SYSTEM at the bridge.
+ * dlopen every bundled backend module (libbackend_<name>.so). A backend's
+ * registrar runs inside dlopen, and the backend then loads whatever engine
+ * modules it needs — so the set of playable systems is decided entirely by
+ * what the copy-assets hook shipped, not this code. Absent modules are
+ * skipped; ids no backend claims stay UNSUPPORTED_SYSTEM at the bridge.
  */
-static void loadCoreModules()
+static void loadBackendModules()
 {
     static bool attempted = false;
     if (attempted) return;
     attempted = true;
 
-    static const char* kCoreIds[] = {
-        "fc", "sfc", "gb", "gba", "md",
+    static const char* kBackendNames[] = {
+        "ares", "sameboy", "mgba", "libretro",
     };
-    for (auto* id : kCoreIds) {
-        char name[64];
-        std::snprintf(name, sizeof(name), "libretro_core_%s.so", id);
-        if (dlopen(name, RTLD_NOW | RTLD_LOCAL)) {
-            LOGI("core module loaded: %s", name);
+    for (auto* name : kBackendNames) {
+        char lib[64];
+        std::snprintf(lib, sizeof(lib), "libbackend_%s.so", name);
+        if (dlopen(lib, RTLD_NOW | RTLD_LOCAL)) {
+            LOGI("backend module loaded: %s", lib);
         }
     }
     LOGI("registry: %zu system(s) available",
@@ -98,7 +98,7 @@ JNIEXPORT jboolean JNICALL
 Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeInit(
     JNIEnv*, jobject)
 {
-    loadCoreModules();
+    loadBackendModules();
     if (!g_host) {
         g_host = new EmulatorHost{};
         auto* ares = EmuHost::Backends::byName("ares");
@@ -796,7 +796,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetSupportedSystems(
     // Registry reads must not depend on a surface existing: nativeInit only
     // runs when a renderer boots, but GetSystems is called from plain screens
     // (a console list) long before any surface. Idempotent.
-    loadCoreModules();
+    loadBackendModules();
     return env->NewStringUTF(joinCsv(EmuHost::Backends::availableSystems()).c_str());
 }
 
@@ -808,7 +808,7 @@ JNIEXPORT jstring JNICALL
 Java_com_kevinbatdorf_plugins_retroemulator_AresCore_nativeGetSystemExtensions(
     JNIEnv* env, jobject, jstring systemIdStr)
 {
-    loadCoreModules();  // registry read — see nativeGetSupportedSystems
+    loadBackendModules();  // registry read — see nativeGetSupportedSystems
     return env->NewStringUTF(joinCsv(
         EmulatorHost::systemExtensionsFor(jstringToString(env, systemIdStr))).c_str());
 }

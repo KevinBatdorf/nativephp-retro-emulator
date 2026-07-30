@@ -12,7 +12,7 @@ set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
 # Android libc++ defaults to pointer-identity typeid comparison (unique RTTI,
 # implementation 1). Objects cross our DSO boundary constantly (paks and node
-# attributes built in libretro_ares.so, consumed in dlopen'd cores), and each
+# attributes built in libbackend_ares.so, consumed in dlopen'd cores), and each
 # DSO carries its own weak typeinfo copies — pointer identity then breaks
 # nall::any::is<T>() (every pak/node attribute reads back empty; the sfc base
 # lost its ST-LOROM board and grew no slot ports). Implementation 2 compares
@@ -90,7 +90,7 @@ target_link_libraries(nall PUBLIC log)
 
 # ---------------------------------------------------------------------------
 # ares_iface — ares/nall headers + profile defines, NO objects. Core modules
-# compile against this; the runtime objects live only in libretro_ares.so.
+# compile against this; the runtime objects live only in libbackend_ares.so.
 # ---------------------------------------------------------------------------
 add_library(ares_iface INTERFACE)
 target_include_directories(ares_iface INTERFACE
@@ -105,7 +105,7 @@ target_compile_definitions(ares_iface INTERFACE
     SLJIT_HAVE_CONFIG_PRE=1
     SLJIT_HAVE_CONFIG_POST=1
 )
-# Every C++ TU imports the pak-reading vfs template from libretro_ares.so
+# Every C++ TU imports the pak-reading vfs template from libbackend_ares.so
 # instead of instantiating its own — see native/cross_dso_vfs.hpp for why
 # (cross-DSO dynamic_cast makes boards read empty ROMs otherwise).
 target_compile_options(ares_iface INTERFACE
@@ -305,12 +305,36 @@ target_include_directories(emu_host PUBLIC "${NATIVE_ROOT}" "${NATIVE_ROOT}/host
 target_link_libraries(emu_host PRIVATE log)
 
 # ---------------------------------------------------------------------------
-# retro_ares — the shared ares runtime, registry host, and pak/save plumbing.
-# Exactly ONE copy per process: the frontend and every dlopen'd core module
-# bind ares::platform, the node system, and the registry from here, so a core
-# can never fork the runtime state. Cores DT_NEED this library.
+# retro_emulator — JNI frontend + engine-neutral host + Vulkan renderer.
+# Engine-free: backends arrive as libbackend_<name>.so modules that nativeInit
+# dlopens (each registers itself with the host at load), and backends in turn
+# load whatever engine modules they need.
 # ---------------------------------------------------------------------------
-add_library(retro_ares SHARED
+add_library(retro_emulator SHARED
+    "${CMAKE_CURRENT_SOURCE_DIR}/ares_jni.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/vulkan_renderer.cpp"
+)
+target_include_directories(retro_emulator PRIVATE
+    "${NATIVE_ROOT}"
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+)
+target_link_libraries(retro_emulator PRIVATE
+    emu_host
+    android
+    log
+    vulkan
+    librashader
+)
+
+# ---------------------------------------------------------------------------
+# backend_ares — the ares engine behind the seam: runtime, backend adapter,
+# SystemDef registry, pak/save plumbing. Exactly ONE copy per process: every
+# dlopen'd core module binds ares::platform, the node system, and the
+# registry from here, so a core can never fork the runtime state. Cores
+# DT_NEED this library; it DT_NEEDs retro_emulator for the host symbols.
+# ---------------------------------------------------------------------------
+add_library(backend_ares SHARED
+    "${NATIVE_ROOT}/backends/ares/ares_backend.cpp"
     "${ARES_ROOT}/ares/component/processor/z80/z80.cpp"
     "${ARES_ROOT}/ares/component/eeprom/m24c/m24c.cpp"
     "${ARES_ROOT}/ares/component/audio/sn76489/sn76489.cpp"
@@ -326,68 +350,39 @@ add_library(retro_ares SHARED
     "${NATIVE_ROOT}/pak/mia_mediums.cpp"
     "${FIRMWARE_DIR}/embedded_firmware.cpp"
 )
-target_include_directories(retro_ares PUBLIC
+target_include_directories(backend_ares PUBLIC
     "${ARES_ROOT}"
     "${ARES_ROOT}/ares"
     "${NATIVE_ROOT}"
     "${NATIVE_ROOT}/pak"
     "${FIRMWARE_DIR}"
 )
-target_link_libraries(retro_ares PUBLIC ares_core nall ares_iface)
-target_link_libraries(retro_ares PRIVATE libco)
-target_link_libraries(retro_ares PRIVATE log)
+target_link_libraries(backend_ares PUBLIC ares_core nall ares_iface)
+target_link_libraries(backend_ares PRIVATE libco log retro_emulator)
 
 # ---------------------------------------------------------------------------
 # Per-core modules — each is its own shared library so the copy-assets hook
 # can bundle only the systems a host app declares. dlopen runs the module's
 # SystemRegistry::Registrar, so loading IS registering.
 # ---------------------------------------------------------------------------
-function(retro_core_module SYS)
-    add_library(retro_core_${SYS} SHARED
+function(ares_core_module SYS)
+    add_library(ares_core_${SYS} SHARED
         "${NATIVE_ROOT}/cores/core_${SYS}.cpp"
         ${ARGN}
     )
-    target_include_directories(retro_core_${SYS} PRIVATE
+    target_include_directories(ares_core_${SYS} PRIVATE
         "${NATIVE_ROOT}"
         "${NATIVE_ROOT}/pak"
         "${FIRMWARE_DIR}"
     )
-    target_link_libraries(retro_core_${SYS} PRIVATE ${SYS}_core retro_ares)
-    set_target_properties(retro_core_${SYS} PROPERTIES OUTPUT_NAME "retro_core_${SYS}")
+    target_link_libraries(ares_core_${SYS} PRIVATE ${SYS}_core backend_ares)
+    set_target_properties(ares_core_${SYS} PROPERTIES OUTPUT_NAME "ares_core_${SYS}")
 endfunction()
 
-# sfc_pak.cpp lives in retro_ares with the other pak builders so every pak's
-# vfs objects share one home DSO (see native/cross_dso_vfs.hpp).
-retro_core_module(sfc)
-retro_core_module(fc)
-retro_core_module(gb)
-retro_core_module(md)
-retro_core_module(gba)
-
-# ---------------------------------------------------------------------------
-# retro_emulator — JNI frontend + engine-neutral host + ares backend + Vulkan
-# renderer. Links no core: nativeInit dlopens whichever retro_core_*.so
-# modules the app bundled, and the ares backend registers itself with the
-# host at library load.
-# ---------------------------------------------------------------------------
-add_library(retro_emulator SHARED
-    "${CMAKE_CURRENT_SOURCE_DIR}/ares_jni.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/vulkan_renderer.cpp"
-    "${NATIVE_ROOT}/backends/ares/ares_backend.cpp"
-)
-target_include_directories(retro_emulator PRIVATE
-    "${ARES_ROOT}"
-    "${ARES_ROOT}/ares"
-    "${NATIVE_ROOT}"
-    "${NATIVE_ROOT}/pak"
-    "${FIRMWARE_DIR}"
-    "${CMAKE_CURRENT_SOURCE_DIR}"
-)
-target_link_libraries(retro_emulator PRIVATE
-    emu_host
-    retro_ares
-    android
-    log
-    vulkan
-    librashader
-)
+# sfc_pak.cpp lives in backend_ares with the other pak builders so every
+# pak's vfs objects share one home DSO (see native/cross_dso_vfs.hpp).
+ares_core_module(sfc)
+ares_core_module(fc)
+ares_core_module(gb)
+ares_core_module(md)
+ares_core_module(gba)

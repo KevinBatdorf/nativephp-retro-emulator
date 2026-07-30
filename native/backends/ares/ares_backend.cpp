@@ -16,11 +16,33 @@
 #include <algorithm>
 #include <cstring>
 
+#if defined(__ANDROID__)
+#include <dlfcn.h>
+#include <cstdio>
+#endif
+
 AresBackend::AresBackend() {
-    // One engine, one Platform — the global hookup the bridges did in their
-    // init paths. The backend outlives host init/destroy cycles now; with no
-    // core running, no callback ever fires, so an early hookup is inert.
+    // One engine, one Platform — the global hookup. The backend outlives
+    // host init/destroy cycles; with no core running, no callback ever
+    // fires, so an early hookup is inert.
     ares::platform = this;
+
+#if defined(__ANDROID__)
+    // The modular build ships each system as libares_core_<id>.so; dlopen
+    // runs its SystemRegistry::Registrar, so loading IS registering and
+    // systems() reflects exactly what the copy-assets hook bundled. The iOS
+    // static build registers through link anchors instead (core_link.cpp).
+    static const char* kCoreIds[] = {
+        "fc", "sfc", "gb", "gba", "md",
+    };
+    for (auto* id : kCoreIds) {
+        char name[64];
+        std::snprintf(name, sizeof(name), "libares_core_%s.so", id);
+        if (dlopen(name, RTLD_NOW | RTLD_LOCAL)) {
+            EMUHOST_LOGI("ares core module loaded: %s", name);
+        }
+    }
+#endif
 }
 
 AresBackend::~AresBackend() {

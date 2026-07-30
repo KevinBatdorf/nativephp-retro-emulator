@@ -73,8 +73,8 @@ class CopyAssetsCommand extends NativePluginHookCommand
     {
         $ids = [];
 
-        foreach (glob("$source/*/libretro_core_*.so") ?: [] as $path) {
-            $ids[] = substr(basename($path, '.so'), strlen('libretro_core_'));
+        foreach (glob("$source/*/libares_core_*.so") ?: [] as $path) {
+            $ids[] = substr(basename($path, '.so'), strlen('libares_core_'));
         }
 
         return array_values(array_unique($ids));
@@ -86,11 +86,11 @@ class CopyAssetsCommand extends NativePluginHookCommand
             return $shaders;
         }
 
-        if (preg_match('/^libretro_core_(.+)\.so$/', $name, $m)) {
+        if (preg_match('/^libares_core_(.+)\.so$/', $name, $m)) {
             return $systems === null || in_array($m[1], $systems, true);
         }
 
-        // The frontend + shared runtime always ship.
+        // The frontend + the backend libraries always ship.
         return true;
     }
 }
