@@ -1,0 +1,37 @@
+# The PHP surface + the drift scanners (PluginTest parses the native and
+# bridge sources in-repo, so Pest guards far more than src/). Native builds
+# need the NDK and the instrumented suites need real devices — those gates
+# run locally per AGENTS.md, not here.
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  pest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        # Engine submodules are build-time only; the test suite reads the
+        # in-repo sources.
+        with:
+          submodules: false
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
+      - name: Cache composer
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: composer-${{ runner.os }}-${{ hashFiles('composer.lock') }}
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Pest
+        run: ./vendor/bin/pest
