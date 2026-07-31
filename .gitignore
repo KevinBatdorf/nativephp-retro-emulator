@@ -47,3 +47,4 @@ ios/devharness/Tests/Resources/*
 android/app/src/androidTest/jniLibs/
 # BYO cores staged for dev-harness measurement runs — never committed
 android/app/src/main/jniLibs/
+.phpunit.cache/
