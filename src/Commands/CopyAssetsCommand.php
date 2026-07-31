@@ -66,8 +66,41 @@ class CopyAssetsCommand extends NativePluginHookCommand
         $this->info('Bundled native libraries: '.implode(', ', array_keys($bundled)));
 
         $this->bundleDroppedInCores($files, $destination);
+        $this->warnAboutMissingPreferredEngines($destination);
 
         return self::SUCCESS;
+    }
+
+    /**
+     * A preferred engine that isn't packaged falls through silently at
+     * boot — warn at build time with the fetch command that fixes it.
+     */
+    private function warnAboutMissingPreferredEngines(string $destination): void
+    {
+        // The engines compiled into the plugin's own libraries; anything
+        // else in the map must be a packaged libretro core to serve.
+        $shipped = ['ares', 'sameboy', 'mgba'];
+
+        foreach ((array) config('retro-emulator.backends', []) as $system => $engines) {
+            foreach ((array) $engines as $engine) {
+                $engine = $engine instanceof \KevinBatdorf\RetroEmulator\Backend
+                    ? $engine->value
+                    : (string) $engine;
+
+                if (in_array($engine, $shipped, true)) {
+                    break;   // present — nothing before it went missing
+                }
+
+                if (glob("{$destination}/*/lib{$engine}_libretro_android.so") !== []) {
+                    break;   // packaged core — this entry serves
+                }
+
+                $this->warn(
+                    "retro-emulator: config prefers '{$engine}' for {$system} but no such core is packaged — "
+                    ."boots fall back. Run: php artisan retro-emulator:fetch-core {$engine}"
+                );
+            }
+        }
     }
 
     /**

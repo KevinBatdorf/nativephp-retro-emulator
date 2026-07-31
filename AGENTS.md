@@ -207,11 +207,17 @@ Resolution order for who serves a boot:
 1. **Explicit `backend:` on the system config — strict.** What you name
    must serve or `loadSystem` throws `UNSUPPORTED_BACKEND` listing what
    does. Never a silent substitution.
-2. **The app map in `config/retro-emulator.php` — a graceful preference
-   list.** `'sfc' => ['snes9x', 'bsnes']` tries each in order; an engine
-   that isn't bundled/fetched is skipped (a plain string wraps to a
-   one-item list). The shipped config prefers the performance engine for
-   every system, so fetching a core activates it with no config edit.
+2. **The app map in `config/retro-emulator.php` — the recommended load
+   order, one shape everywhere: `[fast pick, accurate pick]`**
+   (`'sfc' => ['snes9x', 'bsnes']`). Entries are tried in order; an
+   engine that isn't bundled/fetched is skipped **with a warning** (the
+   Laravel log names the miss + the fetch-core command; the bridge logs
+   it device-side too; copy-assets warns at build where hook output is
+   surfaced) and ares is the implicit final fallback — the app always
+   boots. The map is prescriptive: the plugin can't ship the fetchable
+   cores itself (their licences), so the shipped config directs the dev
+   to the recommended setup, and fetching a core activates it with no
+   config edit. A plain string wraps to a one-item list.
 3. **The built-in engine (ares)** — the floor when the list runs dry or no
    map entry exists.
 

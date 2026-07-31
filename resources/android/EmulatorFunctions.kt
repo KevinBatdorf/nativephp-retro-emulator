@@ -431,17 +431,26 @@ object EmulatorFunctions {
                 }
             } else {
                 for (candidate in preferences) {
-                    if (candidate in bundled && candidate !in availableForSystem) continue
-                    if (renderer.stageSystem(system, biosPath, bootOptions, candidate) == true) {
-                        staged = true
-                        break
+                    if (candidate !in bundled || candidate in availableForSystem) {
+                        if (renderer.stageSystem(system, biosPath, bootOptions, candidate) == true) {
+                            staged = true
+                            break
+                        }
                     }
-                }
-                if (!staged && renderer.stageSystem(system, biosPath, bootOptions, null) != true) {
-                    return BridgeResponse.error(
-                        "UNSUPPORTED_SYSTEM",
-                        "System '$system' failed to stage — no engine claimed it",
+                    Log.w(
+                        TAG,
+                        "config prefers '$candidate' for '$system' but it isn't available — " +
+                            "falling through. Run: php artisan retro-emulator:fetch-core $candidate",
                     )
+                }
+                if (!staged) {
+                    Log.w(TAG, "'$system' is running the built-in engine (ares) — no preferred engine was available")
+                    if (renderer.stageSystem(system, biosPath, bootOptions, null) != true) {
+                        return BridgeResponse.error(
+                            "UNSUPPORTED_SYSTEM",
+                            "System '$system' failed to stage — no engine claimed it",
+                        )
+                    }
                 }
             }
 

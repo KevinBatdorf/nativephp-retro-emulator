@@ -378,16 +378,22 @@ enum EmulatorFunctions {
             } else {
                 var staged = false
                 for candidate in preferences {
-                    if bundled.contains(candidate), !availableForSystem.contains(candidate) { continue }
-                    if renderer.loadSystem(system, biosPath: biosPath,
-                                           bootOptions: bootOptions, backend: candidate) {
-                        staged = true
-                        break
+                    if !bundled.contains(candidate) || availableForSystem.contains(candidate) {
+                        if renderer.loadSystem(system, biosPath: biosPath,
+                                               bootOptions: bootOptions, backend: candidate) {
+                            staged = true
+                            break
+                        }
                     }
+                    print("[RetroEmulator] config prefers '\(candidate)' for '\(system)' but it isn't available — "
+                        + "falling through. Run: php artisan retro-emulator:fetch-core \(candidate)")
                 }
-                if !staged, !renderer.loadSystem(system, biosPath: biosPath,
-                                                 bootOptions: bootOptions, backend: nil) {
-                    return BridgeResponse.error(code: "UNSUPPORTED_SYSTEM", message: "System '\(system)' failed to stage — no engine claimed it")
+                if !staged {
+                    print("[RetroEmulator] '\(system)' is running the built-in engine (ares) — no preferred engine was available")
+                    if !renderer.loadSystem(system, biosPath: biosPath,
+                                            bootOptions: bootOptions, backend: nil) {
+                        return BridgeResponse.error(code: "UNSUPPORTED_SYSTEM", message: "System '\(system)' failed to stage — no engine claimed it")
+                    }
                 }
             }
 

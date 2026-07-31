@@ -777,12 +777,52 @@ describe('Typed layer', function () {
         }
     });
 
+    it('warns in the log when a boot lands off the preferred engine', function () {
+        $log = new class extends \Psr\Log\AbstractLogger
+        {
+            /** @var string[] */
+            public array $warnings = [];
+
+            public function log($level, \Stringable|string $message, array $context = []): void
+            {
+                if ($level === 'warning') {
+                    $this->warnings[] = (string) $message;
+                }
+            }
+        };
+        \Illuminate\Container\Container::getInstance()->instance('log', $log);
+        $GLOBALS['__nativephp_mock']['Emulator.LoadSystem'] = json_encode([
+            'status' => 'staged', 'system' => 'sfc', 'backend' => 'ares',
+        ]);
+        config()->set('retro-emulator.backends', ['sfc' => ['snes9x', 'bsnes']]);
+
+        try {
+            Emulator::surface('main')->loadSystem(System::Sfc);
+
+            expect($log->warnings)->toHaveCount(1);
+            expect($log->warnings[0])->toContain("running 'ares'")
+                ->toContain('fetch-core snes9x');
+
+            // Landing on the preferred engine stays quiet.
+            $GLOBALS['__nativephp_mock']['Emulator.LoadSystem'] = json_encode([
+                'status' => 'staged', 'system' => 'sfc', 'backend' => 'snes9x',
+            ]);
+            Emulator::surface('main')->loadSystem(System::Sfc);
+            expect($log->warnings)->toHaveCount(1);
+        } finally {
+            config()->set('retro-emulator.backends', []);
+            unset($GLOBALS['__nativephp_mock']['Emulator.LoadSystem']);
+            \Illuminate\Container\Container::getInstance()->forgetInstance('log');
+        }
+    });
+
     it('ships a performance-first preference map covering every system', function () {
         $map = require dirname(__DIR__).'/config/retro-emulator.php';
 
         foreach (array_map(fn ($case) => $case->value, System::cases()) as $id) {
             expect($map['backends'])->toHaveKey($id);
-            expect($map['backends'][$id])->toBeArray();
+            // One shape for every console: [fast pick, accurate pick].
+            expect($map['backends'][$id])->toBeArray()->toHaveCount(2);
         }
     });
 

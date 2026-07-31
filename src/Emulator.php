@@ -80,11 +80,21 @@ class Emulator
         }
         $staged = array_filter($staged, fn ($value) => $value !== null);
 
-        $this->call('Emulator.LoadSystem', [
+        $result = $this->call('Emulator.LoadSystem', [
             'surface' => $this->surface,
             'system' => $systemId,
             'config' => $staged,
         ]);
+
+        $preferred = $staged['backendPreferences'][0] ?? null;
+        $actual = $result['backend'] ?? '';
+
+        if ($preferred !== null && $actual !== '' && $actual !== $preferred && app()->bound('log')) {
+            logger()->warning(
+                "retro-emulator: {$systemId} is running '{$actual}' — the config prefers "
+                ."'{$preferred}'. Run: php artisan retro-emulator:fetch-core {$preferred}"
+            );
+        }
 
         if ($config instanceof Config) {
             $this->applyPresentation($config);

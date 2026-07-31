@@ -35,28 +35,31 @@ return [
     | Engine preferences
     |--------------------------------------------------------------------------
     |
-    | Per system: the engines to try, in order. Each entry is tried until one
-    | serves — an engine that isn't bundled or fetched is skipped, and when
-    | the list runs dry the built-in engine (ares) plays. So the defaults
-    | below prefer the fast engine everywhere, cost nothing until a core is
-    | actually available, and activate the moment you fetch one:
+    | The load order per system, one shape everywhere: the fast pick first,
+    | the accurate pick as its fallback. This is the setup we recommend —
+    | the fetchable engines can't ship inside the plugin (their own
+    | licences; see LICENSING.md), so fetch what you want the app to
+    | actually use and it plays on the next build:
     |
     |     php artisan retro-emulator:fetch-core snes9x
     |
-    | A single string works too ('gb' => 'sameboy'). A per-boot backend on
-    | the system's config (SfcConfig(backend: 'bsnes')) overrides this map
-    | and is strict: what you name must serve, or loadSystem throws.
-    | Emulator::systems() reports each system's available engines.
+    | An engine that isn't present is skipped with a warning (your app log
+    | and the device log) and the built-in engine, ares, is the final
+    | fallback — the app always boots. A single string works too
+    | ('gb' => 'sameboy'). A per-boot backend on the system's config
+    | (SfcConfig(backend: 'bsnes')) overrides this map and is strict: what
+    | you name must serve, or loadSystem throws. Emulator::systems()
+    | reports each system's available engines.
     |
     */
 
     'backends' => [
-        'fc' => ['fceumm'],
-        'sfc' => ['snes9x'],
-        'gb' => ['sameboy'],
-        'gbc' => ['sameboy'],
-        'gba' => ['mgba'],
-        'md' => ['picodrive'],
+        'fc' => ['fceumm', 'mesen'],
+        'sfc' => ['snes9x', 'bsnes'],
+        'gb' => ['sameboy', 'ares'],
+        'gbc' => ['sameboy', 'ares'],
+        'gba' => ['mgba', 'ares'],
+        'md' => ['picodrive', 'genesis_plus_gx'],
     ],
 
 ];
