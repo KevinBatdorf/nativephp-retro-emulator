@@ -10,7 +10,7 @@ namespace {
 struct Entry {
     std::string name;
     BackendFactory make;
-    std::unique_ptr<Backend> instance;   // created on first use
+    std::unique_ptr<Backend> instance;
 };
 
 // Construct-on-first-use — registrar constructors run during static init /
@@ -82,8 +82,7 @@ auto forSystem(const std::string& systemId,
         auto* backend = byName(preferred);
         if (backend) return claims(backend) ? backend : nullptr;
         // Not a registered engine name: offer it to each backend as a
-        // dynamic core (the libretro loader adopts "snes9x" by probing its
-        // .so). Still never a silent substitution — adoption is exact.
+        // dynamic core (the libretro loader adopts "snes9x" by probing its .so).
         for (auto& entry : registry()) {
             auto* candidate = instanceOf(entry);
             if (candidate->adoptDynamicCore(preferred, systemId)) return candidate;

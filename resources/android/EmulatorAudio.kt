@@ -51,7 +51,6 @@ class EmulatorAudio(private val core: EmulatorCore) {
         .build()
 
     // Drain buffer holds enough frames for one AudioTrack write at a time.
-    // minBufBytes / (4 bytes/float) gives the frame capacity in floats.
     private val drainBuffer = FloatArray(minBufBytes / 4)
 
     @Volatile private var running = false

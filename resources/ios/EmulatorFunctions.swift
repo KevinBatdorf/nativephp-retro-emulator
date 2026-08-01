@@ -40,7 +40,7 @@ enum EmulatorFunctions {
     /// BEFORE the old instance's dismantle fires. A blind remove-by-name would
     /// then wipe the live renderer's entry, stranding every bridge call with
     /// SURFACE_NOT_FOUND. Compare identity so a superseded teardown leaves the
-    /// live entry in place. (Same fix as Android's unregisterSurface.)
+    /// live entry in place. Android's unregisterSurface compares identity the same way.
     static func unregister(name: String, renderer: EmulatorRenderer) {
         renderer.eventListener = nil
         registryLock.lock()
@@ -78,7 +78,7 @@ enum EmulatorFunctions {
 
             // Stage the system with its playback/system config — LoadSystem
             // reads the staged + core-toggle keys and ignores the presentation
-            // keys, which fan out to their own channels below.
+            // keys, which go out on their own channels.
             _ = try? LoadSystem().execute(parameters: [
                 "surface": surface, "system": system, "config": config])
 
@@ -135,8 +135,8 @@ enum EmulatorFunctions {
         }
     }
 
-    /// Report an operational outcome (category B): a valid call the world said
-    /// no to — a missing ROM, an empty slot, a failed save. These surface as an
+    /// Report an operational outcome (category B): a valid call that failed
+    /// at runtime — a missing ROM, an empty slot, a failed save. These surface as an
     /// EmulatorError event, never as a bridge error, so the PHP wrapper returns
     /// fluently and the event carries the detail. The "failed" status keeps the
     /// response off the wrapper's throw path (which fires on "error").
@@ -167,8 +167,7 @@ enum EmulatorFunctions {
 
     // Native input calls return "" on success or "CODE"/"CODE:detail" on a
     // category-A error. Map that to a bridge response; the code stays in a
-    // variable so it doesn't register on the enum drift scan (the codes it
-    // emits appear as literals elsewhere / in ConnectDevice).
+    // variable so it stays off PluginTest's error-code drift scan.
     private static func statusResponse(
         _ result: String, success: [String: Any]
     ) -> [String: Any] {
@@ -284,7 +283,8 @@ enum EmulatorFunctions {
         }
     }
 
-    /// Initialize the ares core for a system. Supported systems are the ones
+    /// Stage a system declaration — no core boots until LoadRom arrives
+    /// with a ROM. Supported systems are the ones
     /// compiled into the native library — reported by GetSystems with
     /// `supported: true`. System firmware (SFC ipl.rom + boards.bml, GB boot
     /// ROM, MD TMSS) is embedded; no biosPath is needed for these systems.
@@ -525,7 +525,6 @@ enum EmulatorFunctions {
         }
     }
 
-    /// Stop emulation and tear down the loop.
     class Stop: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
@@ -666,7 +665,6 @@ enum EmulatorFunctions {
         }
     }
 
-    /// Write bytes to WRAM.
     class WriteMemory: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
@@ -713,7 +711,6 @@ enum EmulatorFunctions {
         }
     }
 
-    /// Remove specific address watches.
     class UnwatchMemory: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
@@ -766,7 +763,7 @@ enum EmulatorFunctions {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
             let options = parameters["options"] as? [String: Any] ?? [:]
             // output/aspectCorrection are renderer-side presentation and work
-            // on every engine; the screen-node settings below only exist where
+            // on every engine; the screen-node settings only exist where
             // the engine has that door. Only a CHANGE is gated — 100 means
             // "unchanged" in the whole-percent contract and false is the
             // default, so neutral values are vacuously satisfied (configs
@@ -902,7 +899,6 @@ enum EmulatorFunctions {
         }
     }
 
-    /// Merge system-specific options (per-system emulation toggles).
     class SetSystemOptions: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
@@ -959,8 +955,7 @@ enum EmulatorFunctions {
             if result.isEmpty {
                 return BridgeResponse.success(data: ["status": "mapped", "count": pairs.count])
             }
-            // Native returns "CODE" or "CODE:detail" — re-raise as a bridge error
-            // (code held in a variable so it stays off the enum drift scan).
+            // Native returns "CODE" or "CODE:detail" — re-raise as a bridge error.
             let code = String(result.split(separator: ":", maxSplits: 1)[0])
             let detail = result.contains(":")
                 ? String(result.split(separator: ":", maxSplits: 1)[1]) : ""
@@ -1125,7 +1120,6 @@ enum EmulatorFunctions {
         }
     }
 
-    /// Release a single button on a port.
     class ReleaseButton: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
@@ -1203,7 +1197,6 @@ enum EmulatorFunctions {
         }
     }
 
-    /// Return controller ports and available button names for the loaded system.
     /// Buttons held on a port, by name — see Controller::pressed().
     class GetPressedButtons: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
@@ -1217,6 +1210,7 @@ enum EmulatorFunctions {
         }
     }
 
+    /// Return controller ports and available button names for the loaded system.
     class GetPorts: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
@@ -1226,7 +1220,7 @@ enum EmulatorFunctions {
         }
     }
 
-    /// Return all supported ares systems as rich objects (static list — no native call).
+    /// Return all supported ares systems as rich objects.
     class GetSystems: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             let compiled = Set(EmulatorRenderer.supportedSystems)

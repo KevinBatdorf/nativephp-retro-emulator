@@ -17,7 +17,7 @@ import android.view.Surface
 class EmulatorCore {
 
     companion object {
-        // loadRom result codes — see nativeLoadRom in ares_jni.cpp.
+        // loadRom result codes — see nativeLoadRom in emulator_jni.cpp.
         const val LOAD_OK = 1                  // booted and running
         const val LOAD_REJECTED = 0            // rejected pre-teardown; prior game untouched
         const val LOAD_FAILED_STOPPED = -1     // failed after teardown; emulator cleanly stopped
@@ -34,7 +34,6 @@ class EmulatorCore {
     /** Initialize the ares platform singleton. Returns false if already initialized. */
     fun init(): Boolean = nativeInit()
 
-    /** Tear down the ares platform singleton and free all emulator state. */
     fun destroy() = nativeDestroy()
 
     /** Returns the ares version string (e.g. "v140-android"). */
@@ -81,7 +80,7 @@ class EmulatorCore {
      * STAGE a system declaration — no core boots until [loadRom] arrives with
      * a ROM (every boot is ROM-first so the region variant is always right).
      * Re-staging over a running core is legal; the running game continues
-     * until the next [loadRom]. GL thread only.
+     * until the next [loadRom]. Render thread only.
      *
      * System firmware (SFC ipl.rom + boards.bml, GB boot ROM, MD TMSS, and the
      * embedded open GBA BIOS) ships in the native library — no assets needed.
@@ -90,7 +89,7 @@ class EmulatorCore {
      * @param biosPath Optional real BIOS dump to override gba's embedded open
      *                 BIOS for accuracy; null otherwise.
      * @param backend  Engine to serve this system ("ares", "sameboy", …);
-     *                 null picks the bundled fast core where one exists.
+     *                 null runs the built-in engine (ares).
      */
     fun loadSystem(systemId: String, biosPath: String? = null, backend: String? = null): Boolean =
         nativeLoadSystem(systemId, biosPath ?: "", backend ?: "")
@@ -104,7 +103,7 @@ class EmulatorCore {
     /** The engine serving calls right now: active, else staged, else "". */
     fun backendName(): String = nativeGetBackendName()
 
-    /** Per-system engine availability + default pick, as a JSON object string. */
+    /** Per-system engine availability, as a JSON object string. */
     fun backendsJson(): String = nativeGetBackendsJson()
 
     /** Whether the staged/active engine exposes the setVideo settings door. */
@@ -132,7 +131,7 @@ class EmulatorCore {
      * desktop-ares (ROM region list × preference, override wins), tears down
      * any running core, and boots fresh. A ROM that fails analysis leaves a
      * running game untouched. Must be called after [loadSystem] staged a
-     * system, from the GL thread.
+     * system, from the render thread.
      *
      * @param romBytes         Raw ROM bytes. A 512-byte copier header is
      *                         stripped automatically if detected.
@@ -184,7 +183,7 @@ class EmulatorCore {
 
     /**
      * Write current battery-backed memory to disk under the prefix passed to
-     * [loadRom]. GL thread only. Returns false when nothing was persisted.
+     * [loadRom]. Render thread only. Returns false when nothing was persisted.
      */
     fun flushSaves(): Boolean = nativeFlushSaves()
 
@@ -195,7 +194,7 @@ class EmulatorCore {
      * Video post-processing on the ares screen node. Ranges follow ares:
      * luminance/saturation 0–1, gamma 1.0–2.0. overscan false trims the
      * borders (our default); true shows the full overscan canvas.
-     * GL thread only.
+     * render thread only.
      */
     fun setVideo(
         luminance: Float,
@@ -337,17 +336,15 @@ class EmulatorCore {
     fun resume() = nativeResume()
 
     // -------------------------------------------------------------------------
-    // State save / load — GL thread only (ares serializer uses libco)
+    // State save / load — render thread only (ares serializer uses libco)
     // -------------------------------------------------------------------------
 
-    /** Serialize full emulator state to [path]. Returns true on success. */
     fun stateSave(path: String): Boolean = nativeStateSave(path)
 
-    /** Restore emulator state from [path]. Returns true on success. */
     fun stateLoad(path: String): Boolean = nativeStateLoad(path)
 
     // -------------------------------------------------------------------------
-    // Work-RAM access — GL thread only (avoids data race with tick)
+    // Work-RAM access — render thread only (avoids data race with tick)
     // -------------------------------------------------------------------------
 
     /**
@@ -365,7 +362,7 @@ class EmulatorCore {
     fun writeMemory(address: Int, bytes: ByteArray) = nativeWriteMemory(address, bytes)
 
     // -------------------------------------------------------------------------
-    // Rewind / run-ahead (GL thread only — state is read inside tick())
+    // Rewind / run-ahead (render thread only — state is read inside tick())
     // -------------------------------------------------------------------------
 
     /**
@@ -408,7 +405,7 @@ class EmulatorCore {
     fun rumbleState(): Int = nativeGetRumbleState()
 
     // -------------------------------------------------------------------------
-    // Cheats (GL thread only — the cheat map is read inside tick())
+    // Cheats (render thread only — the cheat map is read inside tick())
     // -------------------------------------------------------------------------
 
     /**

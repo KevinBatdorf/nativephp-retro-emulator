@@ -10,8 +10,8 @@ import org.junit.runner.RunWith
 import kotlin.math.abs
 
 /**
- * ROM-first boot + region resolution (plan 4b) — the audit item that PAL ROMs
- * booted NTSC cores. loadSystem stages; loadRom analyzes the ROM, resolves the
+ * ROM-first boot + region resolution — a PAL ROM must boot the PAL system
+ * variant, not an NTSC core reporting PAL. loadSystem stages; loadRom analyzes the ROM, resolves the
  * region like desktop-ares (Emulator::region(), emulator.cpp:40-60), and boots
  * the region-correct system variant.
  *

@@ -3,8 +3,8 @@
 namespace KevinBatdorf\RetroEmulator\Buttons;
 
 /**
- * Game Boy Advance buttons. Values mirror the native registry's button names
- * (native/cores/core_gba.cpp) and are drift-tested against it.
+ * Game Boy Advance buttons. Values mirror the native catalog's button names
+ * (native/host/system_catalog.cpp) and are drift-tested against it.
  */
 enum GbaButton: string
 {

@@ -9,7 +9,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Phase 6 instrumented tests — controller input.
+ * Controller input through the Kotlin ↔ JNI seam.
  *
  * These tests verify the Kotlin ↔ JNI input path without requiring a running
  * ROM. nativeSetInputState is a no-op when g_state is null, so the tests are

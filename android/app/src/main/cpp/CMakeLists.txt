@@ -258,7 +258,7 @@ target_compile_definitions(md_core PUBLIC
 # per ABI. libretro_emulator.so gains a NEEDED liblibrashader.so, which the
 # dynamic linker resolves from the packaged jniLibs at load (minSdk 26). The
 # dev-harness packages it from android/app/src/main/jniLibs; hosts receive it via
-# the plugin's copy-assets hook. See .claude/findings.md → "Shaders".
+# the plugin's copy-assets hook.
 # ---------------------------------------------------------------------------
 add_library(librashader SHARED IMPORTED)
 set_target_properties(librashader PROPERTIES

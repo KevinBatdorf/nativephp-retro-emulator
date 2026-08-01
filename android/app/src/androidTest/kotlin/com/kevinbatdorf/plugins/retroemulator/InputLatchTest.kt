@@ -9,9 +9,9 @@ import org.junit.runner.RunWith
 
 /**
  * Press-latch regression: a touch tap's press+release arrive between two core
- * input polls (<5ms apart), and before the latch the pulse was lost entirely —
- * on-screen buttons "didn't work" for real fingers while 600ms injected test
- * holds passed. The latch defers a release that lands before its press was
+ * input polls (<5ms apart); without the latch the pulse is lost entirely —
+ * on-screen buttons fail for real fingers while 600ms injected test holds
+ * pass. The latch defers a release that lands before its press was
  * ever sampled until right after the first sample.
  *
  * The synthetic ROM enables SNES auto-joypad polling ($4200 = $01) so the

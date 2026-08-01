@@ -9,15 +9,14 @@ import org.junit.runner.RunWith
 import java.io.File
 
 /**
- * Phase 4 instrumented test — confirms the emulator activity starts and runs
- * for 3 seconds without crashing.
+ * The emulator activity must start and run for 3 seconds without crashing.
  *
  * Requirements:
  *   - A test ROM must be pushed to the device before running:
  *       adb push /path/to/game.sfc /data/local/tmp/test.sfc
  *
- * System firmware (ipl.rom, boards.bml, …) is embedded in the native library
- * since Phase 11 — no extra assets are needed.
+ * System firmware (ipl.rom, boards.bml, …) is embedded in the native
+ * library — no extra assets are needed.
  */
 @RunWith(AndroidJUnit4::class)
 class Phase4RenderingTest {
@@ -61,7 +60,7 @@ class Phase4RenderingTest {
 
     @Test
     fun supportedSystemsAreReported() {
-        // Verify the four Phase 11 systems are compiled into the native library.
+        // Every advertised system must be compiled into the native library.
         val supported = EmulatorCore().supportedSystems().split(",")
         for (id in listOf("fc", "sfc", "gb", "md")) {
             assert(id in supported) { "system '$id' must be supported, got: $supported" }

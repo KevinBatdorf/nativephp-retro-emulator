@@ -15,7 +15,7 @@ it('lists .slangp presets recursively as sorted absolute paths', function () {
     touch($dir.'/b.slangp');
     touch($dir.'/a.slangp');
     touch($dir.'/crt/royale.slangp');
-    touch($dir.'/readme.txt');       // not a preset
+    touch($dir.'/readme.txt');
     touch($dir.'/pass.slang');       // a shader pass, not a preset
 
     expect(Shaders::in($dir))->toBe([

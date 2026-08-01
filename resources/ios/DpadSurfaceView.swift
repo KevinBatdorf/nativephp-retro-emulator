@@ -122,8 +122,8 @@ private struct DpadPad: View {
             if panXId != 0 { SharedValueStore.shared.set(panXInitial, for: panXId) }
             if panYId != 0 { SharedValueStore.shared.set(panYInitial, for: panYId) }
         }
-        // Captures the direction instead of reading @State per tick, and exists
-        // only while something is held — see DpadSurface.kt for what that costs.
+        // Captures the direction instead of reading @State per tick: reading
+        // @State inside the tick races the host's snapshot and kills the app.
         .onChange(of: held) { pressed in
             panTimer?.invalidate()
             panTimer = nil

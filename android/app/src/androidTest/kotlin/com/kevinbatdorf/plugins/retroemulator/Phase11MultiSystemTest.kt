@@ -6,7 +6,7 @@ import org.junit.runner.RunWith
 import java.io.File
 
 /**
- * Phase 11 instrumented test — each compiled system loads its core, boots a
+ * Each compiled system loads its core, boots a
  * homebrew ROM headlessly (no GL surface — the video callback is a no-op
  * without a bound texture), ticks 120 frames, and answers a work-RAM read.
  *
@@ -30,7 +30,7 @@ class Phase11MultiSystemTest {
         val probeAddress: Int,
         // True when the test ROM is known to write this window early: catches
         // "booted but executing garbage" (an empty cartridge read leaves RAM
-        // untouched — how the cross-DSO vfs bug hid behind green boots).
+        // untouched).
         val expectRamActivity: Boolean,
     )
 

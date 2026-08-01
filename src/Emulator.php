@@ -244,7 +244,7 @@ class Emulator
     }
 
     /**
-     * Synchronous RAM read — returns bytes directly.
+     * Synchronous RAM read; the async variant reports through MemoryRead instead.
      *
      * @return int[]
      */
@@ -516,9 +516,7 @@ class Emulator
     /**
      * Gate rumble forwarding: while enabled, motor state published by the
      * emulated hardware (SFC Rumble Gamepad, GB MBC5 rumble carts) drives
-     * the device vibrator/haptics. The bridge response
-     * reports hasVibrator so apps can hide their rumble toggle on devices
-     * without a motor.
+     * the device vibrator/haptics.
      */
     public function setRumble(bool $enabled): static
     {
@@ -728,11 +726,10 @@ class Emulator
     }
 
     /**
-     * Hardware controllers the OS currently reports as connected — the Thor's
-     * built-in pad, paired Bluetooth gamepads, etc. A consumer can show the
-     * player which real controllers are recognized (the on-screen overlay
-     * works regardless). Names are the platform's device names; empty when
-     * none are connected (on-screen controls only). No surface required.
+     * Hardware controllers the OS currently reports as connected — a
+     * handheld's built-in pad, paired Bluetooth gamepads. Names are the
+     * platform's device names; empty when none are connected. No surface
+     * required.
      *
      * @return array<int, string>
      */

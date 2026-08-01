@@ -2,8 +2,7 @@ import RetroEmulator
 import XCTest
 
 /// Per-system emulation toggles reach the core through the generic setBoolean
-/// scan, only on cores that declare the node. Deep Black Boost is SNES's — the
-/// user-visible change this phase ships (plan.md item 6): ares' sfc core
+/// scan, only on cores that declare the node. Deep Black Boost is SNES's: ares' sfc core
 /// defaults it on, the wrapper turns it off unless the dev opts in. Mirrors the
 /// Android CoreOptionsTest (GB coverage lives there — iOS boots only SFC).
 final class CoreOptionsTests: XCTestCase {

@@ -18,8 +18,7 @@ class CopyAssetsCommand extends NativePluginHookCommand
         }
 
         // Host apps don't compile the ares C++ — they consume the prebuilt
-        // modular set (frontend + shared runtime + one library per core) and
-        // this hook bundles only what config/retro-emulator.php selects.
+        // modular set (frontend + shared runtime + one library per core).
         $source = $this->pluginPath().'/resources/android/jniLibs';
         $destination = $this->buildPath().'/app/src/main/jniLibs';
 

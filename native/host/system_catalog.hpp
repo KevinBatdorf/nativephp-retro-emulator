@@ -57,8 +57,8 @@ struct System {
     uint32_t memSize;
 };
 
-// All cataloged systems, ordered by id (the order every "supported systems"
-// list has always used). Stable pointers for the process lifetime.
+// All cataloged systems, ordered by id; bridge output order follows it.
+// Stable pointers for the process lifetime.
 auto all() -> const std::vector<const System*>&;
 
 // Look up by id; nullptr when the catalog has no such system. NOTE: catalog

@@ -8,8 +8,7 @@ import java.io.File
 /**
  * Per-system emulation toggles (Color Emulation, Deep Black Boost, Interframe
  * Blending) reach the core through the generic setBoolean scan, and only on
- * cores that declare the node. Deep Black Boost is SNES's — the user-visible
- * change this phase ships (see plan.md item 6): ares' sfc core defaults it on,
+ * cores that declare the node. Deep Black Boost is SNES's: ares' sfc core defaults it on,
  * and the wrapper turns it off unless the dev opts in.
  */
 @RunWith(AndroidJUnit4::class)
@@ -54,7 +53,7 @@ class CoreOptionsTest {
         val core = EmulatorCore()
         try {
             assert(core.init())
-            // This test pins the ares node scan; gb defaults to sameboy now.
+            // This test pins the ares node scan, so name the engine explicitly.
             assert(core.loadSystem("gb", backend = "ares"))
             assert(core.loadRom(romFile.readBytes()) == EmulatorCore.LOAD_OK)
             core.tick()
@@ -67,8 +66,8 @@ class CoreOptionsTest {
             assert(core.getCoreBoolean("interframeBlending") == 0) { "false must apply" }
 
             // On original Game Boy, Color Emulation is a String palette node, not
-            // a Boolean — the Boolean scan correctly finds nothing (palette is
-            // separate work, see plan.md).
+            // a Boolean — the Boolean scan correctly finds nothing (the palette
+            // is a String node, not covered here).
             assert(core.getCoreBoolean("colorEmulation") == -1) {
                 "DMG Color Emulation is a String, not a Boolean toggle"
             }

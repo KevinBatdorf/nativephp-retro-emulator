@@ -5,7 +5,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Device selection + the axis input channel (plan.md step 1.5). Port 1
+ * Device selection + the axis input channel. Port 1
  * auto-connects the system's default pad on boot (desktop parity); ports 2+
  * stay empty until connectDevice. Each device exposes its own buttons/axes;
  * an explicit connectDevice on port 1 overrides the default. The SNES Mouse is

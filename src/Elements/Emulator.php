@@ -145,12 +145,10 @@ class Emulator extends Element
             $props['system'] = $this->system;
         }
 
-        // Global config ⊕ system config (system wins), so native applies one
-        // effective config on mount.
+        // Native applies one effective config on mount, so merge before sending.
         $config = array_merge($this->config ?? [], $this->systemConfig ?? []);
 
-        // inputCapture is resolved at surface creation, not pushed to the core,
-        // so hoist it onto the surface prop instead of the config map.
+        // inputCapture is resolved at surface creation, never pushed to the core.
         if (isset($config['inputCapture'])) {
             $props['input_capture'] = $config['inputCapture'];
             unset($config['inputCapture']);

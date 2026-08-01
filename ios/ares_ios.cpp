@@ -10,7 +10,6 @@
 #include <ares/debug/debug.cpp>
 #include <ares/node/node.cpp>
 
-// Resource stub — desktop build embeds PNG icons here; iOS needs none.
 namespace Resource {
     namespace Ares {
         const unsigned char* Icon1x  = nullptr;

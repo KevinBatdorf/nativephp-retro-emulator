@@ -5,7 +5,7 @@ namespace KevinBatdorf\RetroEmulator\Buttons;
 /**
  * Mega Drive / Genesis buttons (libretro-style layout: A/B/C on
  * west/south/east, X/Y/Z on north/shoulders). Values mirror the native
- * registry's button names (native/system_registry.cpp) and are drift-tested
+ * catalog's button names (native/host/system_catalog.cpp) and are drift-tested
  * against it.
  */
 enum MdButton: string

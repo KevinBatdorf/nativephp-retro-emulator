@@ -10,7 +10,6 @@
 #include <ares/node/node.cpp>
 // scheduler/thread.cpp are header-only — included inside each system's namespace via ares/inline.hpp
 
-// Resource stub — desktop build embeds PNG icons here; Android needs none.
 namespace Resource {
     namespace Ares {
         const unsigned char* Icon1x  = nullptr;

@@ -42,7 +42,7 @@ class EmulatorActivity : Activity() {
     }
 
     // Internal so instrumented tests can stop emulation deterministically
-    // (on the GL thread, while it is still alive) before the scenario closes.
+    // (on the render thread, while it is still alive) before the scenario closes.
     internal lateinit var renderer: EmulatorRenderer
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -85,7 +85,6 @@ class EmulatorActivity : Activity() {
         intent.getStringExtra(EXTRA_SLOT_A_PATH)?.let { renderer.stageSlot(0, File(it).readBytes()) }
         intent.getStringExtra(EXTRA_SLOT_B_PATH)?.let { renderer.stageSlot(1, File(it).readBytes()) }
 
-        // Queue the ROM load (executes on the render thread after the system is staged).
         renderer.queueRomLoad(romBytes, system, romPath, savePrefix)
         Log.i(TAG, "ROM queued: $romPath (${romBytes.size} bytes, system=$system)")
 

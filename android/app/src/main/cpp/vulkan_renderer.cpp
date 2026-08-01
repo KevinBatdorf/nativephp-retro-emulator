@@ -8,7 +8,7 @@
 // librashader Vulkan runtime — direct-linked (liblibrashader.so in jniLibs).
 // LIBRA_RUNTIME_VULKAN unlocks the libra_vk_* decls; vulkan.h is already included
 // via the header above. Pinned to librashader-v0.5.1 (matches the vendored ABI 2
-// header). See .claude/findings.md → "Shaders".
+// header).
 #define LIBRA_RUNTIME_VULKAN
 #include <librashader/librashader.h>
 
@@ -463,10 +463,9 @@ bool VulkanRenderer::recordAndSubmit(uint32_t imageIndex, int outX, int outY, in
 
             libra_image_vk_t in{srcImage_, kSrcFormat, stagedW_, stagedH_};
             libra_image_vk_t out{shaderOut_, kSrcFormat, shaderOutW_, shaderOutH_};
-            // Render the final pass across the WHOLE output image. A null viewport
-            // left librashader drawing the game at a fraction of the target, so it
-            // presented tiny; the explicit viewport makes the shaded frame fill it
-            // (and lets CRT-style passes work at true output resolution).
+            // Render the final pass across the WHOLE output image: a null
+            // viewport renders the game at a fraction of the output, and the
+            // explicit one lets CRT-style passes work at true output resolution.
             libra_viewport_t vp{0.0f, 0.0f, shaderOutW_, shaderOutH_};
             libra_error_t err = libra_vk_filter_chain_frame(
                 &shaderChain_, cmd, frameCount_++, in, out,

@@ -24,7 +24,7 @@ using EmuHost::EmulatorHost;
 
 static EmulatorHost* g_host = nullptr;
 
-// The Vulkan display path (replaces the old GLES blit). Created lazily in
+// The Vulkan display path. Created lazily in
 // nativeSurfaceCreated (device/instance are window-independent); the
 // swapchain is bound per surface. Its lifecycle follows the SURFACE, not the
 // host — stopEmulation() and release() cycle the host via destroy()+init(),
@@ -249,7 +249,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeGetBackendName(
     return env->NewStringUTF(g_host->backendName().c_str());
 }
 
-/** Per-system engine availability + the fast-by-default pick, as JSON. */
+/** Per-system engine availability, as JSON. */
 JNIEXPORT jstring JNICALL
 Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeGetBackendsJson(
     JNIEnv* env, jobject)
@@ -297,7 +297,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeGetEngineOptionsJ
 /**
  * Stage a Sufami Turbo slot ROM (index 0 = Slot A, 1 = Slot B) to be inserted
  * at the next nativeLoadRom, whose base must be an ST-LOROM cart. Empty bytes
- * clear the slot. Kept separate so loadRom's signature stays single-ROM.
+ * clear the slot.
  */
 JNIEXPORT void JNICALL
 Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeStageSlot(
@@ -636,7 +636,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeStateLoad(
 
 // Memory read / write --------------------------------------------
 // Each system exposes its work-RAM bus window (see the system catalog).
-// Must be called from the GL thread (same thread as tick) to avoid data
+// Must be called from the render thread (same thread as tick) to avoid data
 // races with emulation.
 
 JNIEXPORT jbyteArray JNICALL
@@ -644,8 +644,8 @@ Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeReadMemory(
     JNIEnv* env, jobject, jint address, jint length)
 {
     if (!g_host) return nullptr;
-    // JNI-allocation guard predating the seam; the iOS bridge has no such
-    // cap, so it lives here rather than in the host.
+    // JNI-side allocation cap; the iOS bridge has no equivalent, so it
+    // lives here rather than in the host.
     if (length <= 0 || length > 0x10000) return nullptr;
 
     std::vector<uint8_t> bytes((size_t)length);
@@ -668,7 +668,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeWriteMemory(
 }
 
 // Cheats ----------------------------------------------------------------------
-// GL thread only: callers route through the render thread's queueEvent so the
+// render thread only: callers route through the render thread's queueEvent so the
 // maps are never touched while the engine is between reads.
 
 /**
@@ -699,7 +699,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeClearCheats(JNIEn
 }
 
 // Rewind / run-ahead ----------------------------------------------------------
-// GL thread only (queueEvent routing): the history and flags are read inside
+// render thread only (queueEvent routing): the history and flags are read inside
 // nativeTick.
 
 /**
@@ -795,7 +795,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeSetAudio(
 
 /**
  * Video post-processing options on the engine's screens. Ranges follow the
- * engine: luminance/saturation 0–1, gamma 1.0–2.0. Must run on the GL thread.
+ * engine: luminance/saturation 0–1, gamma 1.0–2.0. Must run on the render thread.
  */
 JNIEXPORT void JNICALL
 Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeSetVideo(
@@ -809,7 +809,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeSetVideo(
 /**
  * Apply a per-system emulation toggle (Color Emulation, Deep Black Boost,
  * Interframe Blending) to the loaded core. No-ops when the core doesn't
- * declare the node, so callers apply every toggle unconditionally. GL thread.
+ * declare the node, so callers apply every toggle unconditionally. render thread.
  */
 JNIEXPORT void JNICALL
 Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeSetCoreBoolean(
@@ -831,7 +831,7 @@ Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeGetCoreBoolean(
 
 /**
  * Write current battery-backed memory (save.ram, save.eeprom, …) to disk
- * under the prefix passed to nativeLoadRom. Must run on the GL thread.
+ * under the prefix passed to nativeLoadRom. Must run on the render thread.
  * Returns false when nothing was persisted.
  */
 JNIEXPORT jboolean JNICALL

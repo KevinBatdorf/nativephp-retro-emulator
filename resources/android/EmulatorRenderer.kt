@@ -74,8 +74,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
 
     init {
         // Hardware gamepads deliver key/motion events to the focused view.
-        // In an EDGE host nothing else routes them here (the plugin's old
-        // test activity overrode dispatchKeyEvent; hosts don't).
+        // In an EDGE host nothing else routes them here.
         isFocusable = true
         isFocusableInTouchMode = true
     }
@@ -95,7 +94,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
         if (!hasWindowFocus) input.reset()
     }
 
-    // Pending commands posted from the main thread and consumed on the GL thread.
+    // Pending commands posted from the main thread and consumed on the render thread.
     @Volatile var pendingRomBytes: ByteArray? = null
     @Volatile var pendingSavePrefix: String?  = null
 
@@ -123,14 +122,14 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     @Volatile var loadedSystem: String = ""
     @Volatile var loadedRomPath: String = ""
 
-    /** Current logical emulator status, updated on the GL thread. */
+    /** Current logical emulator status, updated on the render thread. */
     @Volatile var currentStatus: String = "stopped"
         private set
 
-    /** Optional listener for emulator lifecycle events — dispatched on the GL thread. */
+    /** Optional listener for emulator lifecycle events — dispatched on the render thread. */
     var eventListener: EmulatorEventListener? = null
 
-    // Synchronous GL-thread operations.
+    // Synchronous render-thread operations.
     // Requests are posted from bridge threads and serviced on the render thread.
 
     private data class MemReadRequest(
@@ -195,18 +194,18 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     private var lastAutoSaveNanos = 0L
 
     // Letterboxed output rect in surface pixels, recomputed per frame from the
-    // screen-node geometry (GL thread only). Screenshot reads this region.
+    // screen-node geometry (render thread only). Screenshot reads this region.
     @Volatile private var surfaceW = 0
     @Volatile private var surfaceH = 0
     private var outputRect = OutputRect(0, 0, 0, 0)
 
     // Presentation settings (ares desktop's Video settings) — written from
-    // bridge threads via [queueVideoOptions], read per frame on the GL thread.
+    // bridge threads via [queueVideoOptions], read per frame on the render thread.
     @Volatile var videoOutput: String = "scale"
     @Volatile var videoFixedScale: Int = 2
     @Volatile var videoAspectCorrection: String = "standard"
 
-    // Current screen-node options, merged on the GL thread. Kept so setVideo
+    // Current screen-node options, merged on the render thread. Kept so setVideo
     // has merge semantics (omitted options hold their value) and so a system
     // reload can reapply them — desktop's settings persist the same way.
     private class VideoOptions {
@@ -239,7 +238,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     }
 
     // -----------------------------------------------------------------------
-    // Render thread — replaces GLSurfaceView's managed GL thread. It owns the
+    // Render thread — owns the single thread every ares call runs on (libco). It owns the
     // single thread every ares call runs on (libco), drains queued commands,
     // ticks the core paced to its refresh rate, and presents each frame through
     // the native Vulkan renderer. The Vulkan swapchain follows the SurfaceHolder.
@@ -258,7 +257,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     @Volatile private var wantedShaderPath: String? = null
     @Volatile private var shaderPending = false
 
-    /** GLSurfaceView-style post: run [r] on the render thread (serviced each loop). */
+    /** Run [r] on the render thread; serviced once per loop pass. */
     fun queueEvent(r: Runnable) {
         events.add(r)
         synchronized(lifecycleLock) { lifecycleLock.notifyAll() }
@@ -339,7 +338,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
                 req.latch.countDown()
             }
 
-            // --- Consume pending ROM load — the one boot path, swaps included ---
+            // Consume the pending ROM load — the one boot path, swaps included.
             val rom = pendingRomBytes
             if (systemStaged && rom != null) {
                 pendingRomBytes = null
@@ -376,7 +375,6 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
                 }
             }
 
-            // --- Start audio once the ROM is running ---
             if (romLoaded && !audioStarted) {
                 audioStarted = true
                 audio.start()
@@ -389,12 +387,12 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
                 return
             }
 
-            // --- Service pending memory write (before tick so write takes effect this frame) ---
+            // Service the pending memory write before tick so it takes effect this frame.
             pendingWrite.getAndSet(null)?.let { req ->
                 core.writeMemory(req.address, req.bytes)
             }
 
-            // --- Tick the emulator, paced to the console's frame rate ---
+            // Tick the emulator, paced to the console's frame rate.
             val now = System.nanoTime()
             if (lastTickNanos == 0L) lastTickNanos = now
             // Clamp long gaps (pause/resume, app switch) so we don't fast-run.
@@ -442,7 +440,6 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
                 fpsWindowStartNanos = now
             }
 
-            // --- Periodic battery-save flush ---
             if (autoSave) {
                 if (lastAutoSaveNanos == 0L) lastAutoSaveNanos = now
                 if (now - lastAutoSaveNanos >= AUTOSAVE_INTERVAL_NANOS) {
@@ -451,7 +448,6 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
                 }
             }
 
-            // --- Fire EmulatorStarted on the first rendered frame ---
             val fw = core.getFrameWidth()
             val fh = core.getFrameHeight()
             if (!firstFrameSent && fw > 0 && fh > 0) {
@@ -460,7 +456,6 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
                 eventListener?.onStarted(loadedSystem, loadedRomPath)
             }
 
-            // --- Update the letterboxed output rect ---
             if (fw > 0 && fh > 0) {
                 val g = core.getVideoGeometry()
                 outputRect = computeOutputRect(
@@ -475,32 +470,28 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
                 )
             }
 
-            // --- Service pending memory read ---
             pendingRead.getAndSet(null)?.let { req ->
                 req.result = core.readMemory(req.address, req.length)
                 req.latch.countDown()
             }
 
-            // --- Service pending state operation ---
             pendingStateOp.getAndSet(null)?.let { req ->
                 req.result = if (req.save) core.stateSave(req.path) else core.stateLoad(req.path)
                 req.latch.countDown()
             }
 
-            // --- Service pending screenshot (after the rect update above) ---
+            // Screenshot reads outputRect, so it must run after the rect update.
             pendingScreenshot.getAndSet(null)?.let { req ->
                 req.result = captureFramebuffer()
                 req.latch.countDown()
             }
 
-            // --- Drive the vibrator from ares' motor state ---
             val rumble = core.rumbleState()
             if (rumble != lastRumbleState) {
                 lastRumbleState = rumble
                 applyRumble(rumble)
             }
 
-            // --- Check memory watches and fire MemoryChanged events ---
             if (watchedAddresses.isNotEmpty()) {
                 for (entry in watchedAddresses.values) {
                     val bytes = core.readMemory(entry.address, entry.length) ?: continue
@@ -513,12 +504,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
                 }
             }
 
-            // Present the frame, letterboxed into the output rect, via Vulkan.
-            // The native blit scales the source with a linear filter and centers
-            // it in outputRect (the clear paints the letterbox bars) — the exact
-            // ruby presentation, done by vkCmdBlitImage instead of a quad.
-            //
-            // Only when the core produced a new frame: with the display pinned
+            // Present only when the core produced a new frame: with the display pinned
             // above the content rate (handhelds default 120Hz and can refuse
             // the setFrameRate vote), presenting every vsync re-uploads and
             // re-shades identical pixels — measurable GPU/battery waste. On
@@ -588,7 +574,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     }
 
     // ---------------------------------------------------------------------------
-    // Public API — called from any thread; GL-critical work is queued/synced.
+    // Public API — called from any thread; render-thread-critical work is queued/synced.
     // ---------------------------------------------------------------------------
 
     /**
@@ -660,9 +646,8 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
         romPath: String = "",
         savePrefix: String? = null,
     ) {
-        // Game knowledge dies with the old game: cheat addresses and
-        // watched addresses belong to the outgoing ROM. Cheats clear natively
-        // inside the reboot; watches are wrapper-held so clear them here.
+        // Cheat and watch addresses belong to the outgoing ROM. Cheats clear
+        // natively inside the reboot; watches are wrapper-held so clear them here.
         watchedAddresses.clear()
         loadedSystem  = system
         loadedRomPath = romPath
@@ -692,7 +677,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
 
     /**
      * Stop emulation and tear down the ares core.
-     * Audio is stopped on the calling thread; core teardown runs on the GL thread.
+     * Audio is stopped on the calling thread; core teardown runs on the render thread.
      */
     fun stopEmulation() {
         watchedAddresses.clear()
@@ -720,13 +705,12 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
 
     /**
      * Stop audio and tear down the ares core. Call from [Activity.onDestroy].
-     * Blocks (≤2 s) until the GL thread has actually destroyed the core:
-     * release() runs at teardown, when the GL thread may already be paused or
+     * Blocks (≤2 s) until the render thread has actually destroyed the core:
+     * release() runs at teardown, when the render thread may already be paused or
      * exiting — a fire-and-forget destroy can execute late or never, leaving
      * the global core alive with libco contexts primed on the dying thread.
      * The next surface's loadSystem then drives those coroutines from a
-     * different thread, which wedges or crashes the core (co_switch storm;
-     * found via the instrumented suite hanging cross-test).
+     * different thread, which wedges or crashes the core (co_switch storm).
      */
     fun release() {
         watchedAddresses.clear()
@@ -754,12 +738,12 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     }
 
     // ---------------------------------------------------------------------------
-    // Synchronous GL-thread read/write helpers
+    // Synchronous render-thread read/write helpers
     // ---------------------------------------------------------------------------
 
     /**
      * Read [length] bytes from WRAM at bus [address] (0x7E0000–0x7FFFFF).
-     * Blocks the calling thread until the GL thread services the request (≤2 s).
+     * Blocks the calling thread until the render thread services the request (≤2 s).
      * Returns null if the address is invalid or the emulator is not running.
      */
     fun syncReadMemory(address: Int, length: Int): ByteArray? {
@@ -780,7 +764,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     }
 
     /**
-     * Save emulator state to [path]. Blocks until the GL thread completes (≤30 s).
+     * Save emulator state to [path]. Blocks until the render thread completes (≤30 s).
      * Returns true on success.
      */
     fun syncStateSave(path: String): Boolean {
@@ -793,7 +777,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     }
 
     /**
-     * Load emulator state from [path]. Blocks until the GL thread completes (≤30 s).
+     * Load emulator state from [path]. Blocks until the render thread completes (≤30 s).
      * Returns true on success.
      */
     fun syncStateLoad(path: String): Boolean {
@@ -807,7 +791,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
 
     /**
      * Capture the current framebuffer as a PNG-encoded [ByteArray].
-     * Blocks until the GL thread completes (≤5 s). Returns null on failure.
+     * Blocks until the render thread completes (≤5 s). Returns null on failure.
      */
     fun syncScreenshot(): ByteArray? {
         val latch = CountDownLatch(1)
@@ -819,11 +803,11 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     }
 
     // ---------------------------------------------------------------------------
-    // Cheats — mutations run on the GL thread (the cheat map is read inside tick)
+    // Cheats — mutations run on the render thread (the cheat map is read inside tick)
     // ---------------------------------------------------------------------------
 
     /**
-     * Register (or replace) a cheat code. Blocks until the GL thread parses it
+     * Register (or replace) a cheat code. Blocks until the render thread parses it
      * (≤2 s). Returns false if no valid ADDR:VALUE pair parsed, null on timeout.
      */
     fun syncAddCheat(code: String): Boolean? = syncOnGlThread { core.addCheat(code) }
@@ -871,7 +855,6 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
         }
     }
 
-    /** Whether this device can rumble at all. */
     fun hasVibrator(): Boolean = vibrator?.hasVibrator() == true
 
     /**
@@ -895,7 +878,6 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     fun connectDevice(port: Int, device: String): String =
         core.connectDevice(stagedSystemId, port, device)
 
-    /** Logical ports a physical port's device occupies (see [EmulatorCore.devicePorts]). */
     fun devicePorts(port: Int): IntArray = core.devicePorts(stagedSystemId, port)
 
     /** Buttons held on a port, from any source (see [EmulatorCore.getPressedButtons]). */
@@ -939,7 +921,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
         v.vibrate(effect)
     }
 
-    /** Run [block] on the GL thread and block the caller for the result (≤2 s). */
+    /** Run [block] on the render thread and block the caller for the result (≤2 s). */
     private fun <T> syncOnGlThread(block: () -> T): T? {
         val latch = CountDownLatch(1)
         var result: T? = null
@@ -1003,12 +985,10 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
         }
     }
 
-    /** Remove watches for the given bus addresses. */
     fun removeWatches(addresses: List<Int>) {
         addresses.forEach { watchedAddresses.remove(it) }
     }
 
-    /** Clear all memory watches. */
     fun clearMemoryWatches() = watchedAddresses.clear()
 
     // ---------------------------------------------------------------------------
@@ -1064,7 +1044,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     }
 
     /**
-     * Merge video options onto the GL thread — null keeps the current value.
+     * Merge video options onto the render thread — null keeps the current value.
      * Presentation settings (output/fixedScale/aspectCorrection) apply on
      * the next frame; screen-node options need a loaded system and are
      * reapplied automatically when a new system loads.
@@ -1093,7 +1073,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     }
 
     /**
-     * Merge per-system emulation toggles onto the GL thread. Unknown keys are
+     * Merge per-system emulation toggles onto the render thread. Unknown keys are
      * ignored; recognized ones update the persisted map and apply live (a no-op
      * on cores that don't declare the node, and reapplied on the next boot).
      */
@@ -1131,7 +1111,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     fun getPortsJson(): String = core.getPortsJson()
 
     /**
-     * Ports JSON is built by the system load on the GL thread — round-trip
+     * Ports JSON is built by the system load on the render thread — round-trip
      * through it so a GetPorts issued right after LoadSystem orders correctly.
      * Returns null if no system is loaded within the wait window.
      */
@@ -1157,7 +1137,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
 // Presentation geometry
 // ---------------------------------------------------------------------------
 
-/** Letterboxed output rect in surface pixels (GL origin, bottom-left). */
+/** Letterboxed output rect in surface pixels, top-left origin. */
 internal data class OutputRect(val x: Int, val y: Int, val w: Int, val h: Int)
 
 /**
@@ -1211,8 +1191,8 @@ internal fun computeOutputRect(
         outputWidth  = (videoWidth * bestFitScale).toInt()
         outputHeight = (videoHeight * bestFitScale).toInt()
     }
-    // "integer" keeps video·multiplier from above; the reference's inner
-    // fallback is unreachable there (multiplier == 0 is caught first).
+    // "integer" keeps videoWidth·multiplier unchanged; the reference's inner
+    // fallback is unreachable (multiplier == 0 is caught first).
 
     if (output == "integerFixed") {
         var fixedMult = maxOf(1, fixedScale)
@@ -1244,7 +1224,3 @@ internal fun computeOutputRect(
     )
 }
 
-// Frame presentation now lives entirely in the native Vulkan renderer
-// (vulkan_renderer.cpp): the ares BGRA frame uploads to a B8G8R8A8_UNORM source
-// image and vkCmdBlitImage scales it into the letterboxed output rect. No GL
-// shader program is needed here anymore — librashader handles slang presets.

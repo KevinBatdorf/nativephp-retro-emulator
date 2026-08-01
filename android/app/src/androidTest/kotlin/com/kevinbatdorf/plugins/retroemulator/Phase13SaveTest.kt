@@ -7,7 +7,7 @@ import org.junit.runner.RunWith
 import java.io.File
 
 /**
- * Phase 13 instrumented test — battery-save persistence round-trip.
+ * Battery-save persistence round-trip.
  *
  * Uses a synthetic 32 KB LoROM with 8 KB battery RAM (no Nintendo IP): the
  * LOROM-RAM board reads save.ram from the pak at connect, and System::save()

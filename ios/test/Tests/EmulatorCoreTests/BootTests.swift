@@ -183,7 +183,7 @@ final class BootTests: XCTestCase {
     }
 
     func testPalRomBootsPalCore() {
-        // The 4b headline: a PAL ROM must boot the PAL system variant, not
+        // A PAL ROM must boot the PAL system variant, not
         // just report PAL. The header country byte drives the sfc analyzer
         // ($02 = Europe → PAL, sfc_pak region detection); PAL SFC refresh =
         // cpuFrequency(PAL colorburst · 4.8) / (1364 · 312) ≈ 50.0070

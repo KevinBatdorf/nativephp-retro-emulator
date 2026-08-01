@@ -66,8 +66,8 @@ struct VideoGeometry {
             outputWidth  = Int(Float(videoWidth) * bestFitScale)
             outputHeight = Int(Float(videoHeight) * bestFitScale)
         }
-        // "integer" keeps video·multiplier from above; the reference's inner
-        // fallback is unreachable there (multiplier == 0 is caught first).
+        // "integer" keeps videoWidth·multiplier unchanged; the reference's inner
+        // fallback is unreachable (multiplier == 0 is caught first).
 
         if settings.output == "integerFixed" {
             var fixedMult = max(1, settings.fixedScale)
@@ -255,7 +255,7 @@ final class MetalFrameRenderer: NSObject, MTKViewDelegate {
         // Shader pass first — librashader requires a command buffer with no
         // prior encoders. It renders the source into an output-sized
         // intermediate (the upscale happens inside the chain, like the Android
-        // Vulkan path); the blit below then places that 1:1 into the letterbox.
+        // Vulkan path); the following blit places that 1:1 into the letterbox.
         var sourceTex = tex
         chainLock.lock()
         if let chain = shaderChain {

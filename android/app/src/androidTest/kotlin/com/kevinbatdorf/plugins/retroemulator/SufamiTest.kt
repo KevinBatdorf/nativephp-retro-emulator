@@ -7,7 +7,7 @@ import org.junit.runner.RunWith
 import java.io.File
 
 /**
- * Slotted media (plan.md step 1.10) — SuFami Turbo. Needs copyrighted base
+ * Slotted media — SuFami Turbo. Needs copyrighted base
  * firmware + a slot title staged on the device (never in the repo):
  *   /data/local/tmp/sufami-bios.sfc  — Sufami Turbo (Japan) base BIOS
  *   /data/local/tmp/poipoi.st        — a Sufami Turbo slot game
@@ -61,7 +61,7 @@ class SufamiTest {
     @Test
     fun sufamiDualCartBoots() {
         // A+B dual-cart linking: two SD Gundam Generation carts staged into
-        // both nested SuFami slots. Closes outstanding #SuFami-slot-B.
+        // both nested SuFami slots.
         //   /data/local/tmp/sufami-bios.sfc — Sufami Turbo (Japan) base BIOS
         //   /data/local/tmp/sufami-a.st     — linkable cart in Slot A
         //   /data/local/tmp/sufami-b.st     — linkable cart in Slot B

@@ -9,7 +9,7 @@ import org.junit.runner.RunWith
 /**
  * Instrumented test for the ares JNI library.
  *
- * Phase 3 success criteria:
+ * Asserts:
  *   - Library loads without UnsatisfiedLinkError
  *   - nativeInit() returns true without SIGABRT
  *   - nativeTick() completes without crashing
@@ -37,7 +37,7 @@ class EmulatorCoreTest {
     fun tickDoesNotCrash() {
         val core = EmulatorCore()
         core.init()
-        core.tick()   // no-op stub in Phase 3 — must not SIGABRT
+        core.tick()   // must not SIGABRT with no ROM loaded
         core.destroy()
     }
 

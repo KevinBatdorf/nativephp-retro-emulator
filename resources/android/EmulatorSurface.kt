@@ -61,8 +61,7 @@ object EmulatorSurface {
                 }
             },
             update = { renderer ->
-                // Runs after factory and on every recomposition; re-stage only
-                // when the declarative props actually change.
+                // Runs after factory and on every recomposition.
                 val bootKey = listOf(system, config, rom).joinToString(" ")
                 if (system.isNotEmpty() && renderer.declaredBootKey != bootKey) {
                     renderer.declaredBootKey = bootKey

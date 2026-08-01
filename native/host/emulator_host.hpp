@@ -1,13 +1,8 @@
-// EmulatorHost — the engine-neutral core both platform bridges marshal to:
-// input masks with the press latch, remap tables, device registration and
-// multitap fan-out, the aimAt shadow cursor, axis accumulation, the audio
-// ring with volume/balance and the overflow policy, cheats, host-side rewind,
-// run-ahead orchestration, dynamic-rate-control gating, boot staging, region
-// bookkeeping, battery-save files, save-state files, and the ports JSON.
+// EmulatorHost — the engine-neutral core both platform bridges marshal to.
 // Engines plug in underneath via backend.hpp.
 //
 // Threading: functions documented "emulation thread only" must run on the
-// platform's emu/GL thread; the rest are safe from bridge threads.
+// platform's emu/render thread; the rest are safe from bridge threads.
 #pragma once
 
 #include "backend.hpp"
@@ -38,10 +33,10 @@ public:
 
     // System staging + ROM-first boot ------------------------------------
     // Stage a system declaration; nothing boots until loadRom. `preferred`
-    // picks the engine ("" = fast-by-default policy). Returns false for ids
+    // picks the engine ("" runs the built-in ares). Returns false for ids
     // no registered backend claims (UNSUPPORTED_SYSTEM at the bridge).
     // biosPath: optional firmware override, read here (empty/unreadable
-    // logs and stages nothing, exactly as the bridges did).
+    // logs and stages nothing).
     bool stageSystem(const std::string& systemId, const std::string& biosPath,
                      const std::string& preferred = "");
 
@@ -152,7 +147,7 @@ public:
     // synchronously — never a silent no-op on an engine that lacks the door.
     bool videoSettingsSupported() const;
     // A toggle key outside the engine's declared option set is unsupported;
-    // a declared key keeps the may-accept semantics engines always had.
+    // a declared key may still be refused by the engine at apply time.
     bool toggleSupported(const std::string& key) const;
     // The engine serving calls right now: active, else staged, else "".
     std::string backendName() const;
@@ -171,8 +166,7 @@ public:
     std::string region() const;
     bool systemStaged() const { return stagedSystem_ != nullptr; }
     bool romLoaded() const { return romLoaded_; }
-    // Extensions valid for an id — empty when no registered backend claims
-    // it (matching the compiled-in gate the registry lookup used to provide).
+    // Extensions valid for an id — empty when no registered backend claims it.
     // Static: answered from catalog + registry, needed before any host exists
     // (system lists render on plain screens long before a surface).
     static std::vector<std::string> systemExtensionsFor(const std::string& systemId);
@@ -207,7 +201,7 @@ private:
     void rewindRun();
 
     // Staged engine + system (bridge thread writes at stage, emu thread
-    // reads at boot — same benign publication the bridges relied on).
+    // reads at boot).
     // stagedBackend_ is what the NEXT boot uses; activeBackend_ is what runs
     // now — re-staging over a running game must not redirect teardown.
     Backend* stagedBackend_ = nullptr;

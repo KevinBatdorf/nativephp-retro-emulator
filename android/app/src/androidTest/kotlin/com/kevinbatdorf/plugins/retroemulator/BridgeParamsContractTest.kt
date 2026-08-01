@@ -8,8 +8,8 @@ import org.junit.runner.RunWith
  * Contract fixtures: every payload below is byte-for-byte what the demo
  * app's conformance runner sends over the real bridge, unmarshalled exactly
  * the way BridgeRouter.nativePHPCall does (JSONObject.get per key). This is
- * the layer where `as? List`/`as? Map` casts silently failed for 12 phases —
- * these tests pin the org.json-typed reality so mocks can't drift from it.
+ * the layer where a plain `as? List`/`as? Map` cast silently nulls out
+ * org.json values — these tests pin that reality so mocks can't drift from it.
  */
 @RunWith(AndroidJUnit4::class)
 class BridgeParamsContractTest {

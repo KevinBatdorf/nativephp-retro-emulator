@@ -1,7 +1,7 @@
 package com.kevinbatdorf.plugins.retroemulator
 
 /**
- * Callbacks fired by [EmulatorRenderer] on the GL thread for significant lifecycle changes.
+ * Callbacks fired by [EmulatorRenderer] on the render thread for significant lifecycle changes.
  *
  * Implementations are responsible for marshalling to the main thread if they
  * need to dispatch NativePHP events (see [EmulatorFunctions]).

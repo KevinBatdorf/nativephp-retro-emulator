@@ -1,18 +1,13 @@
 // Vulkan display path for the Android host renderer.
 //
-// WHY Vulkan (not GLES): slang shaders run through librashader, whose runtimes
-// are desktop-GL / Vulkan / Metal / D3D — there is NO GLES runtime, and our old
-// renderer was GLES 2.0. On Android the only route to librashader is its Vulkan
-// runtime, so this is a from-scratch Vulkan swapchain (ares has no Vulkan display
-// backend to port). See .claude/findings.md → "Shaders".
+// WHY Vulkan (not GLES): slang shaders run through librashader, whose
+// runtimes are desktop-GL / Vulkan / Metal / D3D — there is no GLES runtime,
+// so on Android the only route to librashader is its Vulkan runtime (ares
+// has no Vulkan display backend to port).
 //
-// The frame path is deliberately pipeline-free for the passthrough (no-shader)
-// case: the ares frame (BGRA in memory) is uploaded to a B8G8R8A8_UNORM source
-// image and vkCmdBlitImage scales it (VK_FILTER_LINEAR) into the letterboxed
-// output rect on the swapchain image — the blit does the scaling, centering, and
-// format read, so no vertex/fragment SPIR-V is needed. With a shader active,
-// librashader renders source -> an output image and that output is blitted
-// instead. All Vulkan calls happen on the render thread (single-threaded use).
+// Passthrough needs no SPIR-V: vkCmdBlitImage does the scale, centre, and
+// BGRA read. With a shader active, librashader renders into an output image
+// and that is blitted instead. All Vulkan calls happen on the render thread.
 #pragma once
 
 #include <cstdint>
@@ -32,9 +27,7 @@ public:
     VulkanRenderer() = default;
     ~VulkanRenderer();
 
-    // Window-independent setup: instance, physical device, logical device,
-    // graphics queue, command pool + per-frame command buffers/sync, the source
-    // image + staging buffer. Called once. Returns false on any failure.
+    // Window-independent; call once. Returns false on any failure.
     bool initDevice();
 
     // Bind an Android surface and build the swapchain. Takes ownership of the
@@ -47,7 +40,6 @@ public:
     // Tear down swapchain + surface + window (surfaceDestroyed). Device survives.
     void clearSurface();
 
-    // True once a swapchain exists and frames can be presented.
     bool ready() const { return swapchain_ != VK_NULL_HANDLE; }
 
     // Copy one tightly-packed BGRA frame (w*h u32, no padding) into the mapped
@@ -132,7 +124,7 @@ private:
     void*            readbackMapped_   = nullptr;
     VkDeviceSize     readbackCapacity_ = 0;
 
-    // librashader Vulkan filter chain (D). Null = passthrough.
+    // librashader Vulkan filter chain. Null = passthrough.
     struct _filter_chain_vk* shaderChain_ = nullptr;
     uint64_t         frameCount_     = 0;
     // Shader output image (librashader renders into it; then blitted to swapchain).

@@ -16,7 +16,7 @@ let package = Package(
             path: "Tests/EmulatorCoreTests",
             linkerSettings: [
                 .linkedLibrary("c++"),
-                // The framework binary now carries librashader's Metal runtime.
+                // The framework binary carries librashader's Metal runtime.
                 .linkedFramework("Metal"),
                 .linkedFramework("MetalKit"),
                 .linkedFramework("IOSurface"),

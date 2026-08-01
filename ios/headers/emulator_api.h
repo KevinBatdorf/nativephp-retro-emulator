@@ -8,8 +8,7 @@ extern "C" {
 #endif
 
 // Opaque context — one instance per emulated system.
-// The current implementation is backed by a global singleton; do not create
-// more than one context concurrently.
+// Backed by a process singleton — never hold two contexts concurrently.
 typedef struct EmuContext EmuContext;
 
 // Lifecycle --------------------------------------------------------------------
@@ -35,7 +34,7 @@ void emu_reset(EmuContext* ctx);
 // bios_path: optional real BIOS dump to override gba's embedded open BIOS;
 // NULL/empty otherwise (all systems boot on embedded firmware).
 // backend: engine to serve this system ("ares", "sameboy", …); NULL/empty
-// picks the bundled fast core where one exists. An explicitly requested
+// runs the built-in engine (ares). An explicitly requested
 // engine that does not claim the system fails the staging — never a silent
 // substitution.
 bool emu_load_system(EmuContext* ctx, const char* system_id, const char* bios_path,
@@ -49,9 +48,9 @@ const char* emu_supported_systems(void);
 // Thread-local storage — copy before the next call on the same thread.
 const char* emu_get_backend_name(EmuContext* ctx);
 
-// Per-system engine availability + the fast-by-default pick, as a JSON
-// object string:
-// {"gb":{"backends":["ares","sameboy"],"default":"sameboy"}, …}.
+// Per-system engine availability, as a JSON object string:
+// {"engines":[…],"gb":{"backends":["ares","sameboy"]}, …} — no default key;
+// an unnamed boot runs the built-in engine.
 // Thread-local storage — copy before the next call on the same thread.
 const char* emu_get_backends_json(void);
 
@@ -84,8 +83,7 @@ const char* emu_system_extensions(EmuContext* ctx, const char* system_id);
 // the cartridge before boot.  NULL disables persistence.
 // Returns 1 on success; 0 when the ROM was rejected BEFORE any teardown (a
 // running game is untouched); -1 when a later failure left the emulator
-// cleanly stopped; -2 when the system requires firmware and no biosPath was
-// staged (pre-teardown, running game untouched).
+// cleanly stopped.
 int emu_load_rom(EmuContext* ctx, const uint8_t* rom, size_t rom_size,
                   const char* save_prefix,
                   const char* region_override, const char* preferred_regions);
@@ -233,9 +231,8 @@ size_t emu_read_audio(EmuContext* ctx, float* out, size_t capacity);
 bool emu_state_save(EmuContext* ctx, const char* path);
 bool emu_state_load(EmuContext* ctx, const char* path);
 
-// Memory access — the work-RAM bus window is system-specific:
-// SFC 0x7E0000–0x7FFFFF, FC 0x0000–0x07FF, GB 0xC000–0xDFFF,
-// MD 0xFF0000–0xFFFFFF. ----------------------------------------------------
+// Memory access — the work-RAM bus window is system-specific; the windows
+// live in native/host/system_catalog.cpp (memBase/memSize). -----------------
 
 // Returns bytes written, or -1 on error.
 int  emu_read_memory(EmuContext* ctx, uint32_t address, uint8_t* out, int length);

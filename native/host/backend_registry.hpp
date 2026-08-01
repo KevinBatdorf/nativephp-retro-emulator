@@ -40,9 +40,8 @@ auto availableSystems() -> std::vector<std::string>;
 // Pick the engine that boots `systemId`. `preferred` (a backend name) wins
 // when that backend claims the system — and is an explicit nullptr (not a
 // fallback) when it doesn't, so a dev asking for a specific engine never
-// silently gets another. "" applies the default policy: the bundled fast
-// core where one exists, ares otherwise (multicore-plan.md "fast by
-// default"). nullptr when nothing claims the system.
+// silently gets another. "" runs the built-in engine (ares). nullptr when
+// nothing claims the system.
 auto forSystem(const std::string& systemId,
                const std::string& preferred = "") -> Backend*;
 

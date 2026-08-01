@@ -49,9 +49,9 @@ Systems: `fc` (NES), `sfc` (SNES), `gb`/`gbc`, `gba`, `md` (Genesis).
 ./scripts/build_xcframework.sh
 
 # PHP
-./vendor/bin/pest                              # 150 tests, <1s
+./vendor/bin/pest                              # 152 tests, <1s
 
-# Android instrumented (device attached; 101 tests)
+# Android instrumented (device attached; 103 tests)
 cd android && ./gradlew connectedDebugAndroidTest --no-daemon
 
 # iOS simulator (63 tests; needs build/RetroEmulator.xcframework)

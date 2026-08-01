@@ -305,12 +305,8 @@ describe('Error handling', function () {
             .file_get_contents(dirname(__DIR__).'/ios/emulator_api.cpp')
             .file_get_contents(dirname(__DIR__).'/native/host/emulator_host.cpp');
 
-        // Codes surface as a bridge error (code is arg 1, or iOS's `code:`
-        // label), a direct onError (arg 1), operationalError(entry, code, …),
-        // an iOS statusRet(...) status-string, or a bare `return "CODE"` /
-        // NewStringUTF("CODE") in the shared host and JNI — the host is where
-        // input-validation codes like UNKNOWN_BUTTON originate. The enum is
-        // the union across platforms.
+        // The enum is the union across platforms; input-validation codes
+        // like UNKNOWN_BUTTON originate in the shared host.
         preg_match_all(
             '/(?:BridgeResponse\.error|\.onError)\s*\(\s*(?:code:\s*)?"([A-Z_]+)"'
             .'|operationalError\([^,]+,\s*(?:code:\s*)?"([A-Z_]+)"'
@@ -623,8 +619,7 @@ describe('Typed layer', function () {
     });
 
     it('button enums match the native registry', function (string $systemId, string $enumClass) {
-        // Button maps live in the engine-neutral system catalog; every
-        // `.id = "<id>"` entry is in this one file.
+        // Every system's `.id` entry is in this one file, so one regex covers all.
         $registry = file_get_contents(dirname(__DIR__).'/native/host/system_catalog.cpp');
 
         preg_match(
@@ -803,7 +798,6 @@ describe('Typed layer', function () {
             expect($log->warnings[0])->toContain("running 'ares'")
                 ->toContain('fetch-core snes9x');
 
-            // Landing on the preferred engine stays quiet.
             $GLOBALS['__nativephp_mock']['Emulator.LoadSystem'] = json_encode([
                 'status' => 'staged', 'system' => 'sfc', 'backend' => 'snes9x',
             ]);
@@ -956,11 +950,9 @@ describe('Typed layer', function () {
 
         $calls = collect($GLOBALS['__nativephp_calls']);
 
-        // AV knobs are peeled off the staged system config...
         expect($calls->firstWhere('function', 'Emulator.LoadSystem')['payload']['config'])
             ->toBe(['rewind' => true, 'deepBlackBoost' => true]);
 
-        // ...and routed to their own native channels instead.
         expect($calls->firstWhere('function', 'Emulator.SetVideo')['payload']['options'])
             ->toBe(['luminance' => 120]);
         expect($calls->firstWhere('function', 'Emulator.SetAudio')['payload']['options'])
@@ -1084,7 +1076,6 @@ describe('Typed layer', function () {
         expect($slots)->toHaveCount(2);
         expect($slots[0]['payload'])->toBe(['surface' => 'main', 'index' => 0, 'path' => '/roms/game-a.st']);
         expect($slots[1]['payload'])->toBe(['surface' => 'main', 'index' => 1, 'path' => '/roms/game-b.st']);
-        // The base is loaded last, as the cartridge.
         $load = $calls->firstWhere('function', 'Emulator.LoadRom');
         expect($load['payload']['path'])->toBe('/roms/sufami.sfc');
     });

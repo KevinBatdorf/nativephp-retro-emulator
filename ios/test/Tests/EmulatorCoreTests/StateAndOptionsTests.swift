@@ -1,7 +1,7 @@
 import RetroEmulator
 import XCTest
 
-/// Save-state and AV-option coverage the earlier suites skipped —
+/// Save-state and AV-option coverage — mirrors the Android StateAndOptionsTest —
 /// mirrors the Android StateAndOptionsTest.
 final class StateAndOptionsTests: XCTestCase {
 

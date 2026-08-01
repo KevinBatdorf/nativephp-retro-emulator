@@ -11,7 +11,7 @@ import kotlin.math.abs
  * refresh rate when its PPU/VDP screen node loads, and the pacing loop
  * consumes it instead of a hardcoded 60.0988 (EmulatorRenderer).
  *
- * Under the ROM-first boot model (plan 4b) the screen node loads inside
+ * Under the ROM-first boot model the screen node loads inside
  * loadRom — loadSystem only stages, so the hint must stay 0 until a ROM
  * boots the core. Test ROMs come from scripts/fetch_test_roms.sh and must
  * be pushed first (same files as Phase11MultiSystemTest):

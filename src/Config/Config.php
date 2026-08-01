@@ -17,9 +17,8 @@ use KevinBatdorf\RetroEmulator\VideoOutput;
 class Config
 {
     /**
-     * Every percentage option below is a whole percent where 100 means "leave it
-     * alone", so one mental model covers the lot. `speed` is the exception and
-     * says so: it is a multiplier, because 1.0 = native speed is universal.
+     * Percentage options are whole percents; 100 leaves the value untouched.
+     * `speed` is a multiplier, not a percent.
      *
      * @param  int|null  $luminance  Percent, 0–100; 100 is untouched.
      * @param  int|null  $saturation  Percent, 0–100; 100 is untouched.

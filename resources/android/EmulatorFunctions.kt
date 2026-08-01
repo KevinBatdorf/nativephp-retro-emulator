@@ -22,7 +22,7 @@ import java.io.File
  *
  * Threading model:
  *  - Bridge functions are called on an arbitrary NativePHP bridge thread.
- *  - GL-critical ares operations are posted to the GL thread via [EmulatorRenderer].
+ *  - render-thread-critical ares operations are posted to the render thread via [EmulatorRenderer].
  *  - NativePHP events are always dispatched on the main thread.
  */
 object EmulatorFunctions {
@@ -100,7 +100,7 @@ object EmulatorFunctions {
      * construction. [configJson] is the merged effective config (global ⊕
      * system, inputCapture already hoisted onto the surface) as a JSON object
      * string. Runs off the caller's thread: LoadRom reads the ROM file inline
-     * and the appliers block on the GL thread.
+     * and the appliers block on the render thread.
      */
     @JvmStatic
     fun applyDeclarativeSetup(surface: String, system: String, configJson: String, rom: String) {
@@ -116,7 +116,7 @@ object EmulatorFunctions {
 
             // Stage the system with its playback/system config — LoadSystem
             // reads the staged + core-toggle keys and ignores the presentation
-            // keys, which fan out to their own channels below.
+            // keys, which go out on their own channels.
             LoadSystem(activity).execute(params(JSONObject()
                 .put("surface", surface).put("system", system).put("config", config)))
 
@@ -195,8 +195,7 @@ object EmulatorFunctions {
 
     // Native input calls return "" on success or "CODE"/"CODE:detail" on a
     // category-A error. Map that to a bridge response; the code stays in a
-    // variable so it doesn't register on the enum drift scan (the codes it
-    // emits appear as literals elsewhere / in ConnectDevice).
+    // variable so it stays off PluginTest's error-code drift scan.
     private fun statusResponse(result: String, success: Map<String, Any>): Map<String, Any> {
         if (result.isEmpty()) return BridgeResponse.success(success)
         val code = result.substringBefore(':')
@@ -236,8 +235,8 @@ object EmulatorFunctions {
     }
 
     /**
-     * Report an operational outcome (category B): a valid call the world said
-     * no to — a missing ROM, an empty slot, a failed save. These surface as an
+     * Report an operational outcome (category B): a valid call that failed
+     * at runtime — a missing ROM, an empty slot, a failed save. These surface as an
      * EmulatorError event, never as a bridge error, so the PHP wrapper returns
      * fluently and the event carries the detail. The "failed" status keeps the
      * response off the wrapper's throw path (which fires on "error").
@@ -410,8 +409,8 @@ object EmulatorFunctions {
                 "Pixel Accuracy" to (config["pixelAccuracy"] as? Boolean ?: false),
             )
 
-            // Synchronous staging so everything below validates against the
-            // engine that will actually serve this system.
+            // Staging is synchronous so later validation sees the engine
+            // that will actually serve this system.
             val biosPath = config["biosPath"] as? String
             var staged = false
             if (backend != null) {
@@ -600,7 +599,6 @@ object EmulatorFunctions {
         }
     }
 
-    /** Stop emulation and tear down the emulator core. */
     class Stop(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
             val (entry, err) = entry(parameters)
@@ -713,7 +711,7 @@ object EmulatorFunctions {
 
     /**
      * Synchronous WRAM read. Returns bytes immediately via the bridge response.
-     * Blocks the bridge thread until the GL thread services the request (≤2 s).
+     * Blocks the bridge thread until the render thread services the request (≤2 s).
      */
     class ReadMemory(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
@@ -815,7 +813,6 @@ object EmulatorFunctions {
         }
     }
 
-    /** Remove specific address watches. */
     class UnwatchMemory(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
             val (entry, err) = entry(parameters)
@@ -882,7 +879,7 @@ object EmulatorFunctions {
             @Suppress("UNCHECKED_CAST")
             val options = paramMap(parameters, "options") ?: emptyMap()
             // output/aspectCorrection are renderer-side presentation and work
-            // on every engine; the screen-node settings below only exist where
+            // on every engine; the screen-node settings only exist where
             // the engine has that door. Only a CHANGE is gated — 100 means
             // "unchanged" in the whole-percent contract and false is the
             // default, so neutral values are vacuously satisfied (configs
@@ -1045,7 +1042,6 @@ object EmulatorFunctions {
         }
     }
 
-    /** Apply per-system emulation toggles (colorEmulation, deepBlackBoost, interframeBlending). */
     class SetSystemOptions(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
             val (entry, err) = entry(parameters)
@@ -1108,8 +1104,7 @@ object EmulatorFunctions {
             if (result.isEmpty()) {
                 return BridgeResponse.success(mapOf("status" to "mapped", "count" to emulated.size))
             }
-            // Native returns "CODE" or "CODE:detail" — re-raise as a bridge error
-            // (code held in a variable so it stays off the enum drift scan).
+            // Native returns "CODE" or "CODE:detail" — re-raise as a bridge error.
             val code = result.substringBefore(':')
             val detail = result.substringAfter(':', "")
             val message = when (code) {
@@ -1254,7 +1249,6 @@ object EmulatorFunctions {
         }
     }
 
-    /** Release a single button on a port. */
     class ReleaseButton(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
             val (entry, err) = entry(parameters)
@@ -1319,7 +1313,7 @@ object EmulatorFunctions {
 
     /**
      * Capture the current frame as a PNG file saved to internal storage.
-     * Returns the file path. Blocks until the GL thread delivers the frame (≤5 s).
+     * Returns the file path. Blocks until the render thread delivers the frame (≤5 s).
      */
     class Screenshot(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
@@ -1467,8 +1461,8 @@ object EmulatorFunctions {
     }
 
     /**
-     * Names of hardware controllers the OS currently reports — the Thor's
-     * built-in pad, paired Bluetooth gamepads, etc. Filtered to devices that
+     * Names of hardware controllers the OS currently reports — a handheld's
+     * built-in pad, paired Bluetooth gamepads. Filtered to devices that
      * report gamepad/joystick sources; keyboards and the virtual device are
      * excluded. The on-screen overlay works whether or not this is empty.
      */

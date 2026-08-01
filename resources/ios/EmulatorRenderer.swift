@@ -27,7 +27,7 @@ protocol EmulatorEventListener: AnyObject {
 /// Threading: `emu_tick` runs on the emulation loop thread while bridge calls
 /// (memory, state, screenshot) arrive on an arbitrary bridge thread. All `ctx`
 /// access is serialized through `emuLock` — the iOS equivalent of Android posting
-/// GL-critical work onto the GL thread.
+/// render-thread-critical work onto the render thread.
 final class EmulatorRenderer: UIView {
 
     // MARK: - Public state (read by EmulatorFunctions)
@@ -173,8 +173,8 @@ final class EmulatorRenderer: UIView {
     ///   "<prefix>.save.ram" etc., and existing files seed the cartridge before
     ///   boot. Nil disables persistence.
     func loadRom(_ romData: Data, path: String, savePrefix: String? = nil) -> Bool {
-        // Game knowledge dies with the old game: watches are
-        // wrapper-held so clear them here; cheats clear natively in the reboot.
+        // Watch addresses belong to the outgoing ROM and are wrapper-held, so
+        // clear them here; cheats clear natively in the reboot.
         clearMemoryWatches()
 
         emuLock.lock()
@@ -257,9 +257,8 @@ final class EmulatorRenderer: UIView {
         emuLock.unlock()
     }
 
-    /// Master volume (0–1) and stereo balance (−1 … +1). Safe from any thread.
-    /// Merge audio options — nil keeps the current value, matching setVideoOptions
-    /// and Android. Passing one knob must not reset the other.
+    /// Master volume (0–1) and balance (−1 … +1); nil keeps the current
+    /// value. Safe from any thread.
     func setAudioOptions(volume: Float? = nil, balance: Float? = nil) {
         if let volume { audioVolume = volume }
         if let balance { audioBalance = balance }
@@ -366,7 +365,6 @@ final class EmulatorRenderer: UIView {
         }
     }
 
-    /// Whether this device can rumble at all.
     var hasHaptics: Bool { CHHapticEngine.capabilitiesForHardware().supportsHaptics }
 
     /// Called from the emulation loop when the packed motor state changes.
@@ -415,7 +413,7 @@ final class EmulatorRenderer: UIView {
 
     // MARK: - Rewind / run-ahead
 
-    /// Enable/disable rewind capture (see emu_configure_rewind). Serialized on emuLock.
+    /// Enable/disable rewind capture (see emu_configure_rewind). Safe from any thread.
     func configureRewind(enabled: Bool, bufferSeconds: Int) {
         emuLock.lock()
         emu_configure_rewind(ctx, enabled, Int32(bufferSeconds))
@@ -429,7 +427,7 @@ final class EmulatorRenderer: UIView {
         return Int(emu_toggle_rewind(ctx))
     }
 
-    /// Enable/disable one-frame run-ahead (see emu_set_run_ahead). Serialized on emuLock.
+    /// Enable/disable one-frame run-ahead (see emu_set_run_ahead). Safe from any thread.
     func setRunAhead(enabled: Bool) {
         emuLock.lock()
         emu_set_run_ahead(ctx, enabled)
@@ -437,7 +435,7 @@ final class EmulatorRenderer: UIView {
     }
 
     /// Enable/disable dynamic rate control (see emu_set_dynamic_rate_control).
-    /// Serialized on emuLock.
+    /// Safe from any thread.
     func setDynamicRateControl(enabled: Bool) {
         emuLock.lock()
         emu_set_dynamic_rate_control(ctx, enabled)
@@ -447,7 +445,7 @@ final class EmulatorRenderer: UIView {
     // MARK: - Cheats
 
     /// Register (or replace) a cheat code. Returns false when no valid
-    /// ADDR:VALUE pair parses. Serialized on emuLock.
+    /// ADDR:VALUE pair parses. Safe from any thread.
     func addCheat(code: String) -> Bool {
         emuLock.lock()
         defer { emuLock.unlock() }
@@ -541,8 +539,6 @@ final class EmulatorRenderer: UIView {
         return out.prefix(Int(count)).map(Int.init)
     }
 
-    /// Set or clear one software button on a logical port, resolved against the
-    /// connected device. Returns "" or a category-A error code.
     /// Buttons held on a port, from any source. See `emu_get_pressed_buttons`.
     func pressedButtons(port: Int) -> String {
         emuLock.lock()
@@ -735,9 +731,6 @@ final class EmulatorRenderer: UIView {
 
         input.startObserving()
 
-        // Registration under the node's real surface name is done by the EDGE
-        // entry point (EmulatorSurfaceView), the SwiftUI counterpart to
-        // Android's EmulatorSurface.
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }

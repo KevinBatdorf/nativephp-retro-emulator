@@ -137,7 +137,7 @@ describe('Blade component emits the element', function () {
         $root = NativeElementCollector::collect();
         $node = $root->toArray(new CallbackRegistry);
 
-        // collect() wraps roots in a column when needed; find our node.
+        // collect() wraps roots in a column when needed.
         $emulator = $node['type'] === 'emulator'
             ? $node
             : collect($node['children'] ?? [])->firstWhere('type', 'emulator');
@@ -273,8 +273,7 @@ describe('Dpad element contract', function () {
 
 describe('Dpad rejects a value in the wrong unit', function () {
     it('throws when a fraction is passed where a percentage belongs', function () {
-        // 0.33 truncates to 0, which would sit under every threshold and leave a
-        // pad that never reports a direction — silence is the worst outcome here.
+        // 0.33 would truncate to 0, leaving a pad that never reports a direction.
         expect(fn () => (new DpadElement)->applyAttributes(['threshold' => '0.33']))
             ->toThrow(InvalidArgumentException::class, 'whole percentage');
     });

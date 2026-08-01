@@ -18,9 +18,9 @@ use Native\Mobile\Edge\SharedValue;
  *
  * Nothing here is mandatory — every prop has a default, so `<native:dpad />`
  * alone gives a working pad. Size comes from the usual layout classes
- * (`class="w-36 h-36"`); the props below cover how it looks and feels. Each is a
- * whole PERCENTAGE, matching the picture and audio options, and an out-of-range
- * value throws rather than silently producing a dead pad.
+ * (`class="w-36 h-36"`). Every feel prop is a whole PERCENTAGE, matching the
+ * picture and audio options, and an out-of-range value throws rather than
+ * silently producing a dead pad.
  */
 class Dpad extends Element
 {
@@ -331,8 +331,7 @@ class Dpad extends Element
     {
         $props = $this->dpadProps;
 
-        // Omitted props stay absent so each renderer applies its own default,
-        // keeping the two platforms' feel defined in one place per platform.
+        // Omitted props stay absent so each renderer applies its own default.
         foreach (['threshold', 'diagonalRatio', 'thickness', 'radius'] as $name) {
             if ($this->{$name} !== null) {
                 $props[strtolower(preg_replace('/(?<!^)[A-Z]/', '_$0', $name))] = $this->{$name};

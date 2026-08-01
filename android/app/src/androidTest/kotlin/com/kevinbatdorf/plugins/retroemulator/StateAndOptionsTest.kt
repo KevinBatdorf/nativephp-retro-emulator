@@ -7,7 +7,7 @@ import org.junit.runner.RunWith
 import java.io.File
 
 /**
- * Save-state and AV-option coverage the Phase 13/14 suites skipped: a full
+ * Save-state and AV-option coverage: a full
  * state snapshot must round-trip WRAM contents across the save point, and
  * the option setters must accept their documented ranges while emulation
  * keeps ticking.

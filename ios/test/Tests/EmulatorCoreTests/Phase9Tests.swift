@@ -56,7 +56,6 @@ final class Phase9Tests: XCTestCase {
                         withBytes: raw.baseAddress!,
                         bytesPerRow: w * 4)
         }
-        // If we reached here without crashing the upload succeeded.
         XCTAssertTrue(true)
     }
 

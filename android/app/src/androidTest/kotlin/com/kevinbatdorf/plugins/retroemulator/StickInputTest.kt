@@ -12,7 +12,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Left analog stick → d-pad mapping (audit item 5).
+ * Left analog stick → d-pad mapping.
  *
  * Threshold semantics ported from ares desktop-ui InputDigital::value()
  * (input.cpp:190-193): an axis bound to a digital input reads pressed past

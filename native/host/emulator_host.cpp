@@ -43,8 +43,8 @@ auto writeFile(const std::string& path, const uint8_t* data, size_t size) -> boo
     return written == size;
 }
 
-// Battery-save persistence over "<savePrefix>.<name>" files — the file side
-// of the old SaveIO, now host-owned; backends walk their engine's media and
+// Battery-save persistence over "<savePrefix>.<name>" files — host-owned;
+// backends walk their engine's media and
 // call through this. An empty prefix disables persistence.
 struct FileSaveMediaIO final : SaveMediaIO {
     std::string prefix;
@@ -87,11 +87,9 @@ auto contains(const std::vector<std::string>& list, const std::string& value) ->
 }
 
 // Pick the boot region — a port of desktop-ares Emulator::region()
-// (emulator.cpp:40-60): walk the preferred list against the ROM's analyzed
-// regions; NTSC-U/NTSC-J preferences also match a plain "NTSC" entry; no
-// hit falls back to the ROM's first region. Extensions beyond the
-// reference: a non-empty override wins outright (dev knows best — junk
-// homebrew headers), and an empty ROM list falls back to the first
+// (emulator.cpp:40-60); NTSC-U/NTSC-J preferences also match a plain "NTSC"
+// entry. Extensions beyond the reference: a non-empty override wins outright
+// (junk homebrew headers), and an empty ROM list falls back to the first
 // preference the system supports, then the system's first region.
 auto resolveRegion(const SystemCatalog::System& sys,
                    const std::string& romRegionCsv,
@@ -146,8 +144,7 @@ auto orderedButtons(const SystemCatalog::DeviceDescriptor& desc)
 }
 
 // Save-state container header. Files begin "NPEB1" + u8 backend-name length
-// + name + the engine payload; files WITHOUT the magic are pre-seam ares
-// states and load as such. A tagged file from a different engine fails
+// + name + the engine payload; untagged legacy files load as ares. A tagged file from a different engine fails
 // loudly — engine states are not portable between engines.
 constexpr char kStateMagic[5] = {'N', 'P', 'E', 'B', '1'};
 
@@ -168,11 +165,9 @@ EmulatorHost::~EmulatorHost() {
 
 void EmulatorHost::reset() {
     if (systemLoaded_) unloadGame(false);
-    // Factory state: everything the platform Stop semantics reset —
-    // preferences, registrations, staging — while this pointer stays valid
-    // for the host layers' stored references. Runs unconditionally: software
-    // presses, cheats and pause are all settable from staging on, so they
-    // must clear even when no game ever booted.
+    // Runs unconditionally: software presses, cheats and pause are all
+    // settable from staging on, so they must clear even when no game ever
+    // booted. This pointer stays valid for the host layers' stored references.
     stagedBackend_ = nullptr;
     activeBackend_ = nullptr;
     stagedSystem_  = nullptr;
@@ -308,8 +303,8 @@ void EmulatorHost::unloadGame(bool flushSaves) {
         std::lock_guard<std::mutex> lock(audioMutex_);
         audioRing_.clear();
     }
-    // Game knowledge dies with the core: cheats, rewind timeline, the stale
-    // refresh hint, and any paused flag from the old game.
+    // Cheats, the rewind timeline, the stale refresh hint, and any paused
+    // flag belong to the outgoing game.
     cheats_.clear();
     rebuildCheatLookup();
     rewind_.rewinding = false;
@@ -383,7 +378,7 @@ int EmulatorHost::loadRom(const uint8_t* rom, size_t size,
     }
 
     // The backend bound ports during boot; align the remap with the fresh
-    // handle table and clear the flags exactly as the post-bind path did.
+    // handle table and clear the flags.
     applyInputRemap();
     inputRemapDirty_.store(false, std::memory_order_relaxed);
     deviceDirty_.store(false, std::memory_order_relaxed);
@@ -467,9 +462,8 @@ bool EmulatorHost::tick() {
 
     rewindRun();
 
-    // Desktop-ares run-ahead loop generalized over the seam: one hidden
-    // frame, snapshot, the visible frame, roll back — a one-frame preview
-    // that reduces perceived input latency at 2× emulation cost.
+    // Desktop-ares run-ahead: a one-frame preview that reduces perceived
+    // input latency at 2× emulation cost.
     const bool runAhead = runAheadEnabled_ &&
         !rewind_.rewinding &&
         !fastForwardActive_.load(std::memory_order_relaxed);
@@ -513,8 +507,7 @@ std::vector<PortBinding> EmulatorHost::resolveBindings() {
         return out;
     }
 
-    // Walk physical ports, expanding a multitap into gamepad sub-ports, and
-    // assign consecutive LOGICAL numbers (a multitap on port 2 → 2,3,4,5).
+    // A multitap expands to consecutive LOGICAL numbers (port 2 → 2,3,4,5).
     int logical = 1;
     for (int p = 1; p <= sys.ports && logical <= kMaxPorts; p++) {
         std::string name;
@@ -568,7 +561,7 @@ void EmulatorHost::applyInputRemap() {
 
 bool EmulatorHost::connectedDescriptor(int port, SystemCatalog::DeviceDescriptor& out) {
     // Resolved against the STAGED system: descriptors answer from staging
-    // on, before any boot, exactly as before.
+    // on, before any boot.
     if (!stagedSystem_) return false;
     auto& sys = *stagedSystem_;
     if (sys.ports == 0) { out.buttons = sys.buttons; out.axes.clear(); return true; }
@@ -975,7 +968,7 @@ bool EmulatorHost::stateLoad(const std::string& path) {
         payload += headerSize;
         size -= headerSize;
     }
-    // No magic = a pre-seam file: raw engine payload (always ares then).
+    // No magic = an untagged legacy file: raw ares payload.
 
     bool ok = activeBackend_->unserialize(payload, size);
     EMUHOST_LOGI("state loaded: %s — %s", path.c_str(), ok ? "ok" : "failed");

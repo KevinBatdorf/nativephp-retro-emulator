@@ -75,11 +75,9 @@ final class EmulatorInput {
         pad.valueChangedHandler = { [weak self] pad, _ in
             guard let self else { return }
             var mask: UInt32 = 0
-            // GC A (bottom) → SNES B; GC B (right) → SNES A
-            if pad.buttonA.isPressed { mask |= Self.B }
+                if pad.buttonA.isPressed { mask |= Self.B }
             if pad.buttonB.isPressed { mask |= Self.A }
-            // GC X (left) → SNES Y; GC Y (top) → SNES X
-            if pad.buttonX.isPressed { mask |= Self.Y }
+                if pad.buttonX.isPressed { mask |= Self.Y }
             if pad.buttonY.isPressed { mask |= Self.X }
             if pad.dpad.up.isPressed    { mask |= Self.up }
             if pad.dpad.down.isPressed  { mask |= Self.down }

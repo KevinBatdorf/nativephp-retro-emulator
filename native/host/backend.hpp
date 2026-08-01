@@ -1,9 +1,5 @@
-// The engine seam. EmulatorHost (emulator_host.hpp) owns every policy that is
-// true of ANY emulator — input latching and remaps, device registration and
-// multitap fan-out, the audio ring, cheats, rewind, run-ahead orchestration,
-// battery-save files, region resolution, options staging. A Backend owns one
-// engine's mechanics: booting a core, ticking it, serializing it, and wiring
-// the engine's callbacks to the HostPort it was given.
+// The engine seam: EmulatorHost owns every engine-neutral policy; a Backend
+// owns one engine's mechanics and wires its callbacks to the given HostPort.
 //
 // No ares includes here, ever — this header (and everything in native/host/)
 // must compile for a build that bundles no ares at all.
@@ -19,9 +15,8 @@
 namespace EmuHost {
 
 // Screen-node presentation geometry captured with each frame. Field meaning
-// follows ares desktop-ui/program/platform.cpp:95-115 (the math both platform
-// renderers already implement); engines without distinct scale/aspect report
-// {w, h, 1, 1, 1, 1, 0}.
+// follows ares desktop-ui/program/platform.cpp:95-115; engines without
+// distinct scale/aspect report {w, h, 1, 1, 1, 1, 0}.
 struct FrameGeometry {
     double   width  = 0.0;
     double   height = 0.0;
@@ -78,15 +73,13 @@ struct BootResult {
     bool ok = false;
     bool slotConnected[2] = {false, false};
     // Which staged slot ROMs the boot consumed. Unconsumed slots (no slot
-    // port on this cartridge, no slot support) stay staged for the next boot
-    // — the exact semantics the platform layers always had.
+    // port on this cartridge, no slot support) stay staged for the next boot.
     bool slotConsumed[2] = {false, false};
 };
 
 // Battery-save persistence door. The host implements it over
-// "<savePrefix>.<name>" files (same names SaveIO always wrote — save.ram,
-// save.eeprom, …); backends call it wherever their engine seeds/flushes
-// battery memory. read() returns empty when no file exists.
+// "<savePrefix>.<name>" files (save.ram, save.eeprom, …); backends call it
+// wherever their engine seeds/flushes battery memory. read() returns empty when no file exists.
 struct SaveMediaIO {
     virtual ~SaveMediaIO() = default;
     virtual std::vector<uint8_t> read(const std::string& name) = 0;
@@ -98,9 +91,9 @@ struct SaveMediaIO {
 
 // What a backend can do for a given system. The host consults this to gate
 // host-level features (rewind and run-ahead need serialize; cheat calls need
-// cheats; …) and to answer capability introspection. "Be clear when something
-// doesn't exist": the host turns a false here into an explicit error naming
-// the backend — never a silent no-op.
+// cheats; …) and to answer capability
+// introspection. A false here becomes an explicit error naming the backend —
+// never a silent no-op.
 struct OptionInfo {
     std::string key;                       // wrapper camelCase key or engine option name
     enum class Stage { Boot, Runtime } stage = Stage::Runtime;
@@ -156,15 +149,14 @@ public:
     // Cheat hot path -------------------------------------------------------
     // Consulted on every emulated bus read; a virtual call there would tax
     // the hottest loop in the process. The table pointer is stable for the
-    // host's lifetime — backends cache it once and inline the empty()-check +
-    // lookup exactly as the platform layers always did.
+    // host's lifetime — backends cache it once and inline the
+    // empty()-check + lookup.
     virtual const std::unordered_map<uint32_t, uint32_t>* cheatTable() const = 0;
 };
 
-// One emulation engine. Exactly one backend instance runs a system at a time
-// (matching the one-core-per-process model the plugin has always had); the
-// host serializes every call per its existing threading rules, so backends
-// need no internal locking beyond what their engine demands.
+// One emulation engine. Exactly one backend instance runs a system at a
+// time; the host serializes every call, so backends need no internal locking
+// beyond what their engine demands.
 class Backend {
 public:
     virtual ~Backend() = default;
@@ -181,7 +173,7 @@ public:
     virtual Analysis   analyze(const std::string& systemId,
                                const uint8_t* rom, size_t size) = 0;
     virtual BootResult boot(const BootSpec& spec, HostPort& host, SaveMediaIO& saves) = 0;
-    // Flush battery media + tear the engine down. Safe when nothing runs.
+    // Flushes battery media before teardown. Safe when nothing runs.
     virtual void unload(SaveMediaIO& saves) = 0;
 
     // (Re)bind controller ports on the live engine. Called by the host after
@@ -198,7 +190,6 @@ public:
 
     // Battery saves --------------------------------------------------------
     // syncSave: make battery memory current engine-side (ares root->save()).
-    // collectSaveMedia: write every battery entry through `saves`.
     virtual void syncSave() = 0;
     virtual bool collectSaveMedia(SaveMediaIO& saves) = 0;
 

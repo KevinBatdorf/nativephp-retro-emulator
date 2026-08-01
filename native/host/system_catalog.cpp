@@ -132,7 +132,6 @@ const System kSfc = {
 } // namespace
 
 auto all() -> const std::vector<const System*>& {
-    // Ordered by id — the order every supported-systems list has always used.
     static const std::vector<const System*> kAll = {
         &kFc, &kGb, &kGba, &kGbc, &kMd, &kSfc,
     };
@@ -159,7 +158,7 @@ auto effectiveDeviceName(const System& sys, int physicalPort,
 
 auto resolveDevice(const System& sys, const std::string& name,
                    DeviceDescriptor& out) -> bool {
-    if (sys.device && name == sys.device) {   // the system's default pad
+    if (sys.device && name == sys.device) {
         out.buttons = sys.buttons;
         out.axes.clear();   // no shipped default pad has analog axes
         return true;

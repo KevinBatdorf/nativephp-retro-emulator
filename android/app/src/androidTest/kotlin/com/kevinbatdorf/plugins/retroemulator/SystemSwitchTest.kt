@@ -9,7 +9,7 @@ import org.junit.runner.RunWith
  * Regression for the showcase-screen bug: stopEmulation() destroys the core,
  * and the follow-up loadSystem for a different system failed every frame
  * because nothing re-initialized it. Pins the destroy → init → load-another
- * sequence the renderer's stop path now performs.
+ * sequence the renderer's stop path performs.
  */
 @RunWith(AndroidJUnit4::class)
 class SystemSwitchTest {

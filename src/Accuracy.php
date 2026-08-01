@@ -14,7 +14,7 @@ namespace KevinBatdorf\RetroEmulator;
  */
 enum Accuracy: string
 {
-    /** Scanline renderers — the default, and what phones can afford. */
+    /** Scanline renderers — the default. */
     case Performance = 'performance';
 
     /** Dot/cycle renderers where available — mid-scanline effects render right. */

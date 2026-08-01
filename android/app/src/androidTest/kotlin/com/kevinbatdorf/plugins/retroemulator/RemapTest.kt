@@ -5,7 +5,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Per-port controller remapping (plan.md step 1.4). setInputMapping repoints a
+ * Per-port controller remapping. setInputMapping repoints a
  * core button at a different positional slot; the change is applied on the
  * render thread, so each assertion ticks once after mapping to consume it.
  * getButtonBit reports the slot a core button currently reads.

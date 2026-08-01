@@ -19,7 +19,7 @@ import android.view.MotionEvent
 class EmulatorInput(private val core: EmulatorCore) {
 
     companion object {
-        // Bit positions — must match the kSnesButtons map in ares_jni.cpp.
+        // Bit positions — must match the SNES button bits in native/host/system_catalog.cpp.
         const val BTN_B      = 1 shl 0
         const val BTN_Y      = 1 shl 1
         const val BTN_SELECT = 1 shl 2
@@ -54,7 +54,7 @@ class EmulatorInput(private val core: EmulatorCore) {
         }
     }
 
-    // Hardware gamepad state (UI thread). Software presses live natively now
+    // Hardware gamepad state (UI thread). Software presses live natively
     // (swMask, resolved per connected device) and are OR'd in by Platform::input,
     // so this class only owns the physical pad's positional bits for port 1.
     private var keyBits      = 0  // hardware key events
@@ -125,17 +125,14 @@ class EmulatorInput(private val core: EmulatorCore) {
     }
 
     private fun keycodeToBit(keyCode: Int): Int? = when (keyCode) {
-        // Face buttons — Android uses Xbox layout; SNES uses Nintendo layout.
         // Android A (bottom) → SNES B, Android B (right) → SNES A,
         // Android X (left)   → SNES Y, Android Y (top)   → SNES X.
         KeyEvent.KEYCODE_BUTTON_A -> BTN_B
         KeyEvent.KEYCODE_BUTTON_B -> BTN_A
         KeyEvent.KEYCODE_BUTTON_X -> BTN_Y
         KeyEvent.KEYCODE_BUTTON_Y -> BTN_X
-        // Shoulder buttons
         KeyEvent.KEYCODE_BUTTON_L1 -> BTN_L
         KeyEvent.KEYCODE_BUTTON_R1 -> BTN_R
-        // Menu buttons
         KeyEvent.KEYCODE_BUTTON_START  -> BTN_START
         KeyEvent.KEYCODE_BUTTON_SELECT -> BTN_SELECT
         // D-pad delivered as key events by some controllers

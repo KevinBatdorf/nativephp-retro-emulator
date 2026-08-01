@@ -1,5 +1,4 @@
-// C API marshalling over the engine-neutral EmulatorHost (native/host/) —
-// the emulator logic that used to live here moved behind the backend seam.
+// C API marshalling over the engine-neutral EmulatorHost (native/host/).
 // This file is Swift-facing plumbing only: pointer/string conversion and the
 // static-link anchors that force the compiled cores (and the ares backend)
 // into the image.
@@ -60,8 +59,6 @@ void emu_destroy(EmuContext* ctx) {
 
 void emu_reset(EmuContext* ctx) {
     if (!ctx || ctx != g_ctx) return;
-    // Factory state in place — matches Android's destroy()+init() cycle
-    // while keeping the pointer the host (audio/input) stored valid.
     ctx->host.reset();
 }
 
@@ -355,7 +352,7 @@ const char* emu_get_region(EmuContext* ctx) {
     return region.c_str();
 }
 
-/** Buttons held on a port, comma-joined. Mirrors the Android JNI function. */
+/** Comma-joined; empty when nothing held. */
 const char* emu_get_pressed_buttons(EmuContext* ctx, int port) {
     static thread_local std::string out;
     out = ctx ? ctx->host.pressedButtons(port) : "";
