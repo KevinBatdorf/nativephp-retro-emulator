@@ -14,11 +14,17 @@ final class EmulatorAudio {
     private let sampleRate = 48_000.0
     private let bufSize: AVAudioFrameCount = 1024
 
+    // A single in-flight buffer gaps the output at every completion →
+    // reschedule hop — audible as constant crackle.
+    private let queueDepth = 3
+
     private lazy var format = AVAudioFormat(
         commonFormat: .pcmFormatFloat32,
         sampleRate: sampleRate,
         channels: 2,
         interleaved: false)!
+
+    private var scratch = [Float](repeating: 0, count: 1024 * 2)
 
     // Rescheduling MUST NOT run inline in the scheduleBuffer completion
     // handler: that fires on AVFAudio's realtime messenger thread holding
@@ -36,7 +42,10 @@ final class EmulatorAudio {
         try engine.start()
         player.play()
         queue.sync { running = true }
-        queue.async { [weak self] in self?.scheduleNext() }
+        queue.async { [weak self] in
+            guard let self else { return }
+            for _ in 0..<self.queueDepth { self.scheduleNext() }
+        }
     }
 
     func stop() {
@@ -47,26 +56,40 @@ final class EmulatorAudio {
 
     // MARK: - Private
 
-    /// Runs on `queue` only.
+    /// Runs on `queue` only. One call chain per queued-buffer slot: a schedule
+    /// hands the slot to the completion, an empty ring parks it on a short
+    /// retry — either way exactly one continuation keeps the slot alive.
     private func scheduleNext() {
         guard running else { return }
-        guard let buf = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: bufSize) else { return }
 
-        var interleaved = [Float](repeating: 0, count: Int(bufSize) * 2)
         var count = 0
         if let ctx {
-            count = interleaved.withUnsafeMutableBufferPointer {
+            count = scratch.withUnsafeMutableBufferPointer {
                 emu_read_audio(ctx, $0.baseAddress, $0.count)
             }
         }
 
+        // Empty ring: retry shortly instead of scheduling a zero-length
+        // buffer — those complete immediately, spin this loop, and starve the
+        // player into gap-pops. The other queued buffers cover the wait.
+        guard count > 0 else {
+            queue.asyncAfter(deadline: .now() + .milliseconds(2)) { [weak self] in
+                self?.scheduleNext()
+            }
+            return
+        }
+
         let frames = AVAudioFrameCount(count / 2)
+        guard let buf = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: bufSize) else { return }
         buf.frameLength = frames
 
-        if frames > 0, let L = buf.floatChannelData?[0], let R = buf.floatChannelData?[1] {
+        // A partial read ships as a short buffer, NOT zero-padded: the next
+        // buffer's samples are contiguous with these, while silence padding
+        // would insert an audible discontinuity.
+        if let L = buf.floatChannelData?[0], let R = buf.floatChannelData?[1] {
             for i in 0..<Int(frames) {
-                L[i] = interleaved[i * 2]
-                R[i] = interleaved[i * 2 + 1]
+                L[i] = scratch[i * 2]
+                R[i] = scratch[i * 2 + 1]
             }
         }
 
