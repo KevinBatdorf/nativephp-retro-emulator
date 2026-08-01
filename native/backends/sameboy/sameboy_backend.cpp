@@ -145,6 +145,10 @@ EmuHost::BootResult SameBoyBackend::boot(const EmuHost::BootSpec& spec,
     GB_set_vblank_callback(gb_, onVblank);
 
     GB_set_sample_rate(gb_, 48000);
+    // SameBoy defaults to GB_HIGHPASS_OFF ("keep DC offset") — the offset
+    // jumps on every envelope change and pops constantly. Upstream frontends
+    // filter it (sameboy SDL/main.c:281).
+    GB_set_highpass_filter_mode(gb_, GB_HIGHPASS_ACCURATE);
     GB_apu_set_sample_callback(gb_, onSample);
 
     GB_set_rumble_mode(gb_, GB_RUMBLE_CARTRIDGE_ONLY);

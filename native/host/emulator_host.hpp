@@ -236,6 +236,9 @@ private:
     // insertion. ~125 ms cap; overflow drops the OLDEST samples so backlog
     // self-heals instead of persisting.
     static constexpr size_t kAudioCap = 12000u;
+    std::atomic<uint64_t> audioDropped_ {0};     // floats discarded at cap
+    std::atomic<uint64_t> audioUnderruns_ {0};   // reads that found nothing
+    int audioStatTicks_ = 0;
     mutable std::mutex audioMutex_;
     std::vector<float> audioRing_;
     std::atomic<float> volume_  {1.0f};

@@ -460,6 +460,18 @@ bool EmulatorHost::tick() {
         activeBackend_->applyRateControl(fill);
     }
 
+    // A drop or a starved read is a discontinuity the speaker plays: nonzero
+    // counts implicate pacing, zero counts implicate engine sample content.
+    if (++audioStatTicks_ >= 600) {
+        audioStatTicks_ = 0;
+        uint64_t dropped   = audioDropped_.exchange(0, std::memory_order_relaxed);
+        uint64_t underruns = audioUnderruns_.exchange(0, std::memory_order_relaxed);
+        if (dropped || underruns) {
+            EMUHOST_LOGI("audio ring (last ~10s): dropped=%llu floats, empty reads=%llu",
+                         (unsigned long long)dropped, (unsigned long long)underruns);
+        }
+    }
+
     rewindRun();
 
     // Desktop-ares run-ahead: a one-frame preview that reduces perceived
@@ -910,7 +922,10 @@ double EmulatorHost::refreshRateHint() const {
 size_t EmulatorHost::readAudio(float* out, size_t capacity) {
     if (!out || capacity == 0) return 0;
     std::lock_guard<std::mutex> lock(audioMutex_);
-    if (audioRing_.empty()) return 0;
+    if (audioRing_.empty()) {
+        audioUnderruns_.fetch_add(1, std::memory_order_relaxed);
+        return 0;
+    }
     size_t count = std::min(capacity, audioRing_.size());
     std::memcpy(out, audioRing_.data(), count * sizeof(float));
     audioRing_.erase(audioRing_.begin(), audioRing_.begin() + (ptrdiff_t)count);
@@ -1257,6 +1272,8 @@ void EmulatorHost::pushAudioFrame(double left, double right) {
     if (audioRing_.size() > kAudioCap) {
         // Drop the oldest samples — carrying them would turn a burst of
         // emulation (startup, fast-forward) into permanent lag.
+        audioDropped_.fetch_add(audioRing_.size() - kAudioCap,
+                                std::memory_order_relaxed);
         audioRing_.erase(audioRing_.begin(),
                          audioRing_.begin() + (audioRing_.size() - kAudioCap));
     }
