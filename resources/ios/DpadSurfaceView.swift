@@ -36,8 +36,8 @@ struct DpadSurfaceView: View {
             panXMax: CGFloat(node.props.getFloat("pan_x_max", default: .greatestFiniteMagnitude)),
             panYMin: CGFloat(node.props.getFloat("pan_y_min", default: -.greatestFiniteMagnitude)),
             panYMax: CGFloat(node.props.getFloat("pan_y_max", default: .greatestFiniteMagnitude)),
-            baseColor: Color(argb: node.props.getColor("color", default: 0x66FF_FFFF)),
-            activeColor: Color(argb: node.props.getColor("active_color", default: 0xE6FF_FFFF))
+            baseColor: Color(packedArgb: node.props.getColor("color", default: 0x66FF_FFFF)),
+            activeColor: Color(packedArgb: node.props.getColor("active_color", default: 0xE6FF_FFFF))
         )
     }
 }
@@ -252,7 +252,7 @@ private struct ArmShape: Shape {
 
 private extension Color {
     /// EDGE colors cross the wire as packed ARGB ints.
-    init(argb: Int) {
+    init(packedArgb argb: Int) {
         self.init(
             .sRGB,
             red: Double((argb >> 16) & 0xFF) / 255,
