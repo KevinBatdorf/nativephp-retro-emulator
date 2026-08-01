@@ -56,15 +56,45 @@ class EmulatorAudio(private val core: EmulatorCore) {
     @Volatile private var running = false
     private var drainThread: Thread? = null
 
+    // 8 ms linear fade-in per stream start masks the start transient the
+    // hardware route produces regardless of sample content.
+    private var fadeRemaining = 0
+    private companion object { const val FADE_FLOATS = 768 }
+
     fun start() {
         val track = buildTrack()
         audioTrack = track
+        // Prime with silence, then play: play() on an empty stream starts the
+        // output route mid-starvation, and the route opening lands as an
+        // audible pop at every game boot.
+        track.write(FloatArray(minBufBytes / 4), 0, minBufBytes / 4,
+            AudioTrack.WRITE_BLOCKING)
         track.play()
+        fadeRemaining = FADE_FLOATS
         running = true
         drainThread = Thread {
+            var lastStatNanos = System.nanoTime()
             while (running) {
+                val now = System.nanoTime()
+                if (now - lastStatNanos > 5_000_000_000L) {
+                    lastStatNanos = now
+                    Log.i(TAG, "underrunCount=${track.underrunCount}")
+                }
                 val n = core.readAudio(drainBuffer)
                 if (n > 0) {
+                    if (fadeRemaining > 0) {
+                        var i = 0
+                        // Boot-time silence must not consume the ramp — the
+                        // transient worth masking is the first audible attack.
+                        if (fadeRemaining == FADE_FLOATS) {
+                            while (i < n && drainBuffer[i] > -1e-5f && drainBuffer[i] < 1e-5f) i++
+                        }
+                        while (i < n && fadeRemaining > 0) {
+                            drainBuffer[i] *= 1f - fadeRemaining.toFloat() / FADE_FLOATS
+                            fadeRemaining--
+                            i++
+                        }
+                    }
                     var written = 0
                     while (written < n) {
                         val result = track.write(

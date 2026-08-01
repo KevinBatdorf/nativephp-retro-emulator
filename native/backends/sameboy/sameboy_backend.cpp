@@ -146,9 +146,11 @@ EmuHost::BootResult SameBoyBackend::boot(const EmuHost::BootSpec& spec,
 
     GB_set_sample_rate(gb_, 48000);
     // SameBoy defaults to GB_HIGHPASS_OFF ("keep DC offset") — the offset
-    // jumps on every envelope change and pops constantly. Upstream frontends
-    // filter it (sameboy SDL/main.c:281).
-    GB_set_highpass_filter_mode(gb_, GB_HIGHPASS_ACCURATE);
+    // jumps on every envelope change and pops constantly. ACCURATE models the
+    // hardware RC filter, which still clicks on every DAC toggle (GBDK sound
+    // drivers toggle DACs per note — "record player" pops); REMOVE_DC_OFFSET
+    // retargets the offset from live DAC state and stays click-free.
+    GB_set_highpass_filter_mode(gb_, GB_HIGHPASS_REMOVE_DC_OFFSET);
     GB_apu_set_sample_callback(gb_, onSample);
 
     GB_set_rumble_mode(gb_, GB_RUMBLE_CARTRIDGE_ONLY);

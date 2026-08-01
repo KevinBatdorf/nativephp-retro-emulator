@@ -26,6 +26,12 @@ final class EmulatorAudio {
 
     private var scratch = [Float](repeating: 0, count: 1024 * 2)
 
+    // 8 ms linear fade-in per stream start masks the start transient the
+    // hardware route produces regardless of sample content. Boot silence
+    // must not consume the ramp.
+    private var fadeRemaining = 0
+    private let fadeFloats = 768
+
     // Rescheduling MUST NOT run inline in the scheduleBuffer completion
     // handler: that fires on AVFAudio's realtime messenger thread holding
     // internal locks, and a concurrent player.stop() takes the same locks in
@@ -44,6 +50,7 @@ final class EmulatorAudio {
         queue.sync { running = true }
         queue.async { [weak self] in
             guard let self else { return }
+            self.fadeRemaining = self.fadeFloats
             for _ in 0..<self.queueDepth { self.scheduleNext() }
         }
     }
@@ -77,6 +84,18 @@ final class EmulatorAudio {
                 self?.scheduleNext()
             }
             return
+        }
+
+        if fadeRemaining > 0 {
+            var i = 0
+            if fadeRemaining == fadeFloats {
+                while i < count && abs(scratch[i]) < 1e-5 { i += 1 }
+            }
+            while i < count && fadeRemaining > 0 {
+                scratch[i] *= 1 - Float(fadeRemaining) / Float(fadeFloats)
+                fadeRemaining -= 1
+                i += 1
+            }
         }
 
         let frames = AVAudioFrameCount(count / 2)
