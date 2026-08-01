@@ -195,13 +195,13 @@
             "name": "Emulator.SetAxis",
             "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.SetAxis",
             "ios": "EmulatorFunctions.SetAxis",
-            "description": "Accumulate a relative axis delta on a port (mouse/light-gun)"
+            "description": "Accumulate a relative axis delta on a port (mouse X/Y)"
         },
         {
             "name": "Emulator.AimAt",
             "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.AimAt",
             "ios": "EmulatorFunctions.AimAt",
-            "description": "Aim a light-gun at a normalized (0..1) screen position"
+            "description": "Aim an axis device at a normalized (0..1) screen position"
         },
         {
             "name": "Emulator.SetRumble",

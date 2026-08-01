@@ -1,8 +1,7 @@
 #pragma once
 // Android stub — replaces the sourcery-generated resource.hpp.
-// Resources are 1-byte stub arrays; controllers that use these images
-// (Justifier, Super Scope) are never connected in the gamepad-only
-// configuration so setImage() is never called at runtime.
+// Resources are 1-byte stub arrays; the peripherals that use these images
+// are never connectable here, so setImage() is never called at runtime.
 
 namespace Resource {
 

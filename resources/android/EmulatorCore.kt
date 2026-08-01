@@ -312,17 +312,18 @@ class EmulatorCore {
         nativePressButton(port, name, down)
 
     /**
-     * Accumulate a relative delta on one axis of the connected device (mouse /
-     * light-gun X/Y); consumed on the next poll.
+     * Accumulate a relative delta on one axis of the connected device (mouse
+     * X/Y); consumed on the next poll.
      *
      * @return "" on success, or "SYSTEM_NOT_LOADED" / "INVALID_PARAMETERS".
      */
     fun setAxis(port: Int, name: String, value: Int): String = nativeSetAxis(port, name, value)
 
     /**
-     * Aim a light-gun at an absolute normalized position (0..1). ares' guns are
-     * relative-only; native tracks a shadow cursor and feeds the delta to reach
-     * the target. Requires the connected device to expose X/Y axes.
+     * Aim an axis device at an absolute normalized position (0..1). ares'
+     * devices are relative-only; native tracks a shadow cursor and feeds the
+     * delta to reach the target. Requires the connected device to expose X/Y
+     * axes.
      */
     fun aimAt(port: Int, x: Float, y: Float): String = nativeAimAt(port, x, y)
 

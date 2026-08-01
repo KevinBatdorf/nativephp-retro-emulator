@@ -556,14 +556,14 @@ final class EmulatorRenderer: UIView {
         return String(cString: emu_press_button(ctx, Int32(port), name, down))
     }
 
-    /// Accumulate a relative axis delta (mouse / light-gun X/Y).
+    /// Accumulate a relative axis delta (mouse X/Y).
     func setAxis(port: Int, name: String, value: Int) -> String {
         emuLock.lock()
         defer { emuLock.unlock() }
         return String(cString: emu_set_axis(ctx, Int32(port), name, Int32(value)))
     }
 
-    /// Aim a light-gun at an absolute normalized (0..1) screen position.
+    /// Aim an axis device at an absolute normalized (0..1) screen position.
     func aimAt(port: Int, x: Float, y: Float) -> String {
         emuLock.lock()
         defer { emuLock.unlock() }

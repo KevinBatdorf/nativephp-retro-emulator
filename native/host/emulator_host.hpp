@@ -1,6 +1,6 @@
 // EmulatorHost — the engine-neutral core both platform bridges marshal to:
 // input masks with the press latch, remap tables, device registration and
-// multitap fan-out, the light-gun shadow cursor, axis accumulation, the audio
+// multitap fan-out, the aimAt shadow cursor, axis accumulation, the audio
 // ring with volume/balance and the overflow policy, cheats, host-side rewind,
 // run-ahead orchestration, dynamic-rate-control gating, boot staging, region
 // bookkeeping, battery-save files, save-state files, and the ports JSON.
@@ -272,14 +272,14 @@ private:
     };
     std::vector<AxisEntry> axisTable_;
 
-    // Axis accumulate-and-consume (mouse / light-gun deltas) + the gun's
-    // shadow cursor (mirrors the engine's internal cursor so aimAt can feed
-    // the delta to an absolute position).
-    static constexpr int32_t kGunW = 256, kGunH = 240;
+    // Axis accumulate-and-consume (mouse deltas) + the aimAt shadow cursor
+    // (mirrors the engine's internal cursor so aimAt can feed the delta to
+    // reach an absolute position).
+    static constexpr int32_t kAimW = 256, kAimH = 240;
     mutable std::mutex axisMutex_;
     std::unordered_map<std::string, int32_t> axisAccum_[kMaxPorts];
-    int32_t lightgunX_[kMaxPorts] {};
-    int32_t lightgunY_[kMaxPorts] {};
+    int32_t aimX_[kMaxPorts] {};
+    int32_t aimY_[kMaxPorts] {};
 
     // Device registration by PHYSICAL port; "" = nothing. Persists across
     // boots. deviceDirty defers the engine rebind to the emulation thread.

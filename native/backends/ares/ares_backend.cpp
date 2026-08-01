@@ -72,8 +72,6 @@ EmuHost::Capabilities AresBackend::capabilities(const std::string& systemId) con
     caps.videoSettings = true;
     caps.slottedMedia  = def->makeSlotPak != nullptr;
     if (auto* sys = SystemCatalog::find(systemId)) {
-        caps.lightGuns = sys->extraDevices.count("Super Scope") > 0
-                      || sys->extraDevices.count("Justifier") > 0;
         caps.multitap  = sys->multitapName != nullptr;
         caps.mouse     = sys->extraDevices.count("Mouse") > 0;
     }

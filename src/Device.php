@@ -12,7 +12,5 @@ enum Device: string
 {
     case Gamepad = 'Gamepad';
     case Mouse = 'Mouse';
-    case SuperScope = 'Super Scope';
-    case Justifier = 'Justifier';
     case SuperMultitap = 'Super Multitap';
 }

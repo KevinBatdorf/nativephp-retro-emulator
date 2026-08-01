@@ -155,8 +155,8 @@ constexpr char kStateMagic[5] = {'N', 'P', 'E', 'B', '1'};
 
 EmulatorHost::EmulatorHost() {
     for (int i = 0; i < kMaxPorts; i++) {
-        lightgunX_[i] = kGunW / 2;
-        lightgunY_[i] = kGunH / 2;
+        aimX_[i] = kAimW / 2;
+        aimY_[i] = kAimH / 2;
     }
 }
 
@@ -199,8 +199,8 @@ void EmulatorHost::reset() {
         unsampledPress_[i].store(0, std::memory_order_relaxed);
         deferredRelease_[i].store(0, std::memory_order_relaxed);
         connectedDevice_[i].clear();
-        lightgunX_[i] = kGunW / 2;
-        lightgunY_[i] = kGunH / 2;
+        aimX_[i] = kAimW / 2;
+        aimY_[i] = kAimH / 2;
     }
     cheats_.clear();
     rebuildCheatLookup();
@@ -615,12 +615,12 @@ std::string EmulatorHost::connectDevice(const std::string& systemId, int port,
         connectedDevice_[port - 1] = device;
     }
     {
-        // Reset the light-gun shadow cursor to center, matching a fresh
+        // Reset the aimAt shadow cursor to center, matching a fresh
         // device. Telescoping deltas keep it in sync even if aimAt runs
         // before the deferred rebind.
         std::lock_guard<std::mutex> lock(axisMutex_);
-        lightgunX_[port - 1] = kGunW / 2;
-        lightgunY_[port - 1] = kGunH / 2;
+        aimX_[port - 1] = kAimW / 2;
+        aimY_[port - 1] = kAimH / 2;
     }
     deviceDirty_.store(true, std::memory_order_relaxed);
     return "";
@@ -698,14 +698,14 @@ std::string EmulatorHost::aimAt(int port, float nx, float ny) {
 
     float cx = nx < 0 ? 0 : (nx > 1 ? 1 : nx);
     float cy = ny < 0 ? 0 : (ny > 1 ? 1 : ny);
-    int tx = (int)(cx * kGunW);
-    int ty = (int)(cy * kGunH);
+    int tx = (int)(cx * kAimW);
+    int ty = (int)(cy * kAimH);
 
     std::lock_guard<std::mutex> lock(axisMutex_);
-    axisAccum_[port - 1]["X"] += tx - lightgunX_[port - 1];
-    axisAccum_[port - 1]["Y"] += ty - lightgunY_[port - 1];
-    lightgunX_[port - 1] = tx;   // target is in-bounds (0..W/0..H)
-    lightgunY_[port - 1] = ty;
+    axisAccum_[port - 1]["X"] += tx - aimX_[port - 1];
+    axisAccum_[port - 1]["Y"] += ty - aimY_[port - 1];
+    aimX_[port - 1] = tx;   // target is in-bounds (0..W/0..H)
+    aimY_[port - 1] = ty;
     return "";
 }
 

@@ -121,9 +121,6 @@ const System kSfc = {
     // out to gamepad sub-ports.
     .extraDevices = {
         {"Mouse", {{{"Left", 1u << 0}, {"Right", 1u << 1}}, {"X", "Y"}}},
-        {"Super Scope", {{{"Trigger", 1u << 0}, {"Cursor", 1u << 1},
-                          {"Turbo", 1u << 2}, {"Pause", 1u << 3}}, {"X", "Y"}}},
-        {"Justifier", {{{"Trigger", 1u << 0}, {"Start", 1u << 3}}, {"X", "Y"}}},
         {"Super Multitap", {{}, {}}},
     },
     .multitapName = "Super Multitap",

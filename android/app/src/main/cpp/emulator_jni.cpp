@@ -576,8 +576,8 @@ Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativePressButton(
 }
 
 /**
- * Accumulate a relative delta on one axis of the connected device (mouse /
- * light-gun X/Y). Consumed on the engine's next poll.
+ * Accumulate a relative delta on one axis of the connected device (mouse
+ * X/Y). Consumed on the engine's next poll.
  */
 JNIEXPORT jstring JNICALL
 Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeSetAxis(
@@ -589,8 +589,8 @@ Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeSetAxis(
 }
 
 /**
- * Aim a light-gun at an absolute normalized screen position (0..1) — the
- * host's shadow cursor feeds the relative delta the engine's gun needs.
+ * Aim an axis device at an absolute normalized screen position (0..1) — the
+ * host's shadow cursor feeds the relative delta the engine needs.
  */
 JNIEXPORT jstring JNICALL
 Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeAimAt(

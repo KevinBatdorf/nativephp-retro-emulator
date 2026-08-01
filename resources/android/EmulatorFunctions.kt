@@ -1286,7 +1286,7 @@ object EmulatorFunctions {
         }
     }
 
-    /** Accumulate a relative axis delta (mouse / light-gun X/Y). */
+    /** Accumulate a relative axis delta (mouse X/Y). */
     class SetAxis(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
             val (entry, err) = entry(parameters)
@@ -1301,7 +1301,7 @@ object EmulatorFunctions {
         }
     }
 
-    /** Aim a light-gun at a normalized (0..1) screen position. */
+    /** Aim an axis device at a normalized (0..1) screen position. */
     class AimAt(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
             val (entry, err) = entry(parameters)

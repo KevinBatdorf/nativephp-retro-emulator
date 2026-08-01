@@ -7,8 +7,8 @@ use KevinBatdorf\RetroEmulator\Concerns\InteractsWithBridge;
 /**
  * A controller connected to one port of a surface — the handle returned by
  * {@see Emulator::connectDevice()} / {@see Emulator::getDevice()}. All runtime
- * input lives here: press/release buttons, set axes (mouse / light-gun motion),
- * and remap. State is cumulative and native, so independent overlay buttons
+ * input lives here: press/release buttons, set axes (mouse motion), and
+ * remap. State is cumulative and native, so independent overlay buttons
  * compose (hold Up, then B; releasing Up leaves B held).
  *
  * Names — buttons and axes — are the ones {@see Emulator::ports()} reports for
@@ -85,9 +85,8 @@ class Controller
     }
 
     /**
-     * Feed a relative motion delta on an axis (mouse / light-gun X/Y). The
-     * hardware is relative: light-guns accumulate deltas into an internal
-     * cursor. Consumed once per emulated poll.
+     * Feed a relative motion delta on an axis (mouse X/Y). Consumed once per
+     * emulated poll.
      */
     public function setAxis(string $axis, int $value): static
     {
@@ -102,11 +101,11 @@ class Controller
     }
 
     /**
-     * Aim a light-gun (Super Scope / Justifier) at an absolute position on the
+     * Aim an axis device (e.g. the SNES Mouse) at an absolute position on the
      * emulated screen, given as normalized 0..1 coordinates (0,0 = top-left,
      * 1,1 = bottom-right). The hardware is relative-only, so the plugin tracks a
-     * shadow cursor and feeds the delta to reach the target. For light-gun
-     * devices; a device without X/Y axes throws.
+     * shadow cursor and feeds the delta to reach the target. A device without
+     * X/Y axes throws.
      */
     public function aimAt(float $x, float $y): static
     {

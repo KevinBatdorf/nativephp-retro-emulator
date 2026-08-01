@@ -21,7 +21,7 @@
 namespace SystemCatalog {
 
 // A connectable device's inputs: button name → positional bit, plus axis
-// names (mouse / light-gun X/Y).
+// names (mouse X/Y).
 struct DeviceDescriptor {
     std::unordered_map<std::string, uint32_t> buttons;
     std::vector<std::string> axes;
@@ -46,7 +46,7 @@ struct System {
     // Canonical button name → positional bit for the default device.
     std::unordered_map<std::string, uint32_t> buttons;
 
-    // Non-default connectable devices (SNES Mouse, Super Scope, …), and the
+    // Non-default connectable devices (e.g. the SNES Mouse), and the
     // multitap container if the system has one (name + logical fan-out).
     std::unordered_map<std::string, DeviceDescriptor> extraDevices;
     const char* multitapName;   // nullptr = no multitap

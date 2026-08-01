@@ -1002,7 +1002,7 @@ enum EmulatorFunctions {
         }
     }
 
-    /// Accumulate a relative axis delta on a port (mouse / light-gun X/Y).
+    /// Accumulate a relative axis delta on a port (mouse X/Y).
     class SetAxis: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
@@ -1017,7 +1017,7 @@ enum EmulatorFunctions {
         }
     }
 
-    /// Aim a light-gun at a normalized (0..1) screen position.
+    /// Aim an axis device at a normalized (0..1) screen position.
     class AimAt: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }

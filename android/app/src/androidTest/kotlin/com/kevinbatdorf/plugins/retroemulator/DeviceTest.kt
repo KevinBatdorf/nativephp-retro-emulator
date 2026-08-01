@@ -79,19 +79,15 @@ class DeviceTest {
     }
 
     @Test
-    fun lightgunConnectsAndAims() {
+    fun aimAtPositionsTheMouse() {
         val core = EmulatorCore()
         try {
             assert(core.init())
             assert(core.loadSystem("sfc"))
             assert(core.loadRom(makeLoRom(), null) == EmulatorCore.LOAD_OK)
 
-            // Super Scope on port 2 (ares wires the beam latch there).
-            assert(core.connectDevice("sfc", 2, "Super Scope").isEmpty()) { "connect scope" }
+            assert(core.connectDevice("sfc", 2, "Mouse").isEmpty()) { "connect mouse" }
             core.tick()
-            assert(core.getButtonBit(2, "Trigger") == (1 shl 0)) { "scope Trigger bit" }
-            assert(core.getButtonBit(2, "Pause") == (1 shl 3)) { "scope Pause bit" }
-            assert(core.getButtonBit(2, "A") == -1) { "scope has no A button" }
 
             // aimAt feeds the delta from the center shadow cursor (128,120) to the
             // target; no tick between aims, so the accumulator holds and telescopes.
@@ -106,10 +102,6 @@ class DeviceTest {
             assert(core.aimAt(2, 0.5f, 0.5f).isEmpty()) { "aim back to center" }
             assert(core.getAxisAccum(2, "X") == 0) { "128 + (-128) telescopes to 0" }
             assert(core.getAxisAccum(2, "Y") == 0) { "120 + (-120) telescopes to 0" }
-
-            // Trigger goes through the button channel.
-            assert(core.pressButton(2, "Trigger", true).isEmpty()) { "pull trigger" }
-            assert(core.getInputState(2) and (1 shl 0) != 0) { "trigger held" }
 
             // aimAt on a device without X/Y axes (gamepad) is rejected.
             assert(core.connectDevice("sfc", 1, "Gamepad").isEmpty())

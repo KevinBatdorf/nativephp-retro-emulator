@@ -1040,7 +1040,7 @@ describe('Typed layer', function () {
         expect($call['payload']['value'])->toBe(-12);
     });
 
-    it('the handle aims a light-gun at a normalized position', function () {
+    it('the handle aims an axis device at a normalized position', function () {
         Emulator::surface()->getDevice(2)->aimAt(0.25, 0.75);
 
         $call = collect($GLOBALS['__nativephp_calls'])->firstWhere('function', 'Emulator.AimAt');

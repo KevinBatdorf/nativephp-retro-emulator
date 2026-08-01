@@ -117,8 +117,7 @@ $pad->setButtons(['a' => true, 'b' => false]);       // batch
 $pad->remap(['a' => 'b', 'b' => 'a']);               // in-game reads swapped
 $mouse = $emu->connectDevice(1, Device::Mouse);
 $mouse->setAxis('X', 5);                             // relative delta
-$scope = $emu->connectDevice(2, Device::SuperScope);
-$scope->aimAt(0.5, 0.5)->press('Trigger');           // normalized 0..1
+$mouse->aimAt(0.5, 0.5);                             // absolute, normalized 0..1
 $players = $emu->connectMultitap(2, Device::SuperMultitap);  // Controller[4]
 $emu->getDevice(1); $emu->setRumble(true); $emu->ports();
 Emulator::inputDevices();                            // OS-reported gamepads

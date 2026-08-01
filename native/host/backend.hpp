@@ -116,7 +116,6 @@ struct Capabilities {
     bool rateControl   = false;   // applyRateControl steers engine resampling
     bool slottedMedia  = false;   // SuFami / BS-X slots
     bool videoSettings = false;   // luminance/saturation/gamma/colorBleed
-    bool lightGuns     = false;
     bool multitap      = false;
     bool mouse         = false;
     std::vector<OptionInfo> options;

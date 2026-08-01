@@ -154,13 +154,13 @@ int emu_device_ports(EmuContext* ctx, const char* system_id,
 const char* emu_press_button(EmuContext* ctx, int port,
                               const char* name, bool down);
 
-// Accumulate a relative delta on one axis of the connected device (mouse /
-// light-gun X/Y).  Consumed on the core's next poll.
+// Accumulate a relative delta on one axis of the connected device (mouse
+// X/Y).  Consumed on the core's next poll.
 const char* emu_set_axis(EmuContext* ctx, int port, const char* name, int value);
 
-// Aim a light-gun at an absolute normalized position (0..1).  ares' guns are
-// relative-only, so a shadow cursor mirrors the gun's internal cursor and the
-// needed delta is fed to reach the target.
+// Aim an axis device at an absolute normalized position (0..1).  ares' devices
+// are relative-only, so a shadow cursor mirrors the device's internal cursor
+// and the needed delta is fed to reach the target.
 const char* emu_aim_at(EmuContext* ctx, int port, float nx, float ny);
 
 // Merge a per-port controller remap: emulated[i] (a core button name) reads
