@@ -1,0 +1,14 @@
+diff --git a/ares/gb/apu/apu.cpp b/ares/gb/apu/apu.cpp
+index 13d63737b..acad12b38 100644
+--- a/ares/gb/apu/apu.cpp
++++ b/ares/gb/apu/apu.cpp
+@@ -17,7 +17,8 @@ auto APU::load(Node::Object parent) -> void {
+   stream = node->append<Node::Audio::Stream>("PSG");
+   stream->setChannels(2);
+   stream->setFrequency(2 * 1024 * 1024);
+-  stream->addHighPassFilter(20.0, 1);
++  //nativephp: nall's one-pole highpass leaks DC (gain 0.707 at 0 Hz).
++  stream->addHighPassFilter(20.0, 2);
+ }
+ 
+ auto APU::unload() -> void {
