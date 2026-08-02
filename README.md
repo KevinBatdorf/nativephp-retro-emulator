@@ -1,7 +1,7 @@
 # Retro Emulator for NativePHP Mobile
 
-Full retro consoles inside your Laravel mobile app. Native rendering, save
-states, rewind, cheats, shaders, real controllers — Android and iOS.
+Full retro consoles inside your Laravel mobile app, on Android and iOS.
+Native rendering, save states, rewind, cheats, shaders, real controllers.
 
 ```bash
 composer require kevinbatdorf/retro-emulator
@@ -13,33 +13,35 @@ php artisan native:plugin:register kevinbatdorf/retro-emulator
 
 ## Engines
 
-Every system plays out of the box — no BIOS files, nothing to download.
+Every system plays out of the box. No BIOS files, nothing to download.
 Prefer a specific engine? Our picks:
 
 | System | Fast | Accurate |
 |---|---|---|
-| NES | fceumm (GPL-2.0+) | mesen (GPL-3.0) |
-| SNES | snes9x (non-commercial) | bsnes (GPL-3.0) |
-| Game Boy / Color | SameBoy (MIT) † | ares (ISC) † |
-| GBA | mGBA (MPL-2.0) † | ares (ISC) † |
-| Genesis | picodrive (non-commercial) | genesis_plus_gx (non-commercial) |
+| NES | fceumm † (GPL-2.0+) | mesen † (GPL-3.0) |
+| SNES | snes9x † (non-commercial) | bsnes † (GPL-3.0) |
+| Game Boy / Color | SameBoy (MIT) | ares (ISC) |
+| GBA | mGBA (MPL-2.0) | ares (ISC) |
+| Genesis | picodrive † (non-commercial) | genesis_plus_gx † (non-commercial) |
 
-† ships in the box. Everything else is one download away — then name it per
-boot, or app-wide in `config/retro-emulator.php`:
+† requires a download. The plugin bundles only permissively licensed
+engines, so GPL and non-commercial cores stay out of your app unless you
+opt in. Fetching one is a single command, run once on your machine, and
+your builds bundle it from then on:
 
 ```bash
 php artisan retro-emulator:fetch-core snes9x
 ```
 
-We test the cores above on real hardware; any other libretro core loads the
-same way. Each core carries its own licence — see
-[LICENSING.md](LICENSING.md). On iOS extra cores are embedded as self-built
-frameworks instead of downloaded (see [AGENTS.md](AGENTS.md)).
+Pick the engine per boot, or app-wide in `config/retro-emulator.php`. We
+test every core in the table on real hardware, and any other libretro core
+loads the same way. Read [LICENSING.md](LICENSING.md) before shipping a
+fetched core.
 
 ## Show me
 
-Step one: drop the element into a view — it boots when it mounts. The d-pad
-is optional on-screen touch controls:
+Step one: drop the element into a view. It boots when it mounts, and the
+d-pad gives you optional on-screen touch controls:
 
 ```blade
 @use('KevinBatdorf\RetroEmulator\Config\SfcConfig')
@@ -51,7 +53,7 @@ is optional on-screen touch controls:
 ```
 
 From PHP, `Emulator::surface('main')` binds that element and mutates the
-running game — everything is one call away:
+running game. Everything is one call away:
 
 ```php
 use KevinBatdorf\RetroEmulator\{Emulator, System, Device};
@@ -66,8 +68,8 @@ $emu->connectDevice(1, Device::Gamepad)->press(SfcButton::A);
 $emu->watchMemory(0x7EF340, length: 2);   // fires events as the game writes
 ```
 
-Prefer to boot from PHP? Leave the setup attributes off the element and load
-imperatively — including a core's own settings, validated against what it
+Prefer to boot from PHP? Leave the setup attributes off the element and
+load imperatively. Engine options are validated against what the core
 declares:
 
 ```php

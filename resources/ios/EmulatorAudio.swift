@@ -33,10 +33,6 @@ final class EmulatorAudio {
     private var firstAudible = false
     private let fadeFloats = 768
 
-    // The ring runs dry on every pause and frame hitch; cutting the waveform
-    // mid-cycle pops, so the drain ramps the tail to zero and fades back in.
-    private var lastL: Float = 0
-    private var lastR: Float = 0
 
     // Rescheduling MUST NOT run inline in the scheduleBuffer completion
     // handler: that fires on AVFAudio's realtime messenger thread holding
@@ -58,8 +54,6 @@ final class EmulatorAudio {
             guard let self else { return }
             self.fadeRemaining = self.fadeFloats
             self.firstAudible = false
-            self.lastL = 0
-            self.lastR = 0
             for _ in 0..<self.queueDepth { self.scheduleNext() }
         }
     }
@@ -71,26 +65,6 @@ final class EmulatorAudio {
     }
 
     // MARK: - Private
-
-    /// Runs on `queue` only. Ramps the held tail level to zero over 4 ms so a
-    /// dry spell cuts inaudibly; the next real audio fades back in.
-    private func scheduleTailRamp() {
-        let frames = 192
-        guard let buf = AVAudioPCMBuffer(pcmFormat: format,
-                                         frameCapacity: AVAudioFrameCount(frames)) else { return }
-        buf.frameLength = AVAudioFrameCount(frames)
-        if let L = buf.floatChannelData?[0], let R = buf.floatChannelData?[1] {
-            for f in 0..<frames {
-                let g = 1 - Float(f + 1) / Float(frames)
-                L[f] = lastL * g
-                R[f] = lastR * g
-            }
-        }
-        lastL = 0
-        lastR = 0
-        fadeRemaining = fadeFloats
-        player.scheduleBuffer(buf, completionHandler: nil)
-    }
 
     /// Runs on `queue` only. One call chain per queued-buffer slot: a schedule
     /// hands the slot to the completion, an empty ring parks it on a short
@@ -109,7 +83,9 @@ final class EmulatorAudio {
         // buffer — those complete immediately, spin this loop, and starve the
         // player into gap-pops. The other queued buffers cover the wait.
         guard count > 0 else {
-            if lastL != 0 || lastR != 0 { scheduleTailRamp() }
+            // A momentarily empty ring is normal between producer ticks; the
+            // queued buffers bridge it. Synthesizing audio here (ramps, fades)
+            // turns each one into an audible event.
             queue.asyncAfter(deadline: .now() + .milliseconds(2)) { [weak self] in
                 self?.scheduleNext()
             }
@@ -128,11 +104,6 @@ final class EmulatorAudio {
                 i += 1
             }
         }
-        if count >= 2 {
-            lastL = scratch[count - 2]
-            lastR = scratch[count - 1]
-        }
-
         let frames = AVAudioFrameCount(count / 2)
         guard let buf = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: bufSize) else { return }
         buf.frameLength = frames

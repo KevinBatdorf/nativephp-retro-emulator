@@ -99,7 +99,15 @@ void SameBoyBackend::onVblank(GB_gameboy_t* gb, GB_vblank_type_t) {
 void SameBoyBackend::onSample(GB_gameboy_t* gb, GB_sample_t* sample) {
     auto* self = (SameBoyBackend*)GB_get_user_data(gb);
     if (!self || self->hidden_ || !self->host_) return;
-    self->host_->pushAudioFrame(sample->left / 32768.0, sample->right / 32768.0);
+    // R = 0.9995 at 48 kHz: -3 dB near 4 Hz, flat across the audible band.
+    constexpr double R = 0.9995;
+    const double l = sample->left / 32768.0;
+    const double r = sample->right / 32768.0;
+    self->dcOutL_ = l - self->dcInL_ + R * self->dcOutL_;
+    self->dcOutR_ = r - self->dcInR_ + R * self->dcOutR_;
+    self->dcInL_ = l;
+    self->dcInR_ = r;
+    self->host_->pushAudioFrame(self->dcOutL_, self->dcOutR_);
 }
 
 uint32_t SameBoyBackend::encodeRgb(GB_gameboy_t*, uint8_t r, uint8_t g, uint8_t b) {
@@ -151,6 +159,7 @@ EmuHost::BootResult SameBoyBackend::boot(const EmuHost::BootSpec& spec,
     // drivers toggle DACs per note — "record player" pops); REMOVE_DC_OFFSET
     // retargets the offset from live DAC state and stays click-free.
     GB_set_highpass_filter_mode(gb_, GB_HIGHPASS_REMOVE_DC_OFFSET);
+    dcInL_ = dcInR_ = dcOutL_ = dcOutR_ = 0.0;
     GB_apu_set_sample_callback(gb_, onSample);
 
     GB_set_rumble_mode(gb_, GB_RUMBLE_CARTRIDGE_ONLY);
