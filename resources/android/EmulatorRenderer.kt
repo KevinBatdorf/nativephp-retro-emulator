@@ -659,6 +659,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
 
     /** Pause emulation. Audio keeps running; tick() becomes a no-op until [resumeEmulation]. */
     fun pauseEmulation() {
+        audio.setPaused(true)
         core.pause()
         queueEvent { core.flushSaves() }
         // A held one-shot would keep buzzing while the game is frozen.
@@ -670,6 +671,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
 
     /** Resume emulation after [pauseEmulation]. */
     fun resumeEmulation() {
+        audio.setPaused(false)
         core.resume()
         currentStatus = if (firstFrameSent) "running" else "loading"
         eventListener?.onResumed()

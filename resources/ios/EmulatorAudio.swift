@@ -26,12 +26,18 @@ final class EmulatorAudio {
 
     private var scratch = [Float](repeating: 0, count: 1024 * 2)
 
-    // 8 ms linear fade-in per stream start masks the start transient the
-    // hardware route produces regardless of sample content. Boot silence
+    // ~40 ms linear fade-in per attach/resume: long enough to swallow the
+    // stream highpass charging against the GB pedestal at boot. Boot silence
     // must not consume the ramp.
     private var fadeRemaining = 0
     private var firstAudible = false
-    private let fadeFloats = 768
+    private let fadeFloats = 4096
+
+    // Menu pause: ramp the held tail to zero once, then feed silence so the
+    // player queue never drains mid-wave; resume fades back in.
+    private var paused = false
+    private var lastL: Float = 0
+    private var lastR: Float = 0
 
 
     // Rescheduling MUST NOT run inline in the scheduleBuffer completion
@@ -54,6 +60,9 @@ final class EmulatorAudio {
             guard let self else { return }
             self.fadeRemaining = self.fadeFloats
             self.firstAudible = false
+            self.paused = false
+            self.lastL = 0
+            self.lastR = 0
             for _ in 0..<self.queueDepth { self.scheduleNext() }
         }
     }
@@ -64,13 +73,58 @@ final class EmulatorAudio {
         engine.stop()
     }
 
+    /// Menu pause/resume: ramp out instead of cutting, fade back in.
+    func setPaused(_ value: Bool) {
+        queue.async { [weak self] in
+            guard let self else { return }
+            if !value && self.paused {
+                self.fadeRemaining = self.fadeFloats
+                self.firstAudible = true
+            }
+            self.paused = value
+        }
+    }
+
     // MARK: - Private
+
+    /// Runs on `queue` only. While paused: one ~40 ms tail ramp, then silence
+    /// buffers keep the player queue fed so nothing drains mid-wave.
+    private func scheduleQuietBuffer() {
+        guard let buf = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: bufSize) else { return }
+        buf.frameLength = bufSize
+        if let L = buf.floatChannelData?[0], let R = buf.floatChannelData?[1] {
+            if lastL != 0 || lastR != 0 {
+                let frames = Int(bufSize)
+                for f in 0..<frames {
+                    let g = max(0, 1 - Float(f) / 2048)
+                    L[f] = lastL * g
+                    R[f] = lastR * g
+                }
+                lastL = 0
+                lastR = 0
+            } else {
+                for f in 0..<Int(bufSize) {
+                    L[f] = 0
+                    R[f] = 0
+                }
+            }
+        }
+        player.scheduleBuffer(buf) { [weak self] in
+            guard let self else { return }
+            self.queue.async { self.scheduleNext() }
+        }
+    }
 
     /// Runs on `queue` only. One call chain per queued-buffer slot: a schedule
     /// hands the slot to the completion, an empty ring parks it on a short
     /// retry — either way exactly one continuation keeps the slot alive.
     private func scheduleNext() {
         guard running else { return }
+
+        if paused {
+            scheduleQuietBuffer()
+            return
+        }
 
         var count = 0
         if let ctx {
@@ -104,6 +158,11 @@ final class EmulatorAudio {
                 i += 1
             }
         }
+        if count >= 2 {
+            lastL = scratch[count - 2]
+            lastR = scratch[count - 1]
+        }
+
         let frames = AVAudioFrameCount(count / 2)
         guard let buf = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: bufSize) else { return }
         buf.frameLength = frames

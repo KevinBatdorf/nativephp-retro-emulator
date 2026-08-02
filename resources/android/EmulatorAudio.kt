@@ -23,6 +23,9 @@ class EmulatorAudio(private val core: EmulatorCore) {
 
     fun stop() = Pump.detach(core)
 
+    /** Menu pause/resume: ramp out instead of cutting, fade back in. */
+    fun setPaused(paused: Boolean) = Pump.setPaused(paused)
+
     private object Pump {
 
         private val minBufBytes = AudioTrack.getMinBufferSize(
@@ -35,6 +38,7 @@ class EmulatorAudio(private val core: EmulatorCore) {
         private var thread: Thread? = null
 
         @Volatile private var source: EmulatorCore? = null
+        @Volatile private var paused = false
 
         private val drainBuffer = FloatArray(minBufBytes / 4)
 
@@ -42,9 +46,10 @@ class EmulatorAudio(private val core: EmulatorCore) {
         // route never idles into standby, so game boots reuse a hot stream.
         private val silence = FloatArray(minBufBytes / 8)
 
-        // 8 ms linear fade-in per attach masks the first note's attack; boot
+        // ~40 ms linear fade-in per attach/resume: long enough to swallow the
+        // stream highpass charging against the GB pedestal at boot. Boot
         // silence must not consume the ramp.
-        private const val FADE_FLOATS = 768
+        private const val FADE_FLOATS = 4096
         private var fadeRemaining = 0
         private var firstAudible = false
 
@@ -56,9 +61,18 @@ class EmulatorAudio(private val core: EmulatorCore) {
         @Synchronized
         fun attach(core: EmulatorCore) {
             source = core
+            paused = false
             fadeRemaining = FADE_FLOATS
             firstAudible = false
             ensurePump()
+        }
+
+        fun setPaused(value: Boolean) {
+            if (!value && paused) {
+                fadeRemaining = FADE_FLOATS
+                firstAudible = true
+            }
+            paused = value
         }
 
         @Synchronized
@@ -115,7 +129,7 @@ class EmulatorAudio(private val core: EmulatorCore) {
                     Log.i(TAG, "underrunCount=${track.underrunCount}")
                 }
                 val src = source
-                if (src == null) {
+                if (src == null || paused) {
                     if (lastL != 0f || lastR != 0f) writeTailRamp(track)
                     track.write(silence, 0, silence.size, AudioTrack.WRITE_BLOCKING)
                     continue
@@ -159,9 +173,9 @@ class EmulatorAudio(private val core: EmulatorCore) {
             }
         }
 
-        /** Ramp the held tail level to zero over 4 ms so the cut is inaudible. */
+        /** Ramp the held tail level to zero over ~40 ms so the cut is inaudible. */
         private fun writeTailRamp(track: AudioTrack) {
-            val frames = 192
+            val frames = 2048
             val ramp = FloatArray(frames * 2)
             for (f in 0 until frames) {
                 val g = 1f - (f + 1).toFloat() / frames

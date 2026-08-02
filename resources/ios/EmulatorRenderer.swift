@@ -217,6 +217,7 @@ final class EmulatorRenderer: UIView {
     // MARK: - Lifecycle
 
     func pauseEmulation() {
+        audio.setPaused(true)
         emu_pause(ctx)
         flushSaves()
         currentStatus = "paused"
@@ -224,6 +225,7 @@ final class EmulatorRenderer: UIView {
     }
 
     func resumeEmulation() {
+        audio.setPaused(false)
         emu_resume(ctx)
         currentStatus = "running"
         eventListener?.onResumed()
