@@ -59,6 +59,11 @@ class EmulatorAudio(private val core: EmulatorCore) {
     // 8 ms linear fade-in per stream start masks the start transient the
     // hardware route produces regardless of sample content.
     private var fadeRemaining = 0
+    private var firstAudible = false
+    // The ring runs dry on every pause and frame hitch; cutting the waveform
+    // mid-cycle pops, so the drain ramps the tail to zero and fades back in.
+    private var lastL = 0f
+    private var lastR = 0f
     private companion object { const val FADE_FLOATS = 768 }
 
     fun start() {
@@ -71,6 +76,9 @@ class EmulatorAudio(private val core: EmulatorCore) {
             AudioTrack.WRITE_BLOCKING)
         track.play()
         fadeRemaining = FADE_FLOATS
+        firstAudible = false
+        lastL = 0f
+        lastR = 0f
         running = true
         drainThread = Thread {
             var lastStatNanos = System.nanoTime()
@@ -86,14 +94,19 @@ class EmulatorAudio(private val core: EmulatorCore) {
                         var i = 0
                         // Boot-time silence must not consume the ramp — the
                         // transient worth masking is the first audible attack.
-                        if (fadeRemaining == FADE_FLOATS) {
+                        if (!firstAudible) {
                             while (i < n && drainBuffer[i] > -1e-5f && drainBuffer[i] < 1e-5f) i++
+                            if (i < n) firstAudible = true
                         }
                         while (i < n && fadeRemaining > 0) {
                             drainBuffer[i] *= 1f - fadeRemaining.toFloat() / FADE_FLOATS
                             fadeRemaining--
                             i++
                         }
+                    }
+                    if (n >= 2) {
+                        lastL = drainBuffer[n - 2]
+                        lastR = drainBuffer[n - 1]
                     }
                     var written = 0
                     while (written < n) {
@@ -108,14 +121,33 @@ class EmulatorAudio(private val core: EmulatorCore) {
                         written += result
                     }
                 } else {
+                    if (lastL != 0f || lastR != 0f) {
+                        writeTailRamp(track)
+                        fadeRemaining = FADE_FLOATS
+                    }
                     Thread.sleep(1)
                 }
             }
+            if (lastL != 0f || lastR != 0f) writeTailRamp(track)
         }.apply {
             name = "emu-audio"
             start()
         }
         Log.i(TAG, "started — sampleRate=$SAMPLE_RATE bufferBytes=${track.bufferSizeInFrames * 8}")
+    }
+
+    /** Ramp the held tail level to zero over 4 ms so the cut is inaudible. */
+    private fun writeTailRamp(track: AudioTrack) {
+        val frames = 192
+        val ramp = FloatArray(frames * 2)
+        for (f in 0 until frames) {
+            val g = 1f - (f + 1).toFloat() / frames
+            ramp[f * 2] = lastL * g
+            ramp[f * 2 + 1] = lastR * g
+        }
+        lastL = 0f
+        lastR = 0f
+        track.write(ramp, 0, ramp.size, AudioTrack.WRITE_BLOCKING)
     }
 
     fun stop() {

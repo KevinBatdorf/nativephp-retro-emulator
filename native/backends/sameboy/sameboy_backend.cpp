@@ -292,15 +292,13 @@ std::string SameBoyBackend::readBootOption(const std::string&) {
     return "";   // SameBoy declares no boot options
 }
 
-bool SameBoyBackend::applyRateControl(double fillLevel) {
-    if (!gb_ || !loaded_) return false;
-    // Inverse of the ares stream skew: SameBoy's knob is the OUTPUT rate, so
-    // an empty ring asks for a faster output (produce more per emulated
-    // second). Same ±0.5% bound, unity at half full.
-    constexpr double kMaxDelta = 0.005;
-    double rate = 48000.0 * ((1.0 + kMaxDelta) - 2.0 * fillLevel * kMaxDelta);
-    GB_set_sample_rate(gb_, (unsigned)rate);
-    return true;
+bool SameBoyBackend::applyRateControl(double) {
+    // No SameBoy frontend changes the sample rate during gameplay — the
+    // output rate is constant for the device's lifetime and every derived
+    // cache (highpass, sample pacing) recomputes on change (Core/apu.c:2164).
+    // Upstream handles rate mismatch by DROPPING at a queue bound
+    // (SDL/main.c:839, 125 ms), which is exactly the host ring's cap policy.
+    return false;
 }
 
 void SameBoyBackend::syncCheats(const std::unordered_map<uint32_t, uint32_t>& table) {

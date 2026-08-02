@@ -208,6 +208,11 @@ void MgbaBackend::bindPorts(const std::vector<EmuHost::PortBinding>& bindings,
 }
 
 void MgbaBackend::drainAudio() {
+    // The GBA core rate is a live register: SOUNDBIAS writes retarget it at
+    // any instant (gba/audio.c:232). Re-read it per pull, same buffer so the
+    // resampler's phase survives — mirrors sdl-audio.c:131,142.
+    mAudioResamplerSetSource(&resampler_, core_->getAudioBuffer(core_),
+                             core_->audioSampleRate(core_), true);
     mAudioResamplerProcess(&resampler_);
     size_t available = mAudioBufferAvailable(&resampled_);
     while (available > 0) {
@@ -321,14 +326,13 @@ std::string MgbaBackend::readBootOption(const std::string&) {
     return "";   // mGBA declares no boot options
 }
 
-bool MgbaBackend::applyRateControl(double fillLevel) {
-    if (!core_ || !loaded_ || !audioInit_) return false;
-    // Same ±0.5% bound as the other engines, applied at the resampler's
-    // output rate: an empty ring asks for faster production.
-    constexpr double kMaxDelta = 0.005;
-    double rate = 48000.0 * ((1.0 + kMaxDelta) - 2.0 * fillLevel * kMaxDelta);
-    mAudioResamplerSetDestination(&resampler_, &resampled_, rate);
-    return true;
+bool MgbaBackend::applyRateControl(double) {
+    // mAudioResamplerSetDestination has no phase compensation — re-calling
+    // it with a jittering rate inserts a discontinuity at exactly the frame
+    // rate (util/audio-resampler.c:61-68). Upstream only moves the rate when
+    // fpsTarget moves; steady-state playback never re-calls it. Rate
+    // mismatch lands on the host ring's drop-at-cap instead.
+    return false;
 }
 
 void MgbaBackend::syncCheats(const std::unordered_map<uint32_t, uint32_t>& table) {
