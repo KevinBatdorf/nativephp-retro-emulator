@@ -62,7 +62,8 @@ return [
         'gb' => ['ares', 'sameboy'],
         'gbc' => ['ares', 'sameboy'],
         'gba' => ['mgba', 'ares'],
-        'md' => ['picodrive', 'genesis_plus_gx'],
+        // PicoDrive's FM voicing is audibly off; keep it an explicit pick.
+        'md' => ['ares', 'picodrive'],
     ],
 
 ];
