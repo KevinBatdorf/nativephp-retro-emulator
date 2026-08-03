@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.util.fastFirstOrNull
 import com.nativephp.mobile.ui.nativerender.NativeElementBridge
 import com.nativephp.mobile.ui.nativerender.NativeUINode
@@ -71,9 +72,17 @@ object DpadSurface {
         val panYId = node.props.getInt("pan_y_id", 0)
         val panSpeed = node.props.getFloat("pan_speed", DEFAULT_PAN_SPEED_DP)
         val panXMin = node.props.getFloat("pan_x_min", Float.NEGATIVE_INFINITY)
-        val panXMax = node.props.getFloat("pan_x_max", Float.POSITIVE_INFINITY)
         val panYMin = node.props.getFloat("pan_y_min", Float.NEGATIVE_INFINITY)
-        val panYMax = node.props.getFloat("pan_y_max", Float.POSITIVE_INFINITY)
+        // Negative max = window extent minus |value| dp; rotation re-resolves.
+        val config = LocalConfiguration.current
+        val panXMaxRaw = node.props.getFloat("pan_x_max", Float.POSITIVE_INFINITY)
+        val panYMaxRaw = node.props.getFloat("pan_y_max", Float.POSITIVE_INFINITY)
+        val panXMax =
+            if (panXMaxRaw < 0f && panXMaxRaw.isFinite()) config.screenWidthDp + panXMaxRaw
+            else panXMaxRaw
+        val panYMax =
+            if (panYMaxRaw < 0f && panYMaxRaw.isFinite()) config.screenHeightDp + panYMaxRaw
+            else panYMaxRaw
         val baseColor = Color(node.props.getColor("color", 0x66FFFFFF))
         val activeColor = Color(node.props.getColor("active_color", 0xE6FFFFFF.toInt()))
 
@@ -89,6 +98,19 @@ object DpadSurface {
         }
 
         if (panXId != 0 || panYId != 0) {
+            // Rotation shrinks the bounds; re-clamp or a parked value strands off-screen.
+            LaunchedEffect(panXMax, panYMax) {
+                SharedValueStore.seed(panXId, node.props.getFloat("pan_x_initial", 0f))
+                SharedValueStore.seed(panYId, node.props.getFloat("pan_y_initial", 0f))
+                if (panXId != 0) {
+                    SharedValueStore.set(
+                        panXId, SharedValueStore.valueOf(panXId).coerceIn(panXMin, panXMax))
+                }
+                if (panYId != 0) {
+                    SharedValueStore.set(
+                        panYId, SharedValueStore.valueOf(panYId).coerceIn(panYMin, panYMax))
+                }
+            }
             // Keyed on `held` so the effect captures it: reading composition state
             // inside a frame callback races the host's own snapshot and kills the
             // app. It also means no coroutine runs while nothing is pressed.

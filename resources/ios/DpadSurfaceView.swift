@@ -68,6 +68,26 @@ private struct DpadPad: View {
 
     @State private var panTimer: Timer?
 
+    // Negative max = window extent minus |value| pt; rotation re-resolves.
+    private func resolvedXMax() -> CGFloat {
+        panXMax < 0 && panXMax.isFinite ? UIScreen.main.bounds.width + panXMax : panXMax
+    }
+
+    private func resolvedYMax() -> CGFloat {
+        panYMax < 0 && panYMax.isFinite ? UIScreen.main.bounds.height + panYMax : panYMax
+    }
+
+    private func clampIntoBounds() {
+        if panXId != 0 {
+            let v = SharedValueStore.shared.value(for: panXId)
+            SharedValueStore.shared.set(min(max(v, panXMin), resolvedXMax()), for: panXId)
+        }
+        if panYId != 0 {
+            let v = SharedValueStore.shared.value(for: panYId)
+            SharedValueStore.shared.set(min(max(v, panYMin), resolvedYMax()), for: panYId)
+        }
+    }
+
     var body: some View {
         GeometryReader { geo in
             let arm = min(geo.size.width, geo.size.height) * thickness
@@ -122,6 +142,12 @@ private struct DpadPad: View {
             if panXId != 0 { SharedValueStore.shared.set(panXInitial, for: panXId) }
             if panYId != 0 { SharedValueStore.shared.set(panYInitial, for: panYId) }
         }
+        // Rotation shrinks the bounds; re-clamp or a parked value strands off-screen.
+        .onReceive(NotificationCenter.default.publisher(
+            for: UIDevice.orientationDidChangeNotification)) { _ in
+            guard panXId != 0 || panYId != 0 else { return }
+            clampIntoBounds()
+        }
         // Captures the direction instead of reading @State per tick: reading
         // @State inside the tick races the host's snapshot and kills the app.
         .onChange(of: held) { pressed in
@@ -136,11 +162,11 @@ private struct DpadPad: View {
                 let dy = (pressed.contains(.down) ? step : 0) - (pressed.contains(.up) ? step : 0)
                 if panXId != 0, dx != 0 {
                     let next = SharedValueStore.shared.value(for: panXId) + dx
-                    SharedValueStore.shared.set(min(max(next, panXMin), panXMax), for: panXId)
+                    SharedValueStore.shared.set(min(max(next, panXMin), resolvedXMax()), for: panXId)
                 }
                 if panYId != 0, dy != 0 {
                     let next = SharedValueStore.shared.value(for: panYId) + dy
-                    SharedValueStore.shared.set(min(max(next, panYMin), panYMax), for: panYId)
+                    SharedValueStore.shared.set(min(max(next, panYMin), resolvedYMax()), for: panYId)
                 }
             }
         }

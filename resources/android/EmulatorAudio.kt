@@ -46,10 +46,8 @@ class EmulatorAudio(private val core: EmulatorCore) {
         // route never idles into standby, so game boots reuse a hot stream.
         private val silence = FloatArray(minBufBytes / 8)
 
-        // ~40 ms linear fade-in per attach/resume: long enough to swallow the
-        // stream highpass charging against the GB pedestal at boot. Boot
-        // silence must not consume the ramp.
-        private const val FADE_FLOATS = 4096
+        // A faster ramp swings the GB idle DC audibly; boot silence must not consume it.
+        private const val FADE_FLOATS = 19200
         private var fadeRemaining = 0
         private var firstAudible = false
 
@@ -173,9 +171,9 @@ class EmulatorAudio(private val core: EmulatorCore) {
             }
         }
 
-        /** Ramp the held tail level to zero over ~40 ms so the cut is inaudible. */
+        /** Ramp the held tail level to zero over ~200 ms so the cut is inaudible. */
         private fun writeTailRamp(track: AudioTrack) {
-            val frames = 2048
+            val frames = 9600
             val ramp = FloatArray(frames * 2)
             for (f in 0 until frames) {
                 val g = 1f - (f + 1).toFloat() / frames

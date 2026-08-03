@@ -26,18 +26,18 @@ final class EmulatorAudio {
 
     private var scratch = [Float](repeating: 0, count: 1024 * 2)
 
-    // ~40 ms linear fade-in per attach/resume: long enough to swallow the
-    // stream highpass charging against the GB pedestal at boot. Boot silence
-    // must not consume the ramp.
+    // A faster ramp swings the GB idle DC audibly; boot silence must not consume it.
     private var fadeRemaining = 0
     private var firstAudible = false
-    private let fadeFloats = 4096
+    private let fadeFloats = 19200
 
-    // Menu pause: ramp the held tail to zero once, then feed silence so the
-    // player queue never drains mid-wave; resume fades back in.
+    // Menu pause: ramp the held tail to zero across quiet buffers, then feed
+    // silence so the player queue never drains mid-wave; resume fades back in.
     private var paused = false
     private var lastL: Float = 0
     private var lastR: Float = 0
+    private var tailDone = 0
+    private let tailTotal = 9600
 
 
     // Rescheduling MUST NOT run inline in the scheduleBuffer completion
@@ -81,6 +81,9 @@ final class EmulatorAudio {
                 self.fadeRemaining = self.fadeFloats
                 self.firstAudible = true
             }
+            if value && !self.paused {
+                self.tailDone = 0
+            }
             self.paused = value
         }
     }
@@ -96,12 +99,16 @@ final class EmulatorAudio {
             if lastL != 0 || lastR != 0 {
                 let frames = Int(bufSize)
                 for f in 0..<frames {
-                    let g = max(0, 1 - Float(f) / 2048)
+                    let g = max(0, 1 - Float(tailDone + f) / Float(tailTotal))
                     L[f] = lastL * g
                     R[f] = lastR * g
                 }
-                lastL = 0
-                lastR = 0
+                tailDone += frames
+                if tailDone >= tailTotal {
+                    lastL = 0
+                    lastR = 0
+                    tailDone = 0
+                }
             } else {
                 for f in 0..<Int(bufSize) {
                     L[f] = 0
