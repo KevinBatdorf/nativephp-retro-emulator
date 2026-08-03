@@ -54,6 +54,15 @@ final class DemoScreenshotTests: XCTestCase {
         app.terminate()
     }
 
+    /// iOS kills the app if it suspends mid-run; conformance needs it held foreground.
+    func testKeepAlive() throws {
+        let app = XCUIApplication(bundleIdentifier: demoBundleId)
+        app.launch()
+        sleep(280)
+        snap("keepalive-final")
+        app.terminate()
+    }
+
     /// GBC appears twice: the second entry covers back-out → re-enter.
     func testBootSweep() throws {
         let app = XCUIApplication(bundleIdentifier: demoBundleId)
