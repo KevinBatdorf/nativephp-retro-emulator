@@ -53,4 +53,28 @@ final class DemoScreenshotTests: XCTestCase {
 
         app.terminate()
     }
+
+    /// GBC appears twice: the second entry covers back-out → re-enter.
+    func testBootSweep() throws {
+        let app = XCUIApplication(bundleIdentifier: demoBundleId)
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        sleep(25)
+
+        let systems = ["NES", "SNES", "Game Boy", "GBC", "GBA", "Mega Drive", "GBC"]
+        for (i, name) in systems.enumerated() {
+            let tile = app.descendants(matching: .any)[name].firstMatch
+            guard tile.waitForExistence(timeout: 10) else {
+                snap(String(format: "sweep-%02d-%@-MISSING", i, name))
+                continue
+            }
+            tile.tap()
+            sleep(14)
+            snap(String(format: "sweep-%02d-%@", i, name.replacingOccurrences(of: " ", with: "-")))
+            let back = app.descendants(matching: .any)["Back"].firstMatch
+            if back.waitForExistence(timeout: 5) { back.tap() }
+            sleep(6)
+        }
+        app.terminate()
+    }
 }
