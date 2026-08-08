@@ -32,6 +32,11 @@ class Config
      *                               transition fades stay on: gain is
      *                               calibration, and app transitions have no
      *                               hardware behaviour to restore.
+     * @param  bool|null  $bootAnimation  Plays the console's own boot animation
+     *                                    (logo scroll, ding). Skipped by default:
+     *                                    the boot runs hidden at full speed and
+     *                                    the game starts where the console hands
+     *                                    off. Systems without one are unaffected.
      * @param  float|null  $speed  Multiplier, 0.25–4.0; 1.0 is native speed.
      * @param  bool|null  $overscan  Trims the overscan border (trims by default);
      *                               no effect on systems with no overscan region.
@@ -60,6 +65,7 @@ class Config
         public ?int $volume = null,
         public ?int $balance = null,
         public ?bool $rawAudio = null,
+        public ?bool $bootAnimation = null,
         public ?InputCapture $inputCapture = null,
         public ?bool $autoSave = null,
         public ?float $speed = null,
@@ -88,6 +94,7 @@ class Config
             'volume' => $this->volume,
             'balance' => $this->balance,
             'rawAudio' => $this->rawAudio,
+            'bootAnimation' => $this->bootAnimation,
             'inputCapture' => $this->inputCapture?->value,
             'autoSave' => $this->autoSave,
             'speed' => $this->speed,

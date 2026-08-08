@@ -185,6 +185,10 @@ public:
     // audio/video output but advance state.
     virtual bool tick(bool hidden) = 0;
 
+    // True while the console's boot animation runs — the host fast-forwards
+    // those frames hidden unless the bootAnimation option asks to play them.
+    virtual bool inBootIntro() { return false; }
+
     virtual bool serialize(std::vector<uint8_t>& out) = 0;
     virtual bool unserialize(const uint8_t* data, size_t size) = 0;
 

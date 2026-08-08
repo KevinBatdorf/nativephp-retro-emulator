@@ -10,6 +10,7 @@
 
 // Defined in the patched sameboy/Core/apu.c (see patches/).
 extern "C" bool nativephpCenterDacs;
+extern "C" bool nativephpBootRomFinished(GB_gameboy_t *gb);
 
 namespace {
 
@@ -215,6 +216,10 @@ void SameBoyBackend::bindPorts(const std::vector<EmuHost::PortBinding>& bindings
         }
         break;
     }
+}
+
+bool SameBoyBackend::inBootIntro() {
+    return loaded_ && gb_ && !nativephpBootRomFinished(gb_);
 }
 
 bool SameBoyBackend::tick(bool hidden) {

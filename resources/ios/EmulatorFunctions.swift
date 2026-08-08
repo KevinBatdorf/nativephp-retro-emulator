@@ -363,6 +363,7 @@ enum EmulatorFunctions {
                 "Pixel Accuracy": config["pixelAccuracy"] as? Bool ?? false,
                 // GB/GBC only; other backends ignore an unknown boot option.
                 "rawAudio": config["rawAudio"] as? Bool ?? false,
+                "bootAnimation": config["bootAnimation"] as? Bool ?? false,
             ]
             let biosPath = config["biosPath"] as? String
 

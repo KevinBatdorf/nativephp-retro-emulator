@@ -63,6 +63,9 @@ struct SystemDef {
     // empty for an unknown name); nullptr = nothing readable.
     bool (*setOption)(const std::string& name, const std::string& value);
     std::string (*getOption)(const std::string& name);
+
+    // True while the console's boot animation runs; nullptr = none detectable.
+    bool (*inBootIntro)() = nullptr;
 };
 
 // Registers a compiled core at static-init time: dlopen (Android's modular

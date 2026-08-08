@@ -409,6 +409,7 @@ object EmulatorFunctions {
                 "Pixel Accuracy" to (config["pixelAccuracy"] as? Boolean ?: false),
                 // GB/GBC only; other backends ignore an unknown boot option.
                 "rawAudio" to (config["rawAudio"] as? Boolean ?: false),
+                "bootAnimation" to (config["bootAnimation"] as? Boolean ?: false),
             )
 
             // Staging is synchronous so later validation sees the engine

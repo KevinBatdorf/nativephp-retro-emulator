@@ -26,6 +26,9 @@ auto getOption(const std::string& name) -> std::string {
     return ares::GameBoy::nativephpRemovePedestal ? "false" : "true";
 }
 
+// Cleared by the FF50 write that every boot ROM ends with.
+auto inBootIntro() -> bool { return ares::GameBoy::cartridge.bootromEnable; }
+
 auto memRead(uint32_t o) -> uint8_t { return (uint8_t)ares::GameBoy::cpu.wram[o]; }
 auto memWrite(uint32_t o, uint8_t v) -> void { ares::GameBoy::cpu.wram[o] = v; }
 
@@ -52,6 +55,7 @@ const SystemDef kDef = {
     .load          = loadGb,
     .setOption     = setOption,
     .getOption     = getOption,
+    .inBootIntro   = inBootIntro,
     .memRead       = memRead,
     .memWrite      = memWrite,
     .makeSystemPak = systemPak,
@@ -69,6 +73,7 @@ const SystemDef kDefCgb = {
     .load          = loadGb,
     .setOption     = setOption,
     .getOption     = getOption,
+    .inBootIntro   = inBootIntro,
     .memRead       = memRead,
     .memWrite      = memWrite,
     .makeSystemPak = systemPak,

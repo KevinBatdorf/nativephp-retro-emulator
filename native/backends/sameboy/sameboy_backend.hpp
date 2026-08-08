@@ -35,6 +35,7 @@ public:
                    EmuHost::HostPort& host) override;
 
     bool tick(bool hidden) override;
+    bool inBootIntro() override;
     bool serialize(std::vector<uint8_t>& out) override;
     bool unserialize(const uint8_t* data, size_t size) override;
 

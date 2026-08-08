@@ -394,6 +394,21 @@ int EmulatorHost::loadRom(const uint8_t* rom, size_t size,
 
     systemLoaded_ = true;
     romLoaded_    = true;
+
+    {
+        auto it = stagedBootOptions_.find("bootAnimation");
+        const bool play = it != stagedBootOptions_.end()
+                          && (it->second == "true" || it->second == "1");
+        if (!play) {
+            // Also consumes the boot ding and its envelope tail.
+            int guard = 0;
+            while (activeBackend_->inBootIntro() && ++guard <= 600) {
+                activeBackend_->tick(true);
+            }
+            if (guard) EMUHOST_LOGI("boot animation skipped (%d frames)", guard);
+        }
+    }
+
     // Cheats staged before the first boot reach push-style engines here;
     // ares reads the table directly.
     if (!cheatLookup_.empty()) activeBackend_->syncCheats(cheatLookup_);

@@ -1,18 +1,21 @@
 diff --git a/Core/apu.c b/Core/apu.c
-index caa5451..a8b750d 100644
+index caa5451..9270c00 100644
 --- a/Core/apu.c
 +++ b/Core/apu.c
-@@ -191,6 +191,9 @@ static uint8_t agb_bias_for_channel(GB_gameboy_t *gb, GB_channel_t index)
+@@ -191,6 +191,12 @@ static uint8_t agb_bias_for_channel(GB_gameboy_t *gb, GB_channel_t index)
      }
  }
  
 +//nativephp: false restores upstream mixing exactly. Set per boot.
 +bool nativephpCenterDacs = true;
 +
++//nativephp: boot_rom_finished is internal; the backend polls it to skip the intro.
++bool nativephpBootRomFinished(GB_gameboy_t *gb) { return gb->boot_rom_finished; }
++
  static void update_sample(GB_gameboy_t *gb, GB_channel_t index, int8_t value, unsigned cycles_offset)
  {
      if (gb->model > GB_MODEL_CGB_E) {
-@@ -256,7 +259,43 @@ static void update_sample(GB_gameboy_t *gb, GB_channel_t index, int8_t value, un
+@@ -256,7 +262,43 @@ static void update_sample(GB_gameboy_t *gb, GB_channel_t index, int8_t value, un
          }
          GB_sample_t output = {0, 0};
          if (likely(!gb->apu_output.channel_muted[index])) {
@@ -58,14 +61,15 @@ index caa5451..a8b750d 100644
          if (unlikely(gb->apu_output.max_cycles_per_sample == 1)) {
              band_limited_update_unfiltered(&gb->apu_output.band_limited[index], &output, cycles_offset);
 diff --git a/Core/apu.h b/Core/apu.h
-index 604931e..627848e 100644
+index 604931e..36fab80 100644
 --- a/Core/apu.h
 +++ b/Core/apu.h
-@@ -14,6 +14,8 @@
+@@ -14,6 +14,9 @@
  #define GB_BAND_LIMITED_ONE 0x10000 // fixed point value equal to 1
  
  /* Speed = 1 / Length (in seconds) */
 +extern bool nativephpCenterDacs; //nativephp: zero-mean channel mixing, see apu.c
++bool nativephpBootRomFinished(GB_gameboy_t *gb); //nativephp: see apu.c
 +
  #define DAC_DECAY_SPEED 20000
  #define DAC_ATTACK_SPEED 20000

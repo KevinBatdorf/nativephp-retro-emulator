@@ -37,6 +37,7 @@ public:
                    EmuHost::HostPort& host) override;
 
     bool tick(bool hidden) override;
+    bool inBootIntro() override;
     bool serialize(std::vector<uint8_t>& out) override;
     bool unserialize(const uint8_t* data, size_t size) override;
 
@@ -71,6 +72,7 @@ private:
 
     mCore* core_ = nullptr;
     bool loaded_ = false;
+    bool introDone_ = false;  // see inBootIntro
 
     std::vector<uint32_t> pixels_;     // engine XBGR frame, swizzled on push
     std::vector<uint32_t> converted_;

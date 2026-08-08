@@ -26,15 +26,20 @@ class AudioBootSmoothnessTest {
 
     /** Dumps boot audio so a human can hear the real code path, not a filtered WAV. */
     @Test
-    fun dumpAresGbBootAudio() {
+    fun dumpAresGbBootAudio() = dumpBootAudio("ares")
+
+    @Test
+    fun dumpSameboyGbBootAudio() = dumpBootAudio("sameboy")
+
+    private fun dumpBootAudio(backend: String) {
         val rom = romOrSkip() ?: return
         val core = EmulatorCore()
         try {
             assert(core.init())
-            assert(core.loadSystem("gb", backend = "ares")) { "loadSystem failed" }
+            assert(core.loadSystem("gb", backend = backend)) { "loadSystem failed" }
             assert(core.loadRom(rom) == EmulatorCore.LOAD_OK) { "loadRom failed" }
 
-            val out = File("/sdcard/Download/boot-dump.f32")
+            val out = File("/sdcard/Download/boot-dump-$backend.f32")
             out.outputStream().buffered().use { sink ->
                 val buf = FloatArray(8192)
                 val bytes = java.nio.ByteBuffer.allocate(8192 * 4)

@@ -325,6 +325,11 @@ bool AresBackend::tick(bool hidden) {
     return true;
 }
 
+bool AresBackend::inBootIntro() {
+    if (!loaded_ || !def_ || !def_->inBootIntro) return false;
+    return def_->inBootIntro();
+}
+
 bool AresBackend::serialize(std::vector<uint8_t>& out) {
     if (!root_ || !loaded_) return false;
     try {

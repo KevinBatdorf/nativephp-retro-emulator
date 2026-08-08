@@ -6,6 +6,7 @@
 extern "C" {
 #include <mgba/core/version.h>
 #include <mgba/gba/core.h>
+#include <mgba/internal/arm/arm.h>
 #include <mgba/internal/gba/input.h>
 #include <mgba/internal/gba/memory.h>
 #include <mgba-util/vfs.h>
@@ -165,6 +166,7 @@ EmuHost::BootResult MgbaBackend::boot(const EmuHost::BootSpec& spec,
     if (spec.bindings) bindPorts(*spec.bindings, host);
 
     loaded_ = true;
+    introDone_ = false;
     host_->setRefreshRateHint(59.7275);
     result.ok = true;
     return result;
@@ -225,6 +227,18 @@ void MgbaBackend::drainAudio() {
         if (read == 0) break;
         available -= read;
     }
+}
+
+bool MgbaBackend::inBootIntro() {
+    if (!loaded_ || !core_ || introDone_) return false;
+    // Cartridge entry is 0x08000000; until the BIOS jumps there the animation
+    // is still running. Latched because games SWI back into the BIOS forever.
+    auto* cpu = (struct ARMCore*)core_->cpu;
+    if ((uint32_t)cpu->gprs[15] >= 0x08000000) {
+        introDone_ = true;
+        return false;
+    }
+    return true;
 }
 
 bool MgbaBackend::tick(bool hidden) {
