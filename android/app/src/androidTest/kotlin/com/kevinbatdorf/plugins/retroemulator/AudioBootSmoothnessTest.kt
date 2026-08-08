@@ -125,14 +125,31 @@ class AudioBootSmoothnessTest {
                 "late idle level $quietMean is off zero — a pedestal is building up"
             }
 
-            // No adjacent-window step beyond what game onsets produce.
-            var maxStep = 0.0
-            for (i in 1 until means.size) {
-                val d = abs(means[i] - means[i - 1])
-                if (d > maxStep) maxStep = d
+            // A DC step moves the window mean without the wave itself growing;
+            // loud bass moves both. Flag only mean-steps that dwarf the local
+            // amplitude, or every fanfare onset trips a fixed threshold.
+            var worstStep = 0.0
+            var worstAmp = 0.0
+            var idx2 = w
+            var win = 1
+            while (idx2 + w <= left.size) {
+                val d = abs(means[win] - means[win - 1])
+                if (d > 0.08) {
+                    var amp = 0.0
+                    for (j in idx2 - w until minOf(idx2 + w, left.size)) {
+                        val dev = abs(left[j] - means[win])
+                        if (dev > amp) amp = dev
+                    }
+                    if (d > 0.6 * amp && d > worstStep) {
+                        worstStep = d
+                        worstAmp = amp
+                    }
+                }
+                idx2 += w
+                win++
             }
-            assert(maxStep < 0.08) {
-                "window-mean step $maxStep exceeds the audible-pop threshold"
+            assert(worstStep == 0.0) {
+                "DC step $worstStep against local amplitude $worstAmp — an audible pop"
             }
         } finally {
             core.destroy()

@@ -247,6 +247,11 @@ private:
 
     // GB mixer parks off silence; stepping that level reaches speakers as infrasound.
     std::atomic<bool> rawAudio_ {false};
+
+    // Boot-skip phase 2: AV runs but is discarded; audio peak steers the stop.
+    std::atomic<bool> bootSkipDiscard_ {false};
+    double bootSkipAudioPeak_ = 0.0;   // emulation thread only
+    uint64_t frameChecksum();
     bool audioHighpass_ = false;
     bool hpPrimed_ = false;
     double hpX1_[2] {}, hpX2_[2] {}, hpY1_[2] {}, hpY2_[2] {};   // emulation thread only

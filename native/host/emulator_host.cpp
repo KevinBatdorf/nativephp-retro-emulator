@@ -400,12 +400,29 @@ int EmulatorHost::loadRom(const uint8_t* rom, size_t size,
         const bool play = it != stagedBootOptions_.end()
                           && (it->second == "true" || it->second == "1");
         if (!play) {
-            // Also consumes the boot ding and its envelope tail.
+            // Phase 1 — to the boot ROM handoff. Consumes the ding and tail.
             int guard = 0;
             while (activeBackend_->inBootIntro() && ++guard <= 600) {
                 activeBackend_->tick(true);
             }
-            if (guard) EMUHOST_LOGI("boot animation skipped (%d frames)", guard);
+            // Phase 2 — the handoff screen still shows the console logo until
+            // the game redraws it. Keep consuming, AV discarded host-side, and
+            // stop the moment the picture changes or the game makes a sound.
+            int extra = 0;
+            if (guard) {
+                bootSkipDiscard_.store(true, std::memory_order_relaxed);
+                bootSkipAudioPeak_ = 0.0;
+                activeBackend_->tick(false);
+                uint64_t baseline = frameChecksum();
+                while (++extra <= 180) {
+                    bootSkipAudioPeak_ = 0.0;
+                    activeBackend_->tick(false);
+                    if (bootSkipAudioPeak_ > 0.02) break;
+                    if (frameChecksum() != baseline) break;
+                }
+                bootSkipDiscard_.store(false, std::memory_order_relaxed);
+            }
+            if (guard) EMUHOST_LOGI("boot animation skipped (%d+%d frames)", guard, extra);
         }
     }
 
@@ -1265,6 +1282,16 @@ int32_t EmulatorHost::consumeAxisDelta(int handle) {
     return value;
 }
 
+uint64_t EmulatorHost::frameChecksum() {
+    std::lock_guard<std::mutex> lock(frameMutex_);
+    uint64_t h = 1469598103934665603ull;
+    for (uint32_t px : frameBuffer_) {
+        h ^= px;
+        h *= 1099511628211ull;
+    }
+    return h;
+}
+
 void EmulatorHost::pushFrame(const uint32_t* argb, uint32_t width, uint32_t height,
                              uint32_t strideWords, const FrameGeometry& geometry) {
     // Engines deliver frames from their own worker threads — buffer under
@@ -1282,7 +1309,8 @@ void EmulatorHost::pushFrame(const uint32_t* argb, uint32_t width, uint32_t heig
                         argb + (size_t)y * strideWords, width * sizeof(uint32_t));
         }
     }
-    frameDirty_ = true;
+    // Boot-skip phase 2 reads these frames for its checksum; never presented.
+    frameDirty_ = !bootSkipDiscard_.load(std::memory_order_relaxed);
 }
 
 // 60 Hz: below this the GB path measures 30 dB hotter than the reference.
@@ -1307,6 +1335,12 @@ const Highpass& gbHighpass() {
 }  // namespace
 
 void EmulatorHost::pushAudioFrame(double left, double right) {
+    if (bootSkipDiscard_.load(std::memory_order_relaxed)) {
+        const double m = std::max(std::abs(left), std::abs(right));
+        if (m > bootSkipAudioPeak_) bootSkipAudioPeak_ = m;
+        return;
+    }
+
     // Ahead of volume: a volume change would otherwise step the filter's input.
     if (audioHighpass_ && !rawAudio_.load(std::memory_order_relaxed)) {
         const Highpass& hp = gbHighpass();
