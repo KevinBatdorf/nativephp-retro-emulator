@@ -16,6 +16,10 @@ auto loadGb(ares::Node::System& root, const SystemDef&, const std::string& loadN
 
 // The patched gb/apu/sequencer.cpp reads this; false is upstream's mixer.
 auto setOption(const std::string& name, const std::string& value) -> bool {
+    if (name == "bootAnimation") {
+        MultiPak::useFastGbBoot = !(value == "true" || value == "1");
+        return true;
+    }
     if (name != "rawAudio") return false;
     ares::GameBoy::nativephpRemovePedestal = !(value == "true" || value == "1");
     return true;

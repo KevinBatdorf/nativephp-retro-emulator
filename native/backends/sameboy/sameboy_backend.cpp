@@ -142,12 +142,21 @@ EmuHost::BootResult SameBoyBackend::boot(const EmuHost::BootSpec& spec,
     gb_ = GB_init(GB_alloc(), cgb ? GB_MODEL_CGB_E : GB_MODEL_DMG_B);
     GB_set_user_data(gb_, this);
 
+    bool bootAnim = false;
+    if (spec.bootOptions) {
+        auto it = spec.bootOptions->find("bootAnimation");
+        if (it != spec.bootOptions->end()) bootAnim = (it->second == "true" || it->second == "1");
+    }
     if (cgb) {
-        GB_load_boot_rom_from_buffer(gb_, EmbeddedFirmware::SameBoyCgbBoot,
-                                     EmbeddedFirmware::SameBoyCgbBootSize);
+        if (bootAnim) GB_load_boot_rom_from_buffer(gb_, EmbeddedFirmware::SameBoyCgbBoot,
+                                                   EmbeddedFirmware::SameBoyCgbBootSize);
+        else GB_load_boot_rom_from_buffer(gb_, EmbeddedFirmware::SameBoyCgbBootFast,
+                                          EmbeddedFirmware::SameBoyCgbBootFastSize);
     } else {
-        GB_load_boot_rom_from_buffer(gb_, EmbeddedFirmware::SameBoyDmgBoot,
-                                     EmbeddedFirmware::SameBoyDmgBootSize);
+        if (bootAnim) GB_load_boot_rom_from_buffer(gb_, EmbeddedFirmware::SameBoyDmgBoot,
+                                                   EmbeddedFirmware::SameBoyDmgBootSize);
+        else GB_load_boot_rom_from_buffer(gb_, EmbeddedFirmware::SameBoyDmgBootFast,
+                                          EmbeddedFirmware::SameBoyDmgBootFastSize);
     }
 
     width_  = GB_get_screen_width(gb_);

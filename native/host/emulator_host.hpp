@@ -258,6 +258,7 @@ private:
     bool bootSkipDcPrimed_ = false;
     std::vector<float> bootSkipTickAudio_;
     uint64_t frameChecksum();
+    void captureFrame(std::vector<uint32_t>& out);
     bool audioHighpass_ = false;
     bool hpPrimed_ = false;
     double hpX1_[2] {}, hpX2_[2] {}, hpY1_[2] {}, hpY2_[2] {};   // emulation thread only

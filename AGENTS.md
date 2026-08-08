@@ -156,8 +156,20 @@ bound), `region(): string`, `ports(): array`, `engineOptions(): array`,
 ### Configs
 
 `Config` (shareable house style) and per-system `SystemConfig` subclasses:
-`SfcConfig`, `FcConfig`, `GbConfig` (gb+gbc), `GbaConfig`, `MdConfig`. All
-`Config` keys plus:
+`SfcConfig`, `FcConfig`, `GbConfig` (gb+gbc), `GbaConfig`, `MdConfig`.
+
+Base `Config` also carries two all-or-nothing booleans, both default **off**:
+
+- `bootAnimation` — console boot intros (GB/GBC logo + ding, GBA BIOS) are
+  **skipped by default**: GB/GBC boot animation-free boot ROMs with identical
+  post-boot state, mGBA uses its native `skipBios`, and a hidden fast-forward
+  covers the rest. `true` plays the real intros.
+- `rawAudio` — the plugin's audio corrections (GB DC handling in both engines,
+  the 60 Hz filter) are **on by default**; `true` restores each engine's own
+  untouched output. Loudness matching and transition fades are calibration,
+  not corrections, and always stay on.
+
+All `Config` keys plus:
 
 - `biosPath` — optional real-BIOS override (GBA only in practice).
 - `backend` — `Backend` enum or string engine/core name (see Engines).

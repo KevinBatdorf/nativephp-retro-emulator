@@ -375,6 +375,12 @@ int EmulatorHost::loadRom(const uint8_t* rom, size_t size,
     savePrefix_ = savePrefix;   // seed reads through it during boot
     FileSaveMediaIO saves{savePrefix_};
 
+    // Stated explicitly on every boot: engines act on this option's value,
+    // and an absent key would leave their per-core flags at stale values.
+    if (!stagedBootOptions_.count("bootAnimation")) {
+        stagedBootOptions_["bootAnimation"] = "false";
+    }
+
     auto result = activeBackend_->boot(spec, *this, saves);
     if (!result.ok) {
         unloadGame(false);   // nothing booted; nothing to persist
@@ -405,9 +411,8 @@ int EmulatorHost::loadRom(const uint8_t* rom, size_t size,
             while (activeBackend_->inBootIntro() && ++guard <= 600) {
                 activeBackend_->tick(true);
             }
-            // Phase 2 — the handoff screen still shows the console logo until
-            // the game redraws it. Keep consuming, AV discarded host-side, and
-            // stop the moment the picture changes or the game makes a sound.
+            // Phase 2 — games display the handoff screen's logo until they redraw
+            // it; consume that, stopping at the first new picture or sound.
             int extra = 0;
             if (guard) {
                 bootSkipDiscard_.store(true, std::memory_order_relaxed);
@@ -415,9 +420,20 @@ int EmulatorHost::loadRom(const uint8_t* rom, size_t size,
                 bootSkipDcPrimed_ = false;
                 bootSkipTickAudio_.clear();
                 activeBackend_->tick(false);
-                const uint64_t baseline = frameChecksum();
-                uint64_t last = baseline;
+                std::vector<uint32_t> baseline, cur, lastFrame;
+                captureFrame(baseline);
+                // Content over backdrop is the game's first screen; a logo
+                // fade only touches the logo's own pixels.
+                uint32_t background = 0;
+                {
+                    std::unordered_map<uint32_t, uint32_t> histo;
+                    uint32_t best = 0;
+                    for (uint32_t px : baseline) {
+                        if (++histo[px] > best) { best = histo[px]; background = px; }
+                    }
+                }
                 int stable = 0;
+                int unchangedRun = 0;
                 int loudTicks = 0;
                 bool sound = false;
                 std::vector<float> preroll;
@@ -436,14 +452,27 @@ int EmulatorHost::loadRom(const uint8_t* rom, size_t size,
                                       preroll.begin() + (preroll.size() - cap));
                     }
                     if (loudTicks >= 2) { sound = true; break; }
-                    // A statically held logo passes any stability test; only
-                    // sound may end the skip before the minimum.
-                    const uint64_t h = frameChecksum();
-                    if (extra >= 90 && h != baseline) {
-                        stable = (h == last) ? stable + 1 : 0;
-                        if (stable >= 8) break;
+                    captureFrame(cur);
+                    if (cur.size() == baseline.size() && !baseline.empty()) {
+                        size_t drawn = 0;
+                        bool changed = false;
+                        for (size_t i = 0; i < cur.size(); i++) {
+                            if (cur[i] != baseline[i]) {
+                                changed = true;
+                                if (baseline[i] == background) drawn++;
+                            }
+                        }
+                        if (drawn > baseline.size() / 200) break;
+                        if (changed) {
+                            unchangedRun = 0;
+                            stable = (cur == lastFrame) ? stable + 1 : 0;
+                            if (stable >= 8) break;
+                        } else if (++unchangedRun >= 75) {
+                            // Past any logo hold: the game is loading dark.
+                            break;
+                        }
                     }
-                    last = h;
+                    lastFrame = cur;
                 }
                 bootSkipDiscard_.store(false, std::memory_order_relaxed);
                 if (sound) {
@@ -1312,6 +1341,11 @@ int32_t EmulatorHost::consumeAxisDelta(int handle) {
     int32_t value = acc;
     acc = 0;   // consume: a relative delta applies once per poll
     return value;
+}
+
+void EmulatorHost::captureFrame(std::vector<uint32_t>& out) {
+    std::lock_guard<std::mutex> lock(frameMutex_);
+    out = frameBuffer_;
 }
 
 uint64_t EmulatorHost::frameChecksum() {

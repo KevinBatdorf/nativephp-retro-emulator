@@ -16,6 +16,9 @@
 
 namespace MultiPak {
 
+// Set from the bootAnimation boot option before makeSystemPak runs.
+extern bool useFastGbBoot;
+
 struct CartridgeResult {
     std::shared_ptr<nall::vfs::directory> pak;
     std::string title;

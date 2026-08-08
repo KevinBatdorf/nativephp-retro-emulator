@@ -165,14 +165,20 @@ static auto assembleGameBoyAdvance(Markup::Node document, string& manifest,
     return pak;
 }
 
+bool useFastGbBoot = false;
+
 auto makeSystemPak(const std::string& systemId,
                    const std::vector<u8>& bios) -> std::shared_ptr<vfs::directory> {
     auto pak = std::make_shared<vfs::directory>();
     if(systemId == "gb") {
-        pak->append("boot.rom", std::span<const u8>(
+        if(useFastGbBoot) pak->append("boot.rom", std::span<const u8>(
+            EmbeddedFirmware::SameBoyDmgBootFast, EmbeddedFirmware::SameBoyDmgBootFastSize));
+        else pak->append("boot.rom", std::span<const u8>(
             EmbeddedFirmware::GbBootDmg1, EmbeddedFirmware::GbBootDmg1Size));
     } else if(systemId == "gbc") {
-        pak->append("boot.rom", std::span<const u8>(
+        if(useFastGbBoot) pak->append("boot.rom", std::span<const u8>(
+            EmbeddedFirmware::SameBoyCgbBootFast, EmbeddedFirmware::SameBoyCgbBootFastSize));
+        else pak->append("boot.rom", std::span<const u8>(
             EmbeddedFirmware::GbBootCgb1, EmbeddedFirmware::GbBootCgb1Size));
     } else if(systemId == "md") {
         pak->append("tmss.rom", std::span<const u8>(

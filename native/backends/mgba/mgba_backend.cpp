@@ -117,6 +117,14 @@ EmuHost::BootResult MgbaBackend::boot(const EmuHost::BootSpec& spec,
     // garbage and the first lookup strlen-faults.
     mCoreInitConfig(core_, nullptr);
 
+    bool bootAnim = false;
+    if (spec.bootOptions) {
+        auto it = spec.bootOptions->find("bootAnimation");
+        if (it != spec.bootOptions->end()) bootAnim = (it->second == "true" || it->second == "1");
+    }
+    // mGBA's native BIOS skip: initialization runs, the animation does not.
+    mCoreConfigSetDefaultIntValue(&core_->config, "skipBios", bootAnim ? 0 : 1);
+
     core_->baseVideoSize(core_, &width_, &height_);
     pixels_.assign((size_t)width_ * height_, 0);
     converted_.assign((size_t)width_ * height_, 0);

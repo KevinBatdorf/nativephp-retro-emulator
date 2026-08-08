@@ -32,6 +32,11 @@ REPO_BLOBS = [
     ("GbaBios", "native/firmware/gba_open_bios.bin"),
     ("SameBoyDmgBoot", "native/firmware/sameboy_dmg_boot.bin"),
     ("SameBoyCgbBoot", "native/firmware/sameboy_cgb_boot.bin"),
+    # Animation-free variants for bootAnimation=off: identical post-boot state,
+    # handoff on frame one. dmg is our derivative (dmg_boot_fast.asm alongside);
+    # cgb is SameBoy's own cgb_boot_fast.
+    ("SameBoyDmgBootFast", "native/firmware/sameboy_dmg_boot_fast.bin"),
+    ("SameBoyCgbBootFast", "native/firmware/sameboy_cgb_boot_fast.bin"),
 ]
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
