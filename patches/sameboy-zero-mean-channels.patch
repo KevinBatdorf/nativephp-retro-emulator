@@ -1,0 +1,72 @@
+diff --git a/Core/apu.c b/Core/apu.c
+index caa5451..a8b750d 100644
+--- a/Core/apu.c
++++ b/Core/apu.c
+@@ -191,6 +191,9 @@ static uint8_t agb_bias_for_channel(GB_gameboy_t *gb, GB_channel_t index)
+     }
+ }
+ 
++//nativephp: false restores upstream mixing exactly. Set per boot.
++bool nativephpCenterDacs = true;
++
+ static void update_sample(GB_gameboy_t *gb, GB_channel_t index, int8_t value, unsigned cycles_offset)
+ {
+     if (gb->model > GB_MODEL_CGB_E) {
+@@ -256,7 +259,43 @@ static void update_sample(GB_gameboy_t *gb, GB_channel_t index, int8_t value, un
+         }
+         GB_sample_t output = {0, 0};
+         if (likely(!gb->apu_output.channel_muted[index])) {
+-            output = (GB_sample_t){(0xF - value * 2) * left_volume, (0xF - value * 2) * right_volume};
++            if (nativephpCenterDacs) {
++                /* nativephp: NR32, routing, envelope and DAC changes all step
++                   the channel's +15*volume pedestal; mix zero-mean instead. */
++                int dc16 = 240;
++                switch (index) {
++                    case GB_SQUARE_1:
++                    case GB_SQUARE_2: {
++                        static const int duty8[4] = {1, 2, 4, 6};
++                        int e = gb->apu.square_channels[index].current_volume;
++                        int d = duty8[gb->io_registers[index == GB_SQUARE_1 ? GB_IO_NR11 : GB_IO_NR21] >> 6];
++                        dc16 = 240 - 4 * e * d;
++                        break;
++                    }
++                    case GB_WAVE: {
++                        int sum = 0;
++                        int shift = gb->apu.wave_channel.shift;
++                        for (int b = 0; b < 16; b++) {
++                            uint8_t byte = gb->io_registers[GB_IO_WAV_START + b];
++                            sum += (byte >> 4) >> shift;
++                            sum += (byte & 0xF) >> shift;
++                        }
++                        dc16 = 240 - sum;
++                        break;
++                    }
++                    case GB_NOISE:
++                        dc16 = 240 - 16 * gb->apu.noise_channel.current_volume;
++                        break;
++                    default:
++                        break;
++                }
++                int c16 = 16 * (0xF - value * 2) - dc16;
++                output = (GB_sample_t){(int16_t)((c16 * (int)left_volume) / 16),
++                                       (int16_t)((c16 * (int)right_volume) / 16)};
++            }
++            else {
++                output = (GB_sample_t){(0xF - value * 2) * left_volume, (0xF - value * 2) * right_volume};
++            }
+         }
+         if (unlikely(gb->apu_output.max_cycles_per_sample == 1)) {
+             band_limited_update_unfiltered(&gb->apu_output.band_limited[index], &output, cycles_offset);
+diff --git a/Core/apu.h b/Core/apu.h
+index 604931e..627848e 100644
+--- a/Core/apu.h
++++ b/Core/apu.h
+@@ -14,6 +14,8 @@
+ #define GB_BAND_LIMITED_ONE 0x10000 // fixed point value equal to 1
+ 
+ /* Speed = 1 / Length (in seconds) */
++extern bool nativephpCenterDacs; //nativephp: zero-mean channel mixing, see apu.c
++
+ #define DAC_DECAY_SPEED 20000
+ #define DAC_ATTACK_SPEED 20000
+ 

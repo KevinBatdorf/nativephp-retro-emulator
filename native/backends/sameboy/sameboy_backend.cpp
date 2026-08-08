@@ -8,6 +8,9 @@
 
 #include <cstring>
 
+// Defined in the patched sameboy/Core/apu.c (see patches/).
+extern "C" bool nativephpCenterDacs;
+
 namespace {
 
 // GB_key_t order (joypad.h): Right, Left, Up, Down, A, B, Select, Start.
@@ -159,6 +162,7 @@ EmuHost::BootResult SameBoyBackend::boot(const EmuHost::BootSpec& spec,
         auto it = spec.bootOptions->find("rawAudio");
         if (it != spec.bootOptions->end()) raw_ = (it->second == "true" || it->second == "1");
     }
+    nativephpCenterDacs = !raw_;
     // REMOVE_DC_OFFSET retargets from live DAC state, so the removal itself steps.
     GB_set_highpass_filter_mode(gb_, GB_HIGHPASS_ACCURATE);
     GB_apu_set_sample_callback(gb_, onSample);

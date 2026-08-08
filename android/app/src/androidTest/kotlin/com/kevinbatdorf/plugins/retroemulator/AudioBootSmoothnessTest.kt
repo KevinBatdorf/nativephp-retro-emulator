@@ -57,12 +57,18 @@ class AudioBootSmoothnessTest {
     }
 
     @Test
-    fun aresGbIdleSitsAtZeroAndBootHasNoDcSteps() {
+    fun aresGbIdleSitsAtZeroAndBootHasNoDcSteps() = idleSitsAtZero("ares")
+
+    /** SameBoy mixes zero-mean per channel (patched apu.c); pin the same contract. */
+    @Test
+    fun sameboyGbIdleSitsAtZeroAndBootHasNoDcSteps() = idleSitsAtZero("sameboy")
+
+    private fun idleSitsAtZero(backend: String) {
         val rom = romOrSkip() ?: return
         val core = EmulatorCore()
         try {
             assert(core.init())
-            assert(core.loadSystem("gb", backend = "ares")) { "loadSystem failed" }
+            assert(core.loadSystem("gb", backend = backend)) { "loadSystem failed" }
             assert(core.loadRom(rom) == EmulatorCore.LOAD_OK) { "loadRom failed" }
 
             val left = ArrayList<Float>(48_000 * 3)
