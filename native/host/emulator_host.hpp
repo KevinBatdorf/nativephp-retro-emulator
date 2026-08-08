@@ -249,8 +249,14 @@ private:
     std::atomic<bool> rawAudio_ {false};
 
     // Boot-skip phase 2: AV runs but is discarded; audio peak steers the stop.
+    // Peak is measured DC-free — rawAudio boots sit on the GB pedestal, and a
+    // rail is not sound. The tick that trips the guard is buffered and
+    // replayed so the triggering attack is not eaten. Emulation thread only.
     std::atomic<bool> bootSkipDiscard_ {false};
-    double bootSkipAudioPeak_ = 0.0;   // emulation thread only
+    double bootSkipAudioPeak_ = 0.0;
+    double bootSkipDcL_ = 0.0, bootSkipDcR_ = 0.0;
+    bool bootSkipDcPrimed_ = false;
+    std::vector<float> bootSkipTickAudio_;
     uint64_t frameChecksum();
     bool audioHighpass_ = false;
     bool hpPrimed_ = false;
