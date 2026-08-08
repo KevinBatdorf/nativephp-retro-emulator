@@ -26,12 +26,12 @@ class Config
      *                           darkens midtones, below brightens them.
      * @param  int|null  $volume  Percent, 0–100.
      * @param  int|null  $balance  Percent, −100 (full left) … +100 (full right).
-     * @param  bool|null  $rawAudio  Hands back every audio correction at once —
-     *                               Game Boy DC handling, the loudness match
-     *                               between engines, the pause/switch ramp. The
-     *                               hot output route, sink priming and rate
-     *                               control are bug fixes, not opinions, and
-     *                               stay on regardless.
+     * @param  bool|null  $rawAudio  Restores each engine's own sound — today the
+     *                               Game Boy DC handling in both engines plus
+     *                               the 60 Hz filter. Loudness matching and
+     *                               transition fades stay on: gain is
+     *                               calibration, and app transitions have no
+     *                               hardware behaviour to restore.
      * @param  float|null  $speed  Multiplier, 0.25–4.0; 1.0 is native speed.
      * @param  bool|null  $overscan  Trims the overscan border (trims by default);
      *                               no effect on systems with no overscan region.
