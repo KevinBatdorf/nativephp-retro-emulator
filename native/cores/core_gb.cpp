@@ -14,6 +14,18 @@ auto loadGb(ares::Node::System& root, const SystemDef&, const std::string& loadN
     return ares::GameBoy::load(root, nall::string(loadName.c_str()));
 }
 
+// The patched gb/apu/sequencer.cpp reads this; false is upstream's mixer.
+auto setOption(const std::string& name, const std::string& value) -> bool {
+    if (name != "rawAudio") return false;
+    ares::GameBoy::nativephpRemovePedestal = !(value == "true" || value == "1");
+    return true;
+}
+
+auto getOption(const std::string& name) -> std::string {
+    if (name != "rawAudio") return {};
+    return ares::GameBoy::nativephpRemovePedestal ? "false" : "true";
+}
+
 auto memRead(uint32_t o) -> uint8_t { return (uint8_t)ares::GameBoy::cpu.wram[o]; }
 auto memWrite(uint32_t o, uint8_t v) -> void { ares::GameBoy::cpu.wram[o] = v; }
 
@@ -38,6 +50,8 @@ const SystemDef kDef = {
     .loadNameBase  = "[Nintendo] Game Boy",
     .cartridgeNode = "Game Boy Cartridge",
     .load          = loadGb,
+    .setOption     = setOption,
+    .getOption     = getOption,
     .memRead       = memRead,
     .memWrite      = memWrite,
     .makeSystemPak = systemPak,
@@ -53,6 +67,8 @@ const SystemDef kDefCgb = {
     .loadNameBase  = "[Nintendo] Game Boy Color",
     .cartridgeNode = "Game Boy Color Cartridge",
     .load          = loadGb,
+    .setOption     = setOption,
+    .getOption     = getOption,
     .memRead       = memRead,
     .memWrite      = memWrite,
     .makeSystemPak = systemPak,

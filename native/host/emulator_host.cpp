@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 
@@ -349,6 +350,14 @@ int EmulatorHost::loadRom(const uint8_t* rom, size_t size,
 
     activeBackend_ = stagedBackend_;
     activeSystem_  = stagedSystem_;
+    audioHighpass_ = stagedSystem_->id == "gb" || stagedSystem_->id == "gbc";
+    hpPrimed_ = false;
+    {
+        auto it = stagedBootOptions_.find("rawAudio");
+        const bool raw = it != stagedBootOptions_.end()
+                         && (it->second == "true" || it->second == "1");
+        rawAudio_.store(raw, std::memory_order_relaxed);
+    }
 
     auto bindings = resolveBindings();
 
@@ -845,6 +854,10 @@ void EmulatorHost::setAudio(float volume, float balance) {
     balance_.store(std::clamp(balance, -1.0f, 1.0f), std::memory_order_relaxed);
 }
 
+void EmulatorHost::setRawAudio(bool raw) {
+    rawAudio_.store(raw, std::memory_order_relaxed);
+}
+
 void EmulatorHost::setVideo(float luminance, float saturation, float gamma,
                             bool colorBleed, bool overscan) {
     if (!systemLoaded_ || !activeBackend_) return;
@@ -1257,7 +1270,53 @@ void EmulatorHost::pushFrame(const uint32_t* argb, uint32_t width, uint32_t heig
     frameDirty_ = true;
 }
 
+// 60 Hz: below this the GB path measures 30 dB hotter than the reference.
+namespace {
+
+struct Highpass {
+    double b0, b1, b2, a1, a2;
+};
+
+const Highpass& gbHighpass() {
+    static const Highpass hp = [] {
+        constexpr double kCorner = 60.0, kRate = 48000.0, kQ = 0.70710678;
+        const double w0 = 2.0 * 3.14159265358979323846 * kCorner / kRate;
+        const double c = std::cos(w0), s = std::sin(w0), alpha = s / (2.0 * kQ);
+        const double a0 = 1.0 + alpha;
+        return Highpass{(1.0 + c) / 2.0 / a0, -(1.0 + c) / a0, (1.0 + c) / 2.0 / a0,
+                        -2.0 * c / a0, (1.0 - alpha) / a0};
+    }();
+    return hp;
+}
+
+}  // namespace
+
 void EmulatorHost::pushAudioFrame(double left, double right) {
+    // Ahead of volume: a volume change would otherwise step the filter's input.
+    if (audioHighpass_ && !rawAudio_.load(std::memory_order_relaxed)) {
+        const Highpass& hp = gbHighpass();
+        const double in[2] = {left, right};
+        if (!hpPrimed_) {
+            // Seeding output history too steps the ring by the whole pedestal.
+            for (int ch = 0; ch < 2; ++ch) {
+                hpX1_[ch] = hpX2_[ch] = in[ch];
+                hpY1_[ch] = hpY2_[ch] = 0.0;
+            }
+            hpPrimed_ = true;
+        }
+        double out[2];
+        for (int ch = 0; ch < 2; ++ch) {
+            out[ch] = hp.b0 * in[ch] + hp.b1 * hpX1_[ch] + hp.b2 * hpX2_[ch]
+                      - hp.a1 * hpY1_[ch] - hp.a2 * hpY2_[ch];
+            hpX2_[ch] = hpX1_[ch];
+            hpX1_[ch] = in[ch];
+            hpY2_[ch] = hpY1_[ch];
+            hpY1_[ch] = out[ch];
+        }
+        left = out[0];
+        right = out[1];
+    }
+
     float l = (float)std::max(-1.0, std::min(+1.0, left));
     float r = (float)std::max(-1.0, std::min(+1.0, right));
 

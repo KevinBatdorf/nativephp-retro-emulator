@@ -26,6 +26,12 @@ class Config
      *                           darkens midtones, below brightens them.
      * @param  int|null  $volume  Percent, 0–100.
      * @param  int|null  $balance  Percent, −100 (full left) … +100 (full right).
+     * @param  bool|null  $rawAudio  Hands back every audio correction at once —
+     *                               Game Boy DC handling, the loudness match
+     *                               between engines, the pause/switch ramp. The
+     *                               hot output route, sink priming and rate
+     *                               control are bug fixes, not opinions, and
+     *                               stay on regardless.
      * @param  float|null  $speed  Multiplier, 0.25–4.0; 1.0 is native speed.
      * @param  bool|null  $overscan  Trims the overscan border (trims by default);
      *                               no effect on systems with no overscan region.
@@ -53,6 +59,7 @@ class Config
         public ?AspectCorrection $aspectCorrection = null,
         public ?int $volume = null,
         public ?int $balance = null,
+        public ?bool $rawAudio = null,
         public ?InputCapture $inputCapture = null,
         public ?bool $autoSave = null,
         public ?float $speed = null,
@@ -80,6 +87,7 @@ class Config
             'aspectCorrection' => $this->aspectCorrection?->value,
             'volume' => $this->volume,
             'balance' => $this->balance,
+            'rawAudio' => $this->rawAudio,
             'inputCapture' => $this->inputCapture?->value,
             'autoSave' => $this->autoSave,
             'speed' => $this->speed,

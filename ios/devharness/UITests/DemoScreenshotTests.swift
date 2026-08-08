@@ -63,6 +63,19 @@ final class DemoScreenshotTests: XCTestCase {
         app.terminate()
     }
 
+    /// Boots GBC and holds it while the temp audio dump fills.
+    func testGbcTape() throws {
+        let app = XCUIApplication(bundleIdentifier: demoBundleId)
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        sleep(25)
+        let tile = app.descendants(matching: .any)["GBC"].firstMatch
+        if tile.waitForExistence(timeout: 10) { tile.tap() }
+        sleep(30)
+        snap("gbc-tape-state")
+        app.terminate()
+    }
+
     /// GBC appears twice: the second entry covers back-out → re-enter.
     func testBootSweep() throws {
         let app = XCUIApplication(bundleIdentifier: demoBundleId)

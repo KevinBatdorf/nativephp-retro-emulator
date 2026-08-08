@@ -73,6 +73,8 @@ private:
     // Engine teardown shared by unload() and mid-boot failures.
     void teardown();
 
+    double outputGain() const;
+
     const SystemRegistry::SystemDef* def_ = nullptr;
     ares::Node::System root_;
     bool loaded_ = false;

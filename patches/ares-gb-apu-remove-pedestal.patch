@@ -1,0 +1,42 @@
+ares/gb/apu/apu.hpp --- C++
+176 176 
+177 177 extern APU apu;
+    178 
+    179 //nativephp: see sequencer.cpp — false restores upstream mixer behaviour.
+    180 extern bool nativephpRemovePedestal;
+
+ares/gb/apu/sequencer.cpp --- 1/2 --- C++
+ .  1 //nativephp: false restores upstream's mixer exactly; true drops the DC pedestal
+ .  2 //the DAC parks on, so nothing can step it. Set per boot.
+ .  3 bool nativephpRemovePedestal = true;
+ .  4 
+ 1  5 auto APU::Sequencer::run() -> void {
+ 2  6   if(enable == false) {
+
+ares/gb/apu/sequencer.cpp --- 2/2 --- C++
+18 22   if(square2.leftEnable) sample += apu.square2.output;
+19 23   if(   wave.leftEnable) sample +=    apu.wave.output;
+20 24   if(  noise.leftEnable) sample +=   apu.noise.output;
+.. 25   if(nativephpRemovePedestal) {
+.. 26     sample = (sample * 512 * (leftVolume + 1)) / 8;
+.. 27   } else {
+21 28     sample = (sample * 512) - 16384;
+22 29     sample = (sample * (leftVolume + 1)) / 8;
+.. 30   }
+23 31   left = sample;
+24 32 
+25 33   sample = 0;
+26 34   if(square1.rightEnable) sample += apu.square1.output;
+27 35   if(square2.rightEnable) sample += apu.square2.output;
+28 36   if(   wave.rightEnable) sample +=    apu.wave.output;
+29 37   if(  noise.rightEnable) sample +=   apu.noise.output;
+.. 38   if(nativephpRemovePedestal) {
+.. 39     sample = (sample * 512 * (rightVolume + 1)) / 8;
+.. 40   } else {
+30 41     sample = (sample * 512) - 16384;
+31 42     sample = (sample * (rightVolume + 1)) / 8;
+.. 43   }
+32 44   right = sample;
+33 45 
+34 46   //reduce audio volume
+

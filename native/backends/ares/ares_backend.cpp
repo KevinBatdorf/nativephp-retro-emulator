@@ -465,8 +465,19 @@ auto AresBackend::video(ares::Node::Video::Screen node, const u32* data,
     host_->pushFrame(data, width, height, pitch / sizeof(u32), geometry);
 }
 
+// ares' GB mixer halves its own output ("reduce audio volume" in
+// gb/apu/sequencer.cpp) and spends half the remaining range on a DC pedestal,
+// so it lands ~10 dB under SameBoy on the same game. Engines must not change
+// loudness when a dev swaps them, so the quiet one is brought up.
+double AresBackend::outputGain() const {
+    if (!def_) return 1.0;
+    if (def_->id == std::string("gb") || def_->id == std::string("gbc")) return 2.0;
+    return 1.0;
+}
+
 auto AresBackend::audio(ares::Node::Audio::Stream) -> void {
     if (!host_ || audioStreams_.empty()) return;
+    const double gain = outputGain();
 
     while (true) {
         // All streams must have at least one pending frame before we mix.
@@ -486,7 +497,7 @@ auto AresBackend::audio(ares::Node::Audio::Stream) -> void {
                 samples[1] += buf[1];
             }
         }
-        host_->pushAudioFrame(samples[0], samples[1]);
+        host_->pushAudioFrame(samples[0] * gain, samples[1] * gain);
     }
 }
 

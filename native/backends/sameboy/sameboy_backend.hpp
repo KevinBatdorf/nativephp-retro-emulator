@@ -66,11 +66,8 @@ private:
     bool loaded_ = false;
     bool hidden_ = false;         // run-ahead hidden frame: suppress AV output
 
-    // One-pole DC-blocker state (y = x - x_prev + R*y_prev): the DAC-toggle
-    // steps SameBoy's highpass modes let through settle in ~3 ms instead of
-    // reaching the speaker as clicks.
-    double dcInL_ = 0.0, dcInR_ = 0.0, dcOutL_ = 0.0, dcOutR_ = 0.0;
     bool colorCorrection_ = true; // the colorEmulation toggle's live value
+    bool raw_ = false;   // rawAudio boot option; see capabilities()
 
     std::vector<uint32_t> pixels_;   // GB_set_pixels_output target, 160x144
     unsigned width_  = 0;

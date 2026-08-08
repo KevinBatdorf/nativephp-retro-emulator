@@ -94,6 +94,7 @@ public:
 
     // AV options ---------------------------------------------------------
     void setAudio(float volume, float balance);               // any thread
+    void setRawAudio(bool raw);                               // any thread
     void setVideo(float luminance, float saturation, float gamma,
                   bool colorBleed, bool overscan);            // emulation thread
     void setCoreBoolean(const std::string& key, bool value);  // emulation thread
@@ -243,6 +244,12 @@ private:
     std::vector<float> audioRing_;
     std::atomic<float> volume_  {1.0f};
     std::atomic<float> balance_ {0.0f};
+
+    // GB mixer parks off silence; stepping that level reaches speakers as infrasound.
+    std::atomic<bool> rawAudio_ {false};
+    bool audioHighpass_ = false;
+    bool hpPrimed_ = false;
+    double hpX1_[2] {}, hpX2_[2] {}, hpY1_[2] {}, hpY2_[2] {};   // emulation thread only
 
     // Input. Two per-port masks OR'd at poll time: hwMask (hardware pads,
     // any thread) and swMask (software presses). Press latch: unsampledPress

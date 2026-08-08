@@ -54,6 +54,10 @@ EmuHost::Capabilities SameBoyBackend::capabilities(const std::string& systemId) 
     caps.options.push_back({"colorEmulation",
                             EmuHost::OptionInfo::Stage::Runtime,
                             EmuHost::OptionInfo::Kind::Boolean, {}});
+    // Declared so the host reads it; the highpass mode no longer depends on it.
+    caps.options.push_back({"rawAudio",
+                            EmuHost::OptionInfo::Stage::Boot,
+                            EmuHost::OptionInfo::Kind::Boolean, {}});
     return caps;
 }
 
@@ -99,15 +103,12 @@ void SameBoyBackend::onVblank(GB_gameboy_t* gb, GB_vblank_type_t) {
 void SameBoyBackend::onSample(GB_gameboy_t* gb, GB_sample_t* sample) {
     auto* self = (SameBoyBackend*)GB_get_user_data(gb);
     if (!self || self->hidden_ || !self->host_) return;
-    // R = 0.9995 at 48 kHz: -3 dB near 4 Hz, flat across the audible band.
-    constexpr double R = 0.9995;
-    const double l = sample->left / 32768.0;
-    const double r = sample->right / 32768.0;
-    self->dcOutL_ = l - self->dcInL_ + R * self->dcOutL_;
-    self->dcOutR_ = r - self->dcInR_ + R * self->dcOutR_;
-    self->dcInL_ = l;
-    self->dcInR_ = r;
-    self->host_->pushAudioFrame(self->dcOutL_, self->dcOutR_);
+    // SameBoy peaks near half of full scale where ares' GB mixer peaks near a
+    // quarter; the two meet in the middle so swapping engines doesn't change
+    // loudness (see AresBackend::outputGain).
+    constexpr double kLevelMatch = 0.63;
+    self->host_->pushAudioFrame(sample->left / 32768.0 * kLevelMatch,
+                                sample->right / 32768.0 * kLevelMatch);
 }
 
 uint32_t SameBoyBackend::encodeRgb(GB_gameboy_t*, uint8_t r, uint8_t g, uint8_t b) {
@@ -153,13 +154,13 @@ EmuHost::BootResult SameBoyBackend::boot(const EmuHost::BootSpec& spec,
     GB_set_vblank_callback(gb_, onVblank);
 
     GB_set_sample_rate(gb_, 48000);
-    // SameBoy defaults to GB_HIGHPASS_OFF ("keep DC offset") — the offset
-    // jumps on every envelope change and pops constantly. ACCURATE models the
-    // hardware RC filter, which still clicks on every DAC toggle (GBDK sound
-    // drivers toggle DACs per note — "record player" pops); REMOVE_DC_OFFSET
-    // retargets the offset from live DAC state and stays click-free.
-    GB_set_highpass_filter_mode(gb_, GB_HIGHPASS_REMOVE_DC_OFFSET);
-    dcInL_ = dcInR_ = dcOutL_ = dcOutR_ = 0.0;
+    raw_ = false;
+    if (spec.bootOptions) {
+        auto it = spec.bootOptions->find("rawAudio");
+        if (it != spec.bootOptions->end()) raw_ = (it->second == "true" || it->second == "1");
+    }
+    // REMOVE_DC_OFFSET retargets from live DAC state, so the removal itself steps.
+    GB_set_highpass_filter_mode(gb_, GB_HIGHPASS_ACCURATE);
     GB_apu_set_sample_callback(gb_, onSample);
 
     GB_set_rumble_mode(gb_, GB_RUMBLE_CARTRIDGE_ONLY);
@@ -297,7 +298,8 @@ int SameBoyBackend::readRuntimeToggle(const std::string& key) {
     return colorCorrection_ ? 1 : 0;
 }
 
-std::string SameBoyBackend::readBootOption(const std::string&) {
+std::string SameBoyBackend::readBootOption(const std::string& name) {
+    if (name == "rawAudio") return raw_ ? "true" : "false";
     return "";   // SameBoy declares no boot options
 }
 

@@ -11,14 +11,23 @@ import RetroEmulator
 /// hot route and the scheduler feeds silence between them.
 final class EmulatorAudio {
 
+    /// The context this instance registered. Detach compares against it: the
+    /// pump outlives every renderer, and a torn-down renderer's deinit can run
+    /// after the next game has already registered — clearing unconditionally
+    /// silenced every later game until the app restarted.
+    private var owned: OpaquePointer?
+
     var ctx: OpaquePointer? {
         get { Pump.shared.ctx }
-        set { Pump.shared.ctx = newValue }
+        set {
+            owned = newValue
+            Pump.shared.ctx = newValue
+        }
     }
 
     func start() throws { Pump.shared.attach() }
 
-    func stop() { Pump.shared.detach() }
+    func stop() { Pump.shared.detach(owner: owned) }
 
     /// Menu pause/resume: ramp out instead of cutting, fade back in.
     func setPaused(_ value: Bool) { Pump.shared.setPaused(value) }
@@ -77,8 +86,9 @@ final class EmulatorAudio {
             }
         }
 
-        func detach() {
+        func detach(owner: OpaquePointer?) {
             queue.async { [self] in
+                guard owner == nil || _ctx == owner else { return }
                 _ctx = nil
                 tailDone = 0
             }

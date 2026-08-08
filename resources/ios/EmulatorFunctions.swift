@@ -361,6 +361,8 @@ enum EmulatorFunctions {
             // without a choice (fc, gb, md) accept and ignore it.
             let bootOptions = [
                 "Pixel Accuracy": config["pixelAccuracy"] as? Bool ?? false,
+                // GB/GBC only; other backends ignore an unknown boot option.
+                "rawAudio": config["rawAudio"] as? Bool ?? false,
             ]
             let biosPath = config["biosPath"] as? String
 
