@@ -176,9 +176,10 @@ auto makeSystemPak(const std::string& systemId,
         else pak->append("boot.rom", std::span<const u8>(
             EmbeddedFirmware::GbBootDmg1, EmbeddedFirmware::GbBootDmg1Size));
     } else if(systemId == "gbc") {
-        if(useFastGbBoot) pak->append("boot.rom", std::span<const u8>(
-            EmbeddedFirmware::SameBoyCgbBootFast, EmbeddedFirmware::SameBoyCgbBootFastSize));
-        else pak->append("boot.rom", std::span<const u8>(
+        // Always the real CGB boot: SameBoy's fast CGB image misruns under
+        // ares (handoff after one frame, uninitialized palettes — Zelda DX
+        // hangs, Crystal boots to a beep). The host fast-forwards it instead.
+        pak->append("boot.rom", std::span<const u8>(
             EmbeddedFirmware::GbBootCgb1, EmbeddedFirmware::GbBootCgb1Size));
     } else if(systemId == "md") {
         pak->append("tmss.rom", std::span<const u8>(
