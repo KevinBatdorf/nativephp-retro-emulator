@@ -418,12 +418,24 @@ int EmulatorHost::loadRom(const uint8_t* rom, size_t size,
                 const uint64_t baseline = frameChecksum();
                 uint64_t last = baseline;
                 int stable = 0;
+                int loudTicks = 0;
                 bool sound = false;
+                std::vector<float> preroll;
                 while (++extra <= 180) {
                     bootSkipAudioPeak_ = 0.0;
                     bootSkipTickAudio_.clear();
                     activeBackend_->tick(false);
-                    if (bootSkipAudioPeak_ > 0.02) { sound = true; break; }
+                    // One loud tick is a rawAudio pedestal step lagging the DC
+                    // tracker; real sound stays loud tick after tick.
+                    loudTicks = bootSkipAudioPeak_ > 0.02 ? loudTicks + 1 : 0;
+                    preroll.insert(preroll.end(), bootSkipTickAudio_.begin(),
+                                   bootSkipTickAudio_.end());
+                    const size_t cap = 4 * 4096;
+                    if (preroll.size() > cap) {
+                        preroll.erase(preroll.begin(),
+                                      preroll.begin() + (preroll.size() - cap));
+                    }
+                    if (loudTicks >= 2) { sound = true; break; }
                     // A statically held logo passes any stability test; only
                     // sound may end the skip before the minimum.
                     const uint64_t h = frameChecksum();
@@ -435,9 +447,9 @@ int EmulatorHost::loadRom(const uint8_t* rom, size_t size,
                 }
                 bootSkipDiscard_.store(false, std::memory_order_relaxed);
                 if (sound) {
-                    // The triggering tick's audio plays; only silence was cut.
-                    for (size_t i = 0; i + 1 < bootSkipTickAudio_.size(); i += 2) {
-                        pushAudioFrame(bootSkipTickAudio_[i], bootSkipTickAudio_[i + 1]);
+                    // Replay, or the skip eats the triggering sound's attack.
+                    for (size_t i = 0; i + 1 < preroll.size(); i += 2) {
+                        pushAudioFrame(preroll[i], preroll[i + 1]);
                     }
                 }
                 bootSkipTickAudio_.clear();
@@ -1361,8 +1373,8 @@ void EmulatorHost::pushAudioFrame(double left, double right) {
             bootSkipDcR_ = right;
             bootSkipDcPrimed_ = true;
         }
-        bootSkipDcL_ += 0.002 * (left - bootSkipDcL_);
-        bootSkipDcR_ += 0.002 * (right - bootSkipDcR_);
+        bootSkipDcL_ += 0.004 * (left - bootSkipDcL_);
+        bootSkipDcR_ += 0.004 * (right - bootSkipDcR_);
         const double m = std::max(std::abs(left - bootSkipDcL_),
                                   std::abs(right - bootSkipDcR_));
         if (m > bootSkipAudioPeak_) bootSkipAudioPeak_ = m;
