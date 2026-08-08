@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "806fd2bf2c19f6b2d3f32c1780c25e8e",
+    "content-hash": "765744ad436d37e35106b210619b8607",
     "packages": [
         {
             "name": "bacon/bacon-qr-code",
@@ -2292,16 +2292,16 @@
         },
         {
             "name": "nativephp/mobile",
-            "version": "dev-element",
+            "version": "4.1.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/NativePHP/mobile-air.git",
-                "reference": "0784ade3bc30a668b6e2c371737c85b5237e8af8"
+                "reference": "7b3882647020c565cf5590e1662586e3472b1ebe"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/NativePHP/mobile-air/zipball/0784ade3bc30a668b6e2c371737c85b5237e8af8",
-                "reference": "0784ade3bc30a668b6e2c371737c85b5237e8af8",
+                "url": "https://api.github.com/repos/NativePHP/mobile-air/zipball/7b3882647020c565cf5590e1662586e3472b1ebe",
+                "reference": "7b3882647020c565cf5590e1662586e3472b1ebe",
                 "shasum": ""
             },
             "require": {
@@ -2335,6 +2335,9 @@
                 "phpstan/phpstan-deprecation-rules": "^1.0",
                 "phpstan/phpstan-phpunit": "^1.0",
                 "spatie/laravel-ray": "^1.26"
+            },
+            "suggest": {
+                "ext-zip": "Required by native:install to validate and extract the downloaded Android PHP binary archives"
             },
             "type": "library",
             "extra": {
@@ -2378,9 +2381,9 @@
             ],
             "support": {
                 "issues": "https://github.com/NativePHP/mobile-air/issues",
-                "source": "https://github.com/NativePHP/mobile-air/tree/element"
+                "source": "https://github.com/NativePHP/mobile-air/tree/4.1.0"
             },
-            "time": "2026-07-10T01:34:51+00:00"
+            "time": "2026-08-07T12:55:28+00:00"
         },
         {
             "name": "nesbot/carbon",
@@ -9561,9 +9564,7 @@
     ],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": {
-        "nativephp/mobile": 20
-    },
+    "stability-flags": {},
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {
