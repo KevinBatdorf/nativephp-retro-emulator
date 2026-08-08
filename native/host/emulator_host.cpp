@@ -413,12 +413,20 @@ int EmulatorHost::loadRom(const uint8_t* rom, size_t size,
                 bootSkipDiscard_.store(true, std::memory_order_relaxed);
                 bootSkipAudioPeak_ = 0.0;
                 activeBackend_->tick(false);
-                uint64_t baseline = frameChecksum();
+                const uint64_t baseline = frameChecksum();
+                uint64_t last = baseline;
+                int stable = 0;
                 while (++extra <= 180) {
                     bootSkipAudioPeak_ = 0.0;
                     activeBackend_->tick(false);
                     if (bootSkipAudioPeak_ > 0.02) break;
-                    if (frameChecksum() != baseline) break;
+                    // A fade changes every frame; an unsettled stop shows its tail.
+                    const uint64_t h = frameChecksum();
+                    if (h != baseline) {
+                        stable = (h == last) ? stable + 1 : 0;
+                        if (stable >= 4) break;
+                    }
+                    last = h;
                 }
                 bootSkipDiscard_.store(false, std::memory_order_relaxed);
             }
