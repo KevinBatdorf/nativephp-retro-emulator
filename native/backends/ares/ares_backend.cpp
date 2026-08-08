@@ -395,6 +395,10 @@ void AresBackend::setOverscan(bool overscan) {
 
 bool AresBackend::applyRuntimeToggle(const std::string& key, bool value) {
     if (!root_) return false;
+    if (key == "rawAudio") {
+        if (!def_ || !def_->setOption) return false;
+        return def_->setOption("rawAudio", value ? "true" : "false");
+    }
     return CoreOptions::applyBoolean(root_, key, value);
 }
 

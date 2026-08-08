@@ -303,6 +303,11 @@ void SameBoyBackend::setOverscan(bool) {
 }
 
 bool SameBoyBackend::applyRuntimeToggle(const std::string& key, bool value) {
+    if (key == "rawAudio" && gb_) {
+        raw_ = value;
+        nativephpCenterDacs = !value;
+        return true;
+    }
     if (key != "colorEmulation" || !gb_) return false;
     colorCorrection_ = value;
     GB_set_color_correction_mode(gb_, value

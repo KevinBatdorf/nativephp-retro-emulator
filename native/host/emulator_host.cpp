@@ -10,9 +10,11 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <thread>
 
 namespace EmuHost {
 
@@ -408,6 +410,9 @@ int EmulatorHost::loadRom(const uint8_t* rom, size_t size,
         const bool play = it != stagedBootOptions_.end()
                           && (it->second == "true" || it->second == "1");
         if (!play) {
+            // The skip listens on cleaned audio regardless of rawAudio, so both variants stop at the same frame.
+            const bool rawCfg = rawAudio_.load(std::memory_order_relaxed);
+            if (rawCfg) activeBackend_->applyRuntimeToggle("rawAudio", false);
             // Phase 1 — to the boot ROM handoff. Consumes the ding and tail.
             int guard = 0;
             while (activeBackend_->inBootIntro() && ++guard <= 600) {
@@ -424,6 +429,11 @@ int EmulatorHost::loadRom(const uint8_t* rom, size_t size,
                 activeBackend_->tick(false);
                 std::vector<uint32_t> baseline, cur, lastFrame;
                 captureFrame(baseline);
+                // Threaded ares screens deliver ~10 ms late; an empty baseline disarms every video exit.
+                for (int wait = 0; wait < 25 && baseline.empty(); wait++) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+                    captureFrame(baseline);
+                }
                 // Content over backdrop is the game's first screen; a logo
                 // fade only touches the logo's own pixels.
                 uint32_t background = 0;
@@ -502,6 +512,7 @@ int EmulatorHost::loadRom(const uint8_t* rom, size_t size,
                 bootSkipLastExtra_ = extra;
                 bootSkipLastSound_ = sound;
             }
+            if (rawCfg) activeBackend_->applyRuntimeToggle("rawAudio", true);
             if (guard) EMUHOST_LOGI("boot animation skipped (%d+%d frames%s)", guard,
                                     extra, bootSkipLastSound_ ? ", sound" : "");
         }
