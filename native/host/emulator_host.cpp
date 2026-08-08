@@ -420,11 +420,12 @@ int EmulatorHost::loadRom(const uint8_t* rom, size_t size,
                     bootSkipAudioPeak_ = 0.0;
                     activeBackend_->tick(false);
                     if (bootSkipAudioPeak_ > 0.02) break;
-                    // A fade changes every frame; an unsettled stop shows its tail.
+                    // A statically held logo passes any stability test; only
+                    // sound may end the skip before the minimum.
                     const uint64_t h = frameChecksum();
-                    if (h != baseline) {
+                    if (extra >= 90 && h != baseline) {
                         stable = (h == last) ? stable + 1 : 0;
-                        if (stable >= 4) break;
+                        if (stable >= 8) break;
                     }
                     last = h;
                 }

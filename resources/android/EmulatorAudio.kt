@@ -118,16 +118,22 @@ class EmulatorAudio(private val core: EmulatorCore) {
             Log.i(TAG, "pump started — sampleRate=$SAMPLE_RATE bufferBytes=${t.bufferSizeInFrames * 8}")
         }
 
-        // Some speaker amps gate on digital silence and click awake at the next
-        // sound; sub-audible noise (~-68 dBFS) holds them open.
-        private var ditherSeed = 0x2545F491.toInt()
+        // Speaker amps gate on near-silence and click awake at the next sound;
+        // an inaudible 19.5 kHz pilot at -46 dBFS keeps them open.
+        private var pilotPhase = 0.0
+        private val pilotStep = 2.0 * Math.PI * 19_500.0 / SAMPLE_RATE
         private fun dither(buf: FloatArray, count: Int) {
-            var s = ditherSeed
-            for (i in 0 until count) {
-                s = s * 1103515245 + 12345
-                buf[i] += ((s shr 16) and 0x7FFF).toFloat() / 32768f * 8e-4f - 4e-4f
+            var phase = pilotPhase
+            var i = 0
+            while (i + 1 < count) {
+                val v = (Math.sin(phase) * 0.005).toFloat()
+                buf[i] += v
+                buf[i + 1] += v
+                phase += pilotStep
+                i += 2
             }
-            ditherSeed = s
+            if (phase > 2.0 * Math.PI) phase -= 2.0 * Math.PI * Math.floor(phase / (2.0 * Math.PI))
+            pilotPhase = phase
         }
 
         private fun pumpLoop(track: AudioTrack) {
