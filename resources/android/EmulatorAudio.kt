@@ -118,6 +118,18 @@ class EmulatorAudio(private val core: EmulatorCore) {
             Log.i(TAG, "pump started — sampleRate=$SAMPLE_RATE bufferBytes=${t.bufferSizeInFrames * 8}")
         }
 
+        // Some speaker amps gate on digital silence and click awake at the next
+        // sound; sub-audible noise (~-68 dBFS) holds them open.
+        private var ditherSeed = 0x2545F491.toInt()
+        private fun dither(buf: FloatArray, count: Int) {
+            var s = ditherSeed
+            for (i in 0 until count) {
+                s = s * 1103515245 + 12345
+                buf[i] += ((s shr 16) and 0x7FFF).toFloat() / 32768f * 8e-4f - 4e-4f
+            }
+            ditherSeed = s
+        }
+
         private fun pumpLoop(track: AudioTrack) {
             var lastStatNanos = System.nanoTime()
             while (true) {
@@ -129,6 +141,8 @@ class EmulatorAudio(private val core: EmulatorCore) {
                 val src = source
                 if (src == null || paused) {
                     if (lastL != 0f || lastR != 0f) writeTailRamp(track)
+                    java.util.Arrays.fill(silence, 0f)
+                    dither(silence, silence.size)
                     track.write(silence, 0, silence.size, AudioTrack.WRITE_BLOCKING)
                     continue
                 }
@@ -150,6 +164,7 @@ class EmulatorAudio(private val core: EmulatorCore) {
                         lastL = drainBuffer[n - 2]
                         lastR = drainBuffer[n - 1]
                     }
+                    dither(drainBuffer, n)
                     var written = 0
                     while (written < n) {
                         val result = track.write(

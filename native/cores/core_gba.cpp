@@ -14,8 +14,22 @@ namespace {
 using SystemRegistry::CartridgePak;
 using SystemRegistry::SystemDef;
 
+bool bootIntroDone = false;
+
 auto loadGba(ares::Node::System& root, const SystemDef&, const std::string& loadName) -> bool {
+    bootIntroDone = false;
     return ares::GameBoyAdvance::load(root, nall::string(loadName.c_str()));
+}
+
+// The BIOS animation ends when PC reaches the 0x08000000 cartridge entry;
+// latched because games call back into the BIOS during play.
+auto inBootIntro() -> bool {
+    if (bootIntroDone) return false;
+    if ((uint32_t)ares::GameBoyAdvance::cpu.processor.r15 >= 0x08000000) {
+        bootIntroDone = true;
+        return false;
+    }
+    return true;
 }
 
 // 256KB EWRAM at 0x02000000 — the general-purpose work RAM.
@@ -55,6 +69,7 @@ const SystemDef kDef = {
     .clearEntryPoints = clearEntryPoints,
     .setOption     = setOption,
     .getOption     = getOption,
+    .inBootIntro   = inBootIntro,
 };
 
 const SystemRegistry::Registrar kRegistrar{&kDef};
