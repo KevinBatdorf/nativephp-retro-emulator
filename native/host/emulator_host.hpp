@@ -257,6 +257,7 @@ private:
     // rail is not sound. The tick that trips the guard is buffered and
     // replayed so the triggering attack is not eaten. Emulation thread only.
     std::atomic<bool> bootSkipDiscard_ {false};
+    std::atomic<bool> bootSkipVideoHold_ {false};
     int  bootSkipLastExtra_ = 0;
     bool bootSkipLastSound_ = false;
     double bootSkipAudioPeak_ = 0.0;

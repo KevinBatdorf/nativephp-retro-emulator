@@ -483,6 +483,21 @@ int EmulatorHost::loadRom(const uint8_t* rom, size_t size,
                         pushAudioFrame(preroll[i], preroll[i + 1]);
                     }
                 }
+                // A blank LCD presented at load flashes against the black surface.
+                bootSkipVideoHold_.store(true, std::memory_order_relaxed);
+                std::vector<uint32_t> held;
+                for (int hold = 0; hold < 60; hold++) {
+                    captureFrame(held);
+                    if (held.empty()) break;
+                    std::unordered_map<uint32_t, uint32_t> histo;
+                    uint32_t modal = 0;
+                    for (uint32_t px : held) {
+                        if (++histo[px] > modal) modal = histo[px];
+                    }
+                    if (modal < held.size() - held.size() / 200) break;
+                    activeBackend_->tick(false);
+                }
+                bootSkipVideoHold_.store(false, std::memory_order_relaxed);
                 bootSkipTickAudio_.clear();
                 bootSkipLastExtra_ = extra;
                 bootSkipLastSound_ = sound;
@@ -1381,7 +1396,8 @@ void EmulatorHost::pushFrame(const uint32_t* argb, uint32_t width, uint32_t heig
         }
     }
     // Boot-skip phase 2 reads these frames for its checksum; never presented.
-    frameDirty_ = !bootSkipDiscard_.load(std::memory_order_relaxed);
+    frameDirty_ = !bootSkipDiscard_.load(std::memory_order_relaxed)
+                  && !bootSkipVideoHold_.load(std::memory_order_relaxed);
 }
 
 // 60 Hz: below this the GB path measures 30 dB hotter than the reference.
