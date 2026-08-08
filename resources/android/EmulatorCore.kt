@@ -246,6 +246,10 @@ class EmulatorCore {
      */
     fun readAudio(buffer: FloatArray): Int = nativeReadAudio(buffer)
 
+    /** Last boot skip: phase-2 frames ran, and whether the sound guard ended it. */
+    fun bootSkipExtraFrames(): Int = nativeBootSkipExtraFrames()
+    fun bootSkipStoppedOnSound(): Boolean = nativeBootSkipStoppedOnSound()
+
     /**
      * Write the current button bitmask for one controller port. Safe to call
      * from any thread. Bit positions match [EmulatorInput] companion constants.
@@ -476,6 +480,8 @@ class EmulatorCore {
     private external fun nativeGetRefreshRateHint(): Double
 
     private external fun nativeReadAudio(buffer: FloatArray): Int
+    private external fun nativeBootSkipExtraFrames(): Int
+    private external fun nativeBootSkipStoppedOnSound(): Boolean
 
     private external fun nativeSetInputState(port: Int, buttons: Int)
     private external fun nativeGetInputState(port: Int): Int

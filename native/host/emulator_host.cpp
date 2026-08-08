@@ -401,6 +401,8 @@ int EmulatorHost::loadRom(const uint8_t* rom, size_t size,
     systemLoaded_ = true;
     romLoaded_    = true;
 
+    bootSkipLastExtra_ = 0;
+    bootSkipLastSound_ = false;
     {
         auto it = stagedBootOptions_.find("bootAnimation");
         const bool play = it != stagedBootOptions_.end()
@@ -482,8 +484,11 @@ int EmulatorHost::loadRom(const uint8_t* rom, size_t size,
                     }
                 }
                 bootSkipTickAudio_.clear();
+                bootSkipLastExtra_ = extra;
+                bootSkipLastSound_ = sound;
             }
-            if (guard) EMUHOST_LOGI("boot animation skipped (%d+%d frames)", guard, extra);
+            if (guard) EMUHOST_LOGI("boot animation skipped (%d+%d frames%s)", guard,
+                                    extra, bootSkipLastSound_ ? ", sound" : "");
         }
     }
 

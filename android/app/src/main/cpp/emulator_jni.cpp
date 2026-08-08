@@ -436,6 +436,21 @@ Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeReadAudio(
     return (jint)count;
 }
 
+// Boot-skip diagnostics — semantics in EmulatorHost::bootSkipStoppedOnSound().
+JNIEXPORT jint JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeBootSkipExtraFrames(
+    JNIEnv*, jobject)
+{
+    return g_host ? (jint)g_host->bootSkipExtraFrames() : 0;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeBootSkipStoppedOnSound(
+    JNIEnv*, jobject)
+{
+    return g_host && g_host->bootSkipStoppedOnSound() ? JNI_TRUE : JNI_FALSE;
+}
+
 // Input ---------------------------------------------------------
 
 /**

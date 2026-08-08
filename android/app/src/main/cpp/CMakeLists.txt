@@ -44,6 +44,10 @@ add_custom_command(
             "${ARES_ROOT}" "${FIRMWARE_DIR}"
     DEPENDS "${NATIVE_ROOT}/../scripts/generate_firmware.py"
             "${NATIVE_ROOT}/firmware/gba_open_bios.bin"
+            "${NATIVE_ROOT}/firmware/sameboy_dmg_boot.bin"
+            "${NATIVE_ROOT}/firmware/sameboy_cgb_boot.bin"
+            "${NATIVE_ROOT}/firmware/sameboy_dmg_boot_fast.bin"
+            "${NATIVE_ROOT}/firmware/sameboy_cgb_boot_fast.bin"
     COMMENT "Generating embedded firmware from ares submodule"
 )
 

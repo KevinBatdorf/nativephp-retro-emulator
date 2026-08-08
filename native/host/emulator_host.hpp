@@ -116,6 +116,10 @@ public:
     // Audio out ------------------------------------------------------------
     size_t readAudio(float* out, size_t capacity);            // drain thread
 
+    // A sound stop within the first phase-2 frames means boot-ROM audio leaked.
+    int  bootSkipExtraFrames() const { return bootSkipLastExtra_; }
+    bool bootSkipStoppedOnSound() const { return bootSkipLastSound_; }
+
     // Save states ----------------------------------------------------------
     // Host file I/O + a backend tag header; legacy untagged files load as
     // ares (see stateTag notes in the .cpp). Emulation thread only.
@@ -253,6 +257,8 @@ private:
     // rail is not sound. The tick that trips the guard is buffered and
     // replayed so the triggering attack is not eaten. Emulation thread only.
     std::atomic<bool> bootSkipDiscard_ {false};
+    int  bootSkipLastExtra_ = 0;
+    bool bootSkipLastSound_ = false;
     double bootSkipAudioPeak_ = 0.0;
     double bootSkipDcL_ = 0.0, bootSkipDcR_ = 0.0;
     bool bootSkipDcPrimed_ = false;

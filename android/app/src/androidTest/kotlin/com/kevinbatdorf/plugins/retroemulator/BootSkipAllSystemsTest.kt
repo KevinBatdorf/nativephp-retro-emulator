@@ -47,16 +47,32 @@ class BootSkipAllSystemsTest {
                     "$sys/$backend loadRom failed"
                 }
                 var audio = 0L
+                var earlyPeak = 0f
                 val buf = FloatArray(8192)
-                repeat(150) {
+                repeat(150) { i ->
                     core.tick()
                     while (true) {
                         val n = core.readAudio(buf)
                         if (n <= 0) break
+                        if (i < 3) {
+                            for (s in 0 until n) {
+                                val a = kotlin.math.abs(buf[s])
+                                if (a > earlyPeak) earlyPeak = a
+                            }
+                        }
                         audio += n
                     }
                 }
-                results.append("$sys/$backend ok audio=$audio; ")
+                val extra = core.bootSkipExtraFrames()
+                val onSound = core.bootSkipStoppedOnSound()
+                if (sys == "gb" || sys == "gbc") {
+                    // A sound stop within 3 frames of handoff is boot audio, not game music.
+                    assert(!(onSound && extra <= 3)) {
+                        "$sys/$backend/$name boot audio leaked (sound stop at +$extra)"
+                    }
+                }
+                results.append(
+                    "$sys/$backend ok audio=$audio extra=$extra sound=$onSound peak=$earlyPeak; ")
                 android.util.Log.i("BootSkipAllSystems", "BOOTED $sys/$backend audioFloats=$audio")
             } finally {
                 core.destroy()
