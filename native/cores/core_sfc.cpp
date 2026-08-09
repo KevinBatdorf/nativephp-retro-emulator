@@ -76,6 +76,7 @@ const SystemDef kDef = {
     .clearEntryPoints = clearEntryPoints,
     .setOption     = setOption,
     .getOption     = getOption,
+    .runtimeToggles = {"deepBlackBoost"},
 };
 
 const SystemRegistry::Registrar kRegistrar{&kDef};

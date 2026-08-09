@@ -1303,6 +1303,7 @@ std::string EmulatorHost::backendsJson() {
     json += "]";
     for (auto& id : Backends::availableSystems()) {
         std::string claimants;
+        std::string capabilities;
         for (auto& name : Backends::names()) {
             auto* backend = Backends::byName(name);
             if (!backend) continue;
@@ -1310,9 +1311,40 @@ std::string EmulatorHost::backendsJson() {
             if (std::find(ids.begin(), ids.end(), id) == ids.end()) continue;
             if (!claimants.empty()) claimants += ",";
             claimants += "\"" + name + "\"";
+            if (!capabilities.empty()) capabilities += ",";
+            capabilities += "\"" + name + "\":" + capabilitiesJson(backend->capabilities(id));
         }
-        json += ",\"" + id + "\":{\"backends\":[" + claimants + "]}";
+        json += ",\"" + id + "\":{\"backends\":[" + claimants + "]"
+              + ",\"capabilities\":{" + capabilities + "}}";
     }
+    return json + "}";
+}
+
+std::string EmulatorHost::capabilitiesJson(const Capabilities& caps) {
+    auto flag = [](bool value) { return value ? "true" : "false"; };
+    std::string toggles;
+    std::string bootOptions;
+    for (auto& option : caps.options) {
+        auto& list = option.stage == OptionInfo::Stage::Runtime ? toggles : bootOptions;
+        // Engine options (libretro's Enum/String schema) have their own
+        // introspection channel (engineOptions); here only the wrapper's
+        // boolean config surface is capability data.
+        if (option.kind != OptionInfo::Kind::Boolean) continue;
+        if (!list.empty()) list += ",";
+        list += "\"" + option.key + "\"";
+    }
+
+    std::string json = "{";
+    json += "\"videoSettings\":"; json += flag(caps.videoSettings);
+    json += ",\"rumble\":";       json += flag(caps.rumble);
+    json += ",\"serialize\":";    json += flag(caps.serialize);
+    json += ",\"cheats\":";       json += flag(caps.cheats);
+    json += ",\"memoryAccess\":"; json += flag(caps.memoryAccess);
+    json += ",\"slottedMedia\":"; json += flag(caps.slottedMedia);
+    json += ",\"multitap\":";     json += flag(caps.multitap);
+    json += ",\"mouse\":";        json += flag(caps.mouse);
+    json += ",\"toggles\":[" + toggles + "]";
+    json += ",\"bootOptions\":[" + bootOptions + "]";
     return json + "}";
 }
 

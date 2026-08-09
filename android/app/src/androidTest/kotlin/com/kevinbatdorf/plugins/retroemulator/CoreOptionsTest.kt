@@ -15,6 +15,41 @@ import java.io.File
 class CoreOptionsTest {
 
     @Test
+    fun aresDeclaresTogglesPerSystem() {
+        val core = EmulatorCore()
+        try {
+            assert(core.init())
+
+            // Claims come from capabilities(systemId), so staging suffices —
+            // no ROM boot needed.
+            assert(core.loadSystem("sfc"))
+            assert(core.toggleSupported("deepBlackBoost")) { "sfc declares Deep Black Boost" }
+            assert(!core.toggleSupported("colorEmulation")) { "sfc has no Color Emulation node" }
+            assert(!core.toggleSupported("showIcons")) { "no shipped system declares Show Icons" }
+
+            assert(core.loadSystem("gb", backend = "ares"))
+            assert(core.toggleSupported("interframeBlending")) { "gb declares Interframe Blending" }
+            assert(!core.toggleSupported("colorEmulation")) {
+                "DMG Color Emulation is a String palette, not a Boolean toggle"
+            }
+            assert(!core.toggleSupported("deepBlackBoost")) { "Deep Black Boost is SNES-only" }
+
+            assert(core.loadSystem("gbc", backend = "ares"))
+            assert(core.toggleSupported("colorEmulation")) { "CGB declares Color Emulation" }
+            assert(core.toggleSupported("interframeBlending")) { "CGB declares Interframe Blending" }
+
+            assert(core.loadSystem("gba", backend = "ares"))
+            assert(core.toggleSupported("colorEmulation")) { "GBA declares Color Emulation" }
+            assert(core.toggleSupported("interframeBlending")) { "GBA declares Interframe Blending" }
+
+            assert(core.loadSystem("md"))
+            assert(!core.toggleSupported("interframeBlending")) { "md declares no Boolean toggles" }
+        } finally {
+            core.destroy()
+        }
+    }
+
+    @Test
     fun deepBlackBoostTogglesOnSnesAndIsAbsentElsewhere() {
         val core = EmulatorCore()
         try {

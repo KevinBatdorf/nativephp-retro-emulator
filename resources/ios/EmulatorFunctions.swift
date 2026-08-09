@@ -838,6 +838,18 @@ enum EmulatorFunctions {
                 )
             }
 
+            let configureKeys: Set<String> = ["speed", "runAhead", "rewind", "rewindBufferSeconds", "engineOptions"]
+            if let unknown = options.keys.first(where: { !configureKeys.contains($0) }) {
+                // Loud, not silent: a swallowed key reads as applied.
+                return BridgeResponse.error(
+                    code: "INVALID_PARAMETERS",
+                    message: "Configure does not accept '\(unknown)' — it takes "
+                        + configureKeys.sorted().joined(separator: ", ")
+                        + "; other options are LoadSystem config or a dedicated setter "
+                        + "(SetVideo, SetAudio, SetShader, SetSystemOptions)"
+                )
+            }
+
             if let runAhead = (options["runAhead"] as? NSNumber)?.intValue {
                 guard (0...1).contains(runAhead) else {
                     return BridgeResponse.error(
@@ -1232,7 +1244,8 @@ enum EmulatorFunctions {
                 let entry = backends[id] as? [String: Any]
                 return ["id": id, "name": name, "stable": stable,
                         "supported": compiled.contains(id),
-                        "backends": entry?["backends"] as? [String] ?? []]
+                        "backends": entry?["backends"] as? [String] ?? [],
+                        "capabilities": entry?["capabilities"] as? [String: Any] ?? [:]]
             }
             let systems: [[String: Any]] = [
                 system("fc",  "NES / Famicom",             stable: true),

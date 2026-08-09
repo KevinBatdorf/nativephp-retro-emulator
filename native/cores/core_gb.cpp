@@ -66,6 +66,9 @@ const SystemDef kDef = {
     .makeCartridgePak = cartridgePak,
     .makeSlotPak   = nullptr,
     .clearEntryPoints = clearEntryPoints,
+    // DMG's "Color Emulation" is a String palette node, not a Boolean —
+    // only CGB gets the boolean toggle (gb/ppu/ppu.cpp:32-52).
+    .runtimeToggles = {"interframeBlending"},
 };
 
 // Game Boy Color — the same ares core booted as its CGB model (system.cpp:9
@@ -84,6 +87,7 @@ const SystemDef kDefCgb = {
     .makeCartridgePak = cartridgePakCgb,
     .makeSlotPak   = nullptr,
     .clearEntryPoints = clearEntryPoints,
+    .runtimeToggles = {"colorEmulation", "interframeBlending"},
 };
 
 const SystemRegistry::Registrar kRegistrar{&kDef};

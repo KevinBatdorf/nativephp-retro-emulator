@@ -60,7 +60,8 @@ $bytes = $emu->readMemory(0x7E0010);       // sync WRAM read, returns int[]
 $emu->watchMemory(0x7E0010, length: 2);    // fires MemoryChanged on change
 $emu->setVideo(luminance: 90)->setVolume(80)->setShader($presetPath);
 
-Emulator::systems();                       // [{id, name, stable, supported}, …]
+Emulator::systems();          // [{id, name, stable, supported, backends, capabilities}, …]
+Emulator::capabilities('gb', 'sameboy');   // one engine's flags + toggles for a system
 </code-snippet>
 @endverbatim
 

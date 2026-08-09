@@ -702,13 +702,19 @@ class Emulator
     }
 
     /**
-     * Return all ares systems as rich objects. `supported` reflects whether
-     * the system's core is compiled into this build's native library.
+     * Return all systems as rich objects. `supported` reflects whether the
+     * system's core is compiled into this build's native library. `backends`
+     * lists the engines serving the system in this build (bring-your-own
+     * libretro cores appear once fetched), and `capabilities` carries one
+     * object per backend: videoSettings/rumble/serialize/cheats/memoryAccess/
+     * slottedMedia/multitap/mouse flags plus `toggles` (the boolean
+     * setSystemOptions keys this engine+system pair accepts) and
+     * `bootOptions` (boot-only booleans such as pixelAccuracy, rawAudio).
      *
      * GetSystems has no error path, so this static query talks to the bridge
      * directly rather than through the instance-scoped call() router.
      *
-     * @return array<int, array{id: string, name: string, stable: bool, supported: bool}>
+     * @return array<int, array{id: string, name: string, stable: bool, supported: bool, backends: array<int, string>, capabilities: array<string, array<string, mixed>>}>
      */
     public static function systems(): array
     {
@@ -719,6 +725,24 @@ class Emulator
                 $decoded = json_decode($result, true);
 
                 return $decoded['systems'] ?? [];
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * One backend's capability object for a system, from the same data
+     * systems() returns — [] when the pair is unknown (off-device, a system
+     * this build lacks, or an engine that does not serve it).
+     *
+     * @return array{videoSettings?: bool, rumble?: bool, serialize?: bool, cheats?: bool, memoryAccess?: bool, slottedMedia?: bool, multitap?: bool, mouse?: bool, toggles?: array<int, string>, bootOptions?: array<int, string>}
+     */
+    public static function capabilities(string $system, string $backend): array
+    {
+        foreach (self::systems() as $entry) {
+            if (($entry['id'] ?? '') === $system) {
+                return $entry['capabilities'][$backend] ?? [];
             }
         }
 

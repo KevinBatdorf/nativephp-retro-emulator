@@ -66,6 +66,12 @@ struct SystemDef {
 
     // True while the console's boot animation runs; nullptr = none detectable.
     bool (*inBootIntro)() = nullptr;
+
+    // Runtime boolean toggles this core's node tree actually declares
+    // (wrapper keys, see CoreOptions::nodeName). applyBoolean silently
+    // no-ops on a missing node, so capability reporting must not claim
+    // more than this list.
+    std::vector<std::string> runtimeToggles;
 };
 
 // Registers a compiled core at static-init time: dlopen (Android's modular

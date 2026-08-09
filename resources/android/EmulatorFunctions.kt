@@ -34,6 +34,10 @@ object EmulatorFunctions {
     // core doesn't declare it (see native/core_options.hpp).
     private val CORE_TOGGLE_KEYS = listOf("colorEmulation", "deepBlackBoost", "interframeBlending", "showIcons")
 
+    // The full Configure surface; anything else is INVALID_PARAMETERS so a
+    // typo'd or misplaced key can't read as applied.
+    private val CONFIGURE_KEYS = setOf("speed", "runAhead", "rewind", "rewindBufferSeconds", "engineOptions")
+
     private data class SurfaceEntry(
         val renderer: EmulatorRenderer,
         val activity: FragmentActivity,
@@ -960,6 +964,18 @@ object EmulatorFunctions {
                 )
             }
 
+            val unknown = options.keys - CONFIGURE_KEYS
+            if (unknown.isNotEmpty()) {
+                // Loud, not silent: a swallowed key reads as applied.
+                return BridgeResponse.error(
+                    "INVALID_PARAMETERS",
+                    "Configure does not accept '${unknown.first()}' — it takes " +
+                        CONFIGURE_KEYS.joinToString(", ") +
+                        "; other options are LoadSystem config or a dedicated setter " +
+                        "(SetVideo, SetAudio, SetShader, SetSystemOptions)",
+                )
+            }
+
             (options["runAhead"] as? Number)?.toInt()?.let { frames ->
                 if (frames !in 0..1) {
                     return BridgeResponse.error(
@@ -1459,8 +1475,24 @@ object EmulatorFunctions {
                 "id" to id, "name" to name,
                 "stable" to stable, "supported" to (id in compiled),
                 "backends" to engines,
+                "capabilities" to capabilities(entry, engines),
             )
         }
+
+        private fun capabilities(entry: JSONObject?, engines: List<String>): Map<String, Any> {
+            val all = entry?.optJSONObject("capabilities") ?: return emptyMap()
+            return engines.mapNotNull { engine ->
+                all.optJSONObject(engine)?.let { engine to jsonToMap(it) }
+            }.toMap()
+        }
+
+        private fun jsonToMap(obj: JSONObject): Map<String, Any> =
+            obj.keys().asSequence().associateWith { key ->
+                when (val value = obj.get(key)) {
+                    is org.json.JSONArray -> (0 until value.length()).map { value.getString(it) }
+                    else -> value
+                }
+            }
     }
 
     /**

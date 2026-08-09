@@ -75,14 +75,19 @@ EmuHost::Capabilities AresBackend::capabilities(const std::string& systemId) con
         caps.multitap  = sys->multitapName != nullptr;
         caps.mouse     = sys->extraDevices.count("Mouse") > 0;
     }
-    if (def->setOption) {
-        caps.options.push_back({"Pixel Accuracy",
+    // Probe boot options via the core's readback: setOption presence
+    // doesn't imply Pixel Accuracy (gb's serves rawAudio, md's TMSS).
+    if (def->getOption && !def->getOption("Pixel Accuracy").empty()) {
+        caps.options.push_back({"pixelAccuracy",
                                 EmuHost::OptionInfo::Stage::Boot,
                                 EmuHost::OptionInfo::Kind::Boolean, {}});
     }
-    // Runtime toggles route through the CoreOptions scan; which nodes exist
-    // depends on the booted core, so the list stays the wrapper's known keys.
-    for (auto* key : {"colorEmulation", "deepBlackBoost", "interframeBlending", "showIcons"}) {
+    if (def->getOption && !def->getOption("rawAudio").empty()) {
+        caps.options.push_back({"rawAudio",
+                                EmuHost::OptionInfo::Stage::Boot,
+                                EmuHost::OptionInfo::Kind::Boolean, {}});
+    }
+    for (const auto& key : def->runtimeToggles) {
         caps.options.push_back({key,
                                 EmuHost::OptionInfo::Stage::Runtime,
                                 EmuHost::OptionInfo::Kind::Boolean, {}});

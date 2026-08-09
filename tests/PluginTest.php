@@ -231,6 +231,10 @@ describe('Emulator class', function () {
     it('systems returns empty array without native runtime', function () {
         expect(Emulator::systems())->toBe([]);
     });
+
+    it('capabilities returns empty array without native runtime', function () {
+        expect(Emulator::capabilities('gb', 'ares'))->toBe([]);
+    });
 });
 
 describe('Events', function () {

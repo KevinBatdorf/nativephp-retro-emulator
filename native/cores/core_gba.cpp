@@ -70,6 +70,7 @@ const SystemDef kDef = {
     .setOption     = setOption,
     .getOption     = getOption,
     .inBootIntro   = inBootIntro,
+    .runtimeToggles = {"colorEmulation", "interframeBlending"},
 };
 
 const SystemRegistry::Registrar kRegistrar{&kDef};

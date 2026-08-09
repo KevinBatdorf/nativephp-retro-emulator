@@ -90,8 +90,8 @@ $emu = Emulator::surface('main');   // binds the named <native:emulator>
 | `setSpeed(float)` | 0.25–4.0 multiplier, 1.0 native |
 | `fastForward(bool)` | |
 | `toggleRewind()` | Needs `rewind: true` in config/configure; throws `REWIND_DISABLED` otherwise |
-| `configure(array)` | Runtime merge: `speed`, `runAhead` (0\|1), `rewind`, `rewindBufferSeconds`, `engineOptions` |
-| `setSystemOptions(array)` | Per-system toggles (`deepBlackBoost`, `colorEmulation`, `interframeBlending`) |
+| `configure(array)` | Runtime merge: `speed`, `runAhead` (0\|1), `rewind`, `rewindBufferSeconds`, `engineOptions`; any other key throws `INVALID_PARAMETERS` (`pixelAccuracy` specifically throws `BOOT_ONLY_OPTION`) |
+| `setSystemOptions(array)` | Per-system toggles (`deepBlackBoost`, `colorEmulation`, `interframeBlending`); enabling one the engine+system pair lacks throws `UNSUPPORTED_OPTION` — the legal set is `capabilities()['toggles']` |
 
 ### Save states and battery saves
 
@@ -151,7 +151,14 @@ codes are not parsed (convert first). `removeCheat`, `clearCheats`,
 
 `status(): Status`, `accuracy(): ?Accuracy` (what the running core actually
 bound), `region(): string`, `ports(): array`, `engineOptions(): array`,
-`Emulator::systems()` (id, name, stable, supported, backends per system).
+`Emulator::systems()` (id, name, stable, supported, backends per system, and
+`capabilities` — one object per backend with videoSettings/rumble/serialize/
+cheats/memoryAccess/slottedMedia/multitap/mouse flags, `toggles` = the boolean
+setSystemOptions keys that engine+system accepts, `bootOptions` = boot-only
+booleans like pixelAccuracy/rawAudio). `Emulator::capabilities($system,
+$backend)` returns one pair's object directly. Consumers should read
+capabilities instead of hardcoding engine tables — the lists come from what
+each core actually declares.
 
 ### Configs
 

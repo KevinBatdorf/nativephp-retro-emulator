@@ -156,10 +156,15 @@ public:
     bool toggleSupported(const std::string& key) const;
     // The engine serving calls right now: active, else staged, else "".
     std::string backendName() const;
-    // {"engines":[…], "gb":{"backends":["ares","sameboy"]}, …} for every
-    // available system — the introspection the PHP layer surfaces. No
-    // "default" key on purpose: unnamed boots run the built-in engine.
+    // {"engines":[…], "gb":{"backends":["ares","sameboy"],
+    // "capabilities":{"ares":{…,"toggles":[…],"bootOptions":[…]}, …}}, …}
+    // for every available system — the introspection the PHP layer
+    // surfaces. No "default" key on purpose: unnamed boots run the
+    // built-in engine.
     static std::string backendsJson();
+    // One backend's Capabilities as a JSON object; toggles carry the
+    // Runtime Boolean options, bootOptions the Boot ones.
+    static std::string capabilitiesJson(const Capabilities& caps);
     // Engine-declared options (libretro cores). Set returns "" or the
     // refusal message the bridge surfaces as UNSUPPORTED_OPTION; `staged`
     // targets the engine the next boot uses. The JSON lists the schema:

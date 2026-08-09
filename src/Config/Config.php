@@ -38,8 +38,9 @@ class Config
      *                                    the game starts where the console hands
      *                                    off. Systems without one are unaffected.
      * @param  float|null  $speed  Multiplier, 0.25–4.0; 1.0 is native speed.
-     * @param  bool|null  $overscan  Trims the overscan border (trims by default);
-     *                               no effect on systems with no overscan region.
+     * @param  bool|null  $overscan  True shows the overscan border; the default
+     *                               (false) trims it. No effect on systems with
+     *                               no overscan region.
      * @param  bool|null  $colorBleed  Composite color-bleed filter; no effect on
      *                                 systems without composite video (handhelds).
      * @param  InputCapture|null  $inputCapture  Resolved when the surface is
