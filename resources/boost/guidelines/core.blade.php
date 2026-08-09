@@ -1,6 +1,7 @@
 ## kevinbatdorf/retro-emulator
 
-Native retro-game emulation (the ares core) for NativePHP Mobile. The emulator renders on a
+Native retro-game emulation for NativePHP Mobile with pluggable engines — ares, SameBoy and
+mGBA are bundled, and any fetched libretro core loads by name. The emulator renders on a
 native surface positioned by the EDGE layout engine; PHP drives the lifecycle and reads
 emulated RAM live. There is **no JavaScript API** — all control is PHP-side.
 
@@ -79,6 +80,11 @@ Key API facts an assistant gets wrong without being told:
   (only SNES and GBA have two).
 - No system needs a BIOS file — firmware is embedded (GBA boots an open BIOS; a real dump via
   `biosPath` is an optional accuracy override).
+- `backend` picks the engine per boot (`'sameboy'`, `'mgba'`, or a libretro core name);
+  omitted, each system boots its default engine.
+- Console boot intros are skipped by default — `bootAnimation: true` plays them. The plugin's
+  audio corrections are also on by default — `rawAudio: true` restores the engine's own
+  untouched output.
 
 Supported systems in the current build: `fc`, `sfc`, `gb`, `gbc`, `gba`, `md`
 (`Emulator::systems()` reports `supported` per system). Memory addresses are console bus
