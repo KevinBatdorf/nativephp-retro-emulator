@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Container\Container;
 use KevinBatdorf\RetroEmulator\Accuracy;
 use KevinBatdorf\RetroEmulator\AspectCorrection;
 use KevinBatdorf\RetroEmulator\Backend;
@@ -36,6 +37,7 @@ use KevinBatdorf\RetroEmulator\RetroEmulatorServiceProvider;
 use KevinBatdorf\RetroEmulator\Status;
 use KevinBatdorf\RetroEmulator\System;
 use KevinBatdorf\RetroEmulator\VideoOutput;
+use Psr\Log\AbstractLogger;
 
 describe('Plugin Manifest', function () {
     beforeEach(function () {
@@ -777,19 +779,19 @@ describe('Typed layer', function () {
     });
 
     it('warns in the log when a boot lands off the preferred engine', function () {
-        $log = new class extends \Psr\Log\AbstractLogger
+        $log = new class extends AbstractLogger
         {
             /** @var string[] */
             public array $warnings = [];
 
-            public function log($level, \Stringable|string $message, array $context = []): void
+            public function log($level, Stringable|string $message, array $context = []): void
             {
                 if ($level === 'warning') {
                     $this->warnings[] = (string) $message;
                 }
             }
         };
-        \Illuminate\Container\Container::getInstance()->instance('log', $log);
+        Container::getInstance()->instance('log', $log);
         $GLOBALS['__nativephp_mock']['Emulator.LoadSystem'] = json_encode([
             'status' => 'staged', 'system' => 'sfc', 'backend' => 'ares',
         ]);
@@ -810,7 +812,7 @@ describe('Typed layer', function () {
         } finally {
             config()->set('retro-emulator.backends', []);
             unset($GLOBALS['__nativephp_mock']['Emulator.LoadSystem']);
-            \Illuminate\Container\Container::getInstance()->forgetInstance('log');
+            Container::getInstance()->forgetInstance('log');
         }
     });
 
@@ -867,6 +869,16 @@ describe('Typed layer', function () {
             'colorEmulation' => true,
             'interframeBlending' => true,
         ]);
+    });
+
+    it('GbaConfig carries the same display toggles for ares boots', function () {
+        $config = new GbaConfig(colorEmulation: true, interframeBlending: true);
+
+        expect($config->toArray())->toBe([
+            'colorEmulation' => true,
+            'interframeBlending' => true,
+        ]);
+        expect((new GbaConfig)->toArray())->toBe([]);
     });
 
     it('the accuracy preset resolves to the pixelAccuracy wire flag', function () {

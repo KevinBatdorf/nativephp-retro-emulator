@@ -164,6 +164,9 @@ each core actually declares.
 
 `Config` (shareable house style) and per-system `SystemConfig` subclasses:
 `SfcConfig`, `FcConfig`, `GbConfig` (gb+gbc), `GbaConfig`, `MdConfig`.
+`GbaConfig` carries the same `colorEmulation`/`interframeBlending` toggles as
+`GbConfig` — ares' GBA core declares both; booting mGBA with one enabled
+throws `UNSUPPORTED_OPTION`.
 
 Base `Config` also carries two all-or-nothing booleans, both default **off**:
 
