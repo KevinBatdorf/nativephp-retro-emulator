@@ -45,6 +45,18 @@ present are skipped and the boot lands on the built-in engine, ares.
 Embedding a core you compiled yourself as a signed framework is possible
 but on you; the loader probes `<name>_libretro_ios.dylib`.
 
+| System | Android | iOS |
+|---|---|---|
+| NES | ares, fceumm, mesen | ares |
+| SNES | ares, snes9x, bsnes | ares |
+| Game Boy / Color | ares, SameBoy | ares, SameBoy |
+| GBA | ares, mGBA | ares, mGBA |
+| Genesis | ares, picodrive, genesis_plus_gx | ares |
+
+Android can bundle any additional libretro core the same way — fetch it
+(or drop the `.so` into `resources/emulator-cores/`) and it appears in
+the next build.
+
 ## Show me
 
 Step one: drop the element into a view. It boots when it mounts, and the
