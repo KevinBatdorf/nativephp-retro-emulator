@@ -135,8 +135,9 @@ final class EmulatorRenderer: UIView {
         return json
     }
 
-    /// Per-system engine availability + default pick, parsed from the native
-    /// JSON: `["gb": (backends: [...], default: "sameboy"), …]`.
+    /// Per-system engine availability, parsed from the native JSON:
+    /// `["gb": (backends: [...], capabilities: [...]), …]`. No default key —
+    /// unnamed boots run the built-in engine.
     static var backendsJson: [String: Any] {
         let raw = String(cString: emu_get_backends_json())
         let data = raw.data(using: .utf8) ?? Data()

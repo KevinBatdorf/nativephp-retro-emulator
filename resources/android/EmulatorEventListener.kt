@@ -15,7 +15,7 @@ interface EmulatorEventListener {
     /**
      * Fired when a watched address changes value.
      *
-     * @param address  Bus address (0x7E0000–0x7FFFFF).
+     * @param address  Console bus address in the system's work-RAM window.
      * @param oldValue Previous packed integer value.
      * @param newValue New packed integer value.
      */

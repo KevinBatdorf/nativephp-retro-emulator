@@ -11,10 +11,11 @@ use KevinBatdorf\RetroEmulator\VideoOutput;
 class GbConfig extends SystemConfig
 {
     /**
-     * colorEmulation matches CGB colors to a real Game Boy Color screen (no
-     * effect on original Game Boy). interframeBlending emulates handheld-LCD
-     * ghosting so flicker-transparency effects read as translucent. Both default
-     * off.
+     * colorEmulation matches CGB colors to a real Game Boy Color screen. On
+     * original Game Boy it is per-engine: SameBoy accepts it; ares models the
+     * DMG palette as a different mechanism, so enabling it there throws
+     * UNSUPPORTED_OPTION. interframeBlending emulates handheld-LCD ghosting
+     * so flicker-transparency effects read as translucent. Both default off.
      */
     public function __construct(
         ?int $luminance = null,

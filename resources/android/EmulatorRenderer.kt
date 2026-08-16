@@ -584,7 +584,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
      * so the bridge can validate the staged engine (backend availability,
      * option support) before answering PHP.
      * @param systemId system ID — one of [EmulatorCore.supportedSystems].
-     * @param backend  engine to serve it; null picks the bundled fast core.
+     * @param backend  engine to serve it; null runs the built-in engine (ares).
      * @return staging result, or null when the render thread is unavailable.
      */
     fun stageSystem(
@@ -744,7 +744,8 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
     // ---------------------------------------------------------------------------
 
     /**
-     * Read [length] bytes from WRAM at bus [address] (0x7E0000–0x7FFFFF).
+     * Read [length] bytes of work RAM at a console bus [address] (each
+     * system's own window — sfc 0x7E0000, gb 0xC000, …).
      * Blocks the calling thread until the render thread services the request (≤2 s).
      * Returns null if the address is invalid or the emulator is not running.
      */

@@ -329,9 +329,16 @@ object EmulatorFunctions {
      * library — reported by [GetSystems] with `supported: true`. System
      * firmware (SFC ipl.rom + boards.bml, GB boot ROM, MD TMSS) is embedded;
      * no biosPath is needed for these systems.
-     * config keys: biosPath (String?), autoSave (Bool), speed (Float), runAhead (Int),
+     * config keys: backend (String — strict; must serve, or errors),
+     *              backendPreferences (List<String> — graceful, first present wins),
+     *              biosPath (String?), autoSave (Bool), speed (Float), runAhead (Int),
      *              rewind (Bool), rewindBufferSeconds (Int), dynamicRateControl (Bool),
      *              pixelAccuracy (Bool — boot-only renderer choice, see Configure),
+     *              rawAudio (Bool), bootAnimation (Bool),
+     *              engineOptions (Map — validated against the core's declared schema),
+     *              per-system toggles (colorEmulation, deepBlackBoost,
+     *              interframeBlending, showIcons — enabling one the engine
+     *              lacks errors UNSUPPORTED_OPTION),
      *              region (String, e.g. "PAL" — overrides ROM analysis),
      *              preferredRegions (List<String> — preference order for
      *              multi-region ROMs; default matches desktop's "NTSC-U").
@@ -945,6 +952,7 @@ object EmulatorFunctions {
      * Merge general live options. speed (0.25–4.0) scales the tick budget.
      * runAhead accepts 0 or 1 — ares supports exactly one hidden frame.
      * rewind toggles snapshot capture; rewindBufferSeconds sizes the history.
+     * engineOptions applies engine-declared options to the running core.
      */
     class Configure(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {

@@ -44,6 +44,7 @@ class Emulator
      * config's region/preferredRegions knobs to override.
      *
      * @param  SystemConfig|array{
+     *     backend?: string,
      *     biosPath?: string|null,
      *     autoSave?: bool,
      *     runAhead?: int,
@@ -51,6 +52,9 @@ class Emulator
      *     rewindBufferSeconds?: int,
      *     speed?: float,
      *     dynamicRateControl?: bool,
+     *     pixelAccuracy?: bool,
+     *     rawAudio?: bool,
+     *     bootAnimation?: bool,
      *     region?: string,
      *     preferredRegions?: string[],
      * }  $config
@@ -293,7 +297,7 @@ class Emulator
     /**
      * Register/merge an address watch. Native checks every frame and fires
      * MemoryChanged only when the value at that address actually changes.
-     * Chain per address; watches survive ROM swaps until cleared explicitly.
+     * Chain per address; watches clear when a new ROM loads, like cheats.
      */
     public function watchMemory(int $address, int $length = 1): static
     {
