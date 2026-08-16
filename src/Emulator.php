@@ -704,8 +704,9 @@ class Emulator
     /**
      * Return all systems as rich objects. `supported` reflects whether the
      * system's core is compiled into this build's native library. `backends`
-     * lists the engines serving the system in this build (bring-your-own
-     * libretro cores appear once fetched), and `capabilities` carries one
+     * lists the bundled engines claiming the system — bring-your-own
+     * libretro cores never appear here, even while one is running; only a
+     * config that names them selects them. `capabilities` carries one
      * object per backend: videoSettings/rumble/serialize/cheats/memoryAccess/
      * slottedMedia/multitap/mouse flags plus `toggles` (the boolean
      * setSystemOptions keys this engine+system pair accepts) and

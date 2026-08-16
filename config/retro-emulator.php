@@ -49,7 +49,7 @@ return [
     | ('gb' => 'sameboy'). A per-boot backend on the system's config
     | (SfcConfig(backend: 'bsnes')) overrides this map and is strict: what
     | you name must serve, or loadSystem throws. Emulator::systems()
-    | reports each system's available engines.
+    | reports only the bundled engines — fetched cores never appear there.
     |
     */
 
