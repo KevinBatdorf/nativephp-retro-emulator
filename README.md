@@ -1,6 +1,6 @@
 # Retro Emulator for NativePHP Mobile
 
-Full retro consoles inside your Laravel mobile app, on Android and iOS.
+Full retro consoles inside your NativePHP mobile app, on Android and iOS.
 Native rendering, save states, rewind, cheats, shaders, real controllers.
 
 ```bash
