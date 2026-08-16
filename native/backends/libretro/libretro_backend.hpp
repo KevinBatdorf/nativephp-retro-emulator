@@ -129,6 +129,11 @@ private:
 
     bool loaded_ = false;         // a game is loaded on current_
 
+    // The in-memory image handed to the core: the ROM zero-padded to a
+    // sniff-safe floor (see boot). Owned here so the pointer outlives the
+    // retro_load_game call for the whole play session.
+    std::vector<uint8_t> romImage_;
+
     // Video
     std::vector<uint32_t> converted_;
     double frameWidth_ = 0, frameHeight_ = 0, aspectRatio_ = 0;

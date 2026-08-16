@@ -551,7 +551,18 @@ EmuHost::BootResult LibretroBackend::boot(const EmuHost::BootSpec& spec,
                      current_.libraryName.c_str());
         return result;
     }
-    if (!current_.needFullpath) game.data = rom->data();
+    if (!current_.needFullpath) {
+        // Cores sniff headers at fixed offsets with no size guard (snes9x
+        // probes the BS-X header at 0xffc0..0xffda on any image, unbounded
+        // until upstream 4058d0c): the image handed over is zero-padded to
+        // a 64 KB floor so those probes stay inside the allocation, while
+        // game.size keeps reporting the true ROM size. Zeros read as "no
+        // header there" — the same answer upstream's bound check gives.
+        constexpr size_t kSniffFloor = 0x10000;
+        romImage_.assign(rom->begin(), rom->end());
+        if (romImage_.size() < kSniffFloor) romImage_.resize(kSniffFloor, 0);
+        game.data = romImage_.data();
+    }
     if (!current_.api->loadGame(&game)) {
         EMUHOST_LOGE("libretro: %s rejected the ROM", current_.libraryName.c_str());
         return result;
@@ -592,6 +603,7 @@ void LibretroBackend::unload(EmuHost::SaveMediaIO& saves) {
         current_.api->unloadGame();
         loaded_ = false;
     }
+    romImage_ = {};
     host_ = nullptr;
     cheatWrites_.clear();
     for (auto& port : keyHandles_) {
