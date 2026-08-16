@@ -657,6 +657,19 @@ class Emulator
     }
 
     /**
+     * The engine actually serving this surface (active, else staged) — read
+     * back from the core, never from what a config asked for: a preference
+     * for an absent engine lands on ares, and this reports that landing.
+     * Empty before anything is staged.
+     */
+    public function backend(): string
+    {
+        $result = $this->call('Emulator.GetStatus', ['surface' => $this->surface]);
+
+        return $result['backend'] ?? '';
+    }
+
+    /**
      * Which renderer the running core actually bound — read back from the
      * core, not from what was requested. Null before a boot and on cores with
      * a single renderer (NES, GB/GBC, Mega Drive). Boot-only: change it via

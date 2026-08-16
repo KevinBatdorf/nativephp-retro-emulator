@@ -453,6 +453,14 @@ describe('Bridge response parsing', function () {
         expect(Emulator::surface()->status())->toBe(Status::Stopped);
     });
 
+    it('backend reports the engine actually serving, empty before staging', function () {
+        $GLOBALS['__nativephp_mock']['Emulator.GetStatus'] = '{"status":"running","backend":"ares"}';
+        expect(Emulator::surface()->backend())->toBe('ares');
+
+        $GLOBALS['__nativephp_mock']['Emulator.GetStatus'] = '{"status":"stopped"}';
+        expect(Emulator::surface()->backend())->toBe('');
+    });
+
     it('readMemory parses bytes from native response', function () {
         $GLOBALS['__nativephp_mock']['Emulator.ReadMemory'] = '{"address":8257552,"bytes":[7,0]}';
         expect((new Emulator)->readMemory(0x7E0010, 2))->toBe([7, 0]);
