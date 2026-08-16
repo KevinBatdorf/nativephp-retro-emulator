@@ -79,6 +79,7 @@ describe('Plugin Manifest', function () {
             'Emulator.SetAudio',
             'Emulator.SetVideo',
             'Emulator.Configure',
+            'Emulator.PickRom',
             'Emulator.Rewind',
             'Emulator.ToggleRewind',
             'Emulator.SetSystemOptions',
@@ -128,6 +129,7 @@ describe('Plugin Manifest', function () {
             'KevinBatdorf\\RetroEmulator\\Events\\MemoryRead',
             'KevinBatdorf\\RetroEmulator\\Events\\MemoryChanged',
             'KevinBatdorf\\RetroEmulator\\Events\\EmulatorError',
+            'KevinBatdorf\\RetroEmulator\\Events\\RomPicked',
         ];
 
         foreach ($expected as $event) {
@@ -556,6 +558,18 @@ describe('Bridge response parsing', function () {
         $GLOBALS['__nativephp_mock']['Emulator.ToggleRewind'] = '{"status":"rewinding"}';
         $emu = Emulator::surface()->toggleRewind();
         expect($emu)->toBeInstanceOf(Emulator::class);
+    });
+
+    it('pickRom sends destination and extensions, returns fluent instance', function () {
+        $GLOBALS['__nativephp_mock']['Emulator.PickRom'] = '{"status":"picking"}';
+        $emu = Emulator::surface()->pickRom('/tmp/roms/sfc', ['sfc', 'smc']);
+        expect($emu)->toBeInstanceOf(Emulator::class);
+
+        $call = collect($GLOBALS['__nativephp_calls'])->last(
+            fn ($c) => $c['function'] === 'Emulator.PickRom',
+        );
+        expect($call['payload']['destination'])->toBe('/tmp/roms/sfc')
+            ->and($call['payload']['extensions'])->toBe(['sfc', 'smc']);
     });
 
     it('rewind sends the seconds and returns fluent instance', function () {

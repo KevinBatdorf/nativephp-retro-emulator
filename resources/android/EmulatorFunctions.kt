@@ -1,7 +1,11 @@
 package com.kevinbatdorf.plugins.retroemulator
 
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.provider.OpenableColumns
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import android.util.Log
 import android.view.InputDevice
 import androidx.fragment.app.FragmentActivity
@@ -1088,6 +1092,77 @@ object EmulatorFunctions {
                 else -> BridgeResponse.success(mapOf("jumped" to jumped))
             }
         }
+    }
+
+    /**
+     * OS document picker → copy the pick into [destination]. ROM types have
+     * no MIME type, so the picker cannot pre-filter; the pick is validated
+     * by extension afterward — a mismatch dispatches EmulatorError
+     * (INVALID_ROM), a match copies then dispatches RomPicked. Cancelling
+     * dispatches RomPicked with an empty path.
+     */
+    class PickRom(private val activity: FragmentActivity) : BridgeFunction {
+        override fun execute(parameters: Map<String, Any>): Map<String, Any> {
+            val surface = parameters["surface"] as? String ?: "main"
+            val destination = parameters["destination"] as? String
+                ?: return BridgeResponse.error("INVALID_PARAMETERS", "destination directory is required")
+            val extensions = (paramList(parameters, "extensions") ?: emptyList())
+                .map { it.toString().lowercase() }
+
+            activity.runOnUiThread {
+                val key = "retroemu-pick-${System.nanoTime()}"
+                var launcher: ActivityResultLauncher<Array<String>>? = null
+                launcher = activity.activityResultRegistry.register(
+                    key, ActivityResultContracts.OpenDocument(),
+                ) { uri ->
+                    launcher?.unregister()
+                    Thread { handlePick(surface, uri, destination, extensions) }.start()
+                }
+                launcher.launch(arrayOf("*/*"))
+            }
+
+            return BridgeResponse.success(mapOf("status" to "picking"))
+        }
+
+        private fun handlePick(surface: String, uri: Uri?, destination: String, extensions: List<String>) {
+            val romPicked = "KevinBatdorf\\RetroEmulator\\Events\\RomPicked"
+            if (uri == null) {
+                dispatchEvent(activity, romPicked, JSONObject().put("surface", surface).put("path", ""))
+                return
+            }
+
+            val name = displayName(uri) ?: "rom.bin"
+            val ext = name.substringAfterLast('.', "").lowercase()
+            if (extensions.isNotEmpty() && ext !in extensions) {
+                dispatchEvent(
+                    activity, "KevinBatdorf\\RetroEmulator\\Events\\EmulatorError",
+                    JSONObject().put("surface", surface).put("code", "INVALID_ROM")
+                        .put("message", "Not a ${extensions.joinToString(" / ") { ".$it" }} file — picked '$name'"),
+                )
+                return
+            }
+
+            try {
+                val dir = File(destination).apply { mkdirs() }
+                val dest = File(dir, name)
+                activity.contentResolver.openInputStream(uri)!!.use { input ->
+                    dest.outputStream().use { output -> input.copyTo(output) }
+                }
+                dispatchEvent(activity, romPicked, JSONObject().put("surface", surface).put("path", dest.absolutePath))
+            } catch (e: Exception) {
+                dispatchEvent(
+                    activity, "KevinBatdorf\\RetroEmulator\\Events\\EmulatorError",
+                    JSONObject().put("surface", surface).put("code", "INVALID_ROM")
+                        .put("message", "Could not read the picked file: ${e.message}"),
+                )
+            }
+        }
+
+        private fun displayName(uri: Uri): String? = activity.contentResolver
+            .query(uri, null, null, null, null)?.use { cursor ->
+                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (cursor.moveToFirst() && index >= 0) cursor.getString(index) else null
+            }
     }
 
     class SetSystemOptions(private val activity: FragmentActivity) : BridgeFunction {

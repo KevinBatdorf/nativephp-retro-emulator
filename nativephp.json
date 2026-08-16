@@ -162,6 +162,12 @@
             "description": "Merge general live options (speed, runAhead, rewind, etc.)"
         },
         {
+            "name": "Emulator.PickRom",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.PickRom",
+            "ios": "EmulatorFunctions.PickRom",
+            "description": "OS document picker; copies the pick into a destination dir and dispatches RomPicked"
+        },
+        {
             "name": "Emulator.Rewind",
             "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.Rewind",
             "ios": "EmulatorFunctions.Rewind",
@@ -313,7 +319,8 @@
         "KevinBatdorf\\RetroEmulator\\Events\\EmulatorResumed",
         "KevinBatdorf\\RetroEmulator\\Events\\MemoryRead",
         "KevinBatdorf\\RetroEmulator\\Events\\MemoryChanged",
-        "KevinBatdorf\\RetroEmulator\\Events\\EmulatorError"
+        "KevinBatdorf\\RetroEmulator\\Events\\EmulatorError",
+        "KevinBatdorf\\RetroEmulator\\Events\\RomPicked"
     ],
     "service_provider": "KevinBatdorf\\RetroEmulator\\RetroEmulatorServiceProvider",
     "android": {

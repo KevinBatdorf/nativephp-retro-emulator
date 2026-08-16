@@ -1,5 +1,7 @@
 import Foundation
 import GameController
+import UIKit
+import UniformTypeIdentifiers
 
 /// iOS-side `Emulator.*` bridge functions for the NativePHP Retro Emulator plugin.
 ///
@@ -937,6 +939,37 @@ enum EmulatorFunctions {
         }
     }
 
+    /// OS document picker → copy the pick into `destination`. ROM types have
+    /// no UTI, so the picker cannot pre-filter; the pick is validated by
+    /// extension afterward — a mismatch dispatches EmulatorError
+    /// (INVALID_ROM), a match copies then dispatches RomPicked. Cancelling
+    /// dispatches RomPicked with an empty path.
+    class PickRom: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            guard let destination = parameters["destination"] as? String else {
+                return BridgeResponse.error(
+                    code: "INVALID_PARAMETERS", message: "destination directory is required")
+            }
+            let surface = parameters["surface"] as? String ?? "main"
+            let extensions = (parameters["extensions"] as? [Any] ?? []).map { "\($0)".lowercased() }
+
+            DispatchQueue.main.async {
+                let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.data, .item])
+                let delegate = RomPickDelegate(
+                    surface: surface, destination: destination, extensions: extensions)
+                picker.delegate = delegate
+                RomPickDelegate.current = delegate
+                var top = UIApplication.shared.connectedScenes
+                    .compactMap { ($0 as? UIWindowScene)?.keyWindow }
+                    .first?.rootViewController
+                while let presented = top?.presentedViewController { top = presented }
+                top?.present(picker, animated: true)
+            }
+
+            return BridgeResponse.success(data: ["status": "picking"])
+        }
+    }
+
     class SetSystemOptions: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
@@ -1291,6 +1324,70 @@ enum EmulatorFunctions {
                 controller.vendorName ?? "Controller"
             }
             return BridgeResponse.success(data: ["devices": devices])
+        }
+    }
+}
+
+
+/// Held strongly in `current` while a picker is on screen — the picker's
+/// delegate property is weak, and a released delegate drops the pick.
+final class RomPickDelegate: NSObject, UIDocumentPickerDelegate {
+
+    static var current: RomPickDelegate?
+
+    private let surface: String
+    private let destination: String
+    private let extensions: [String]
+
+    init(surface: String, destination: String, extensions: [String]) {
+        self.surface = surface
+        self.destination = destination
+        self.extensions = extensions
+    }
+
+    private func send(_ eventClass: String, _ extra: [String: Any]) {
+        var payload: [String: Any] = ["surface": surface]
+        payload.merge(extra) { _, new in new }
+        let json = (try? JSONSerialization.data(withJSONObject: payload))
+            .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+        DispatchQueue.main.async {
+            NativeElementBridge.sendNativeEvent(eventName: eventClass, payloadJson: json)
+        }
+        RomPickDelegate.current = nil
+    }
+
+    func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+        send("KevinBatdorf\\RetroEmulator\\Events\\RomPicked", ["path": ""])
+    }
+
+    func documentPicker(_ controller: UIDocumentPickerViewController,
+                        didPickDocumentsAt urls: [URL]) {
+        guard let url = urls.first else {
+            send("KevinBatdorf\\RetroEmulator\\Events\\RomPicked", ["path": ""])
+            return
+        }
+
+        let name = url.lastPathComponent
+        let ext = url.pathExtension.lowercased()
+        if !extensions.isEmpty && !extensions.contains(ext) {
+            let wanted = extensions.map { ".\($0)" }.joined(separator: " / ")
+            send("KevinBatdorf\\RetroEmulator\\Events\\EmulatorError",
+                 ["code": "INVALID_ROM", "message": "Not a \(wanted) file — picked '\(name)'"])
+            return
+        }
+
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        do {
+            try FileManager.default.createDirectory(
+                atPath: destination, withIntermediateDirectories: true)
+            let dest = URL(fileURLWithPath: destination).appendingPathComponent(name)
+            try? FileManager.default.removeItem(at: dest)
+            try FileManager.default.copyItem(at: url, to: dest)
+            send("KevinBatdorf\\RetroEmulator\\Events\\RomPicked", ["path": dest.path])
+        } catch {
+            send("KevinBatdorf\\RetroEmulator\\Events\\EmulatorError",
+                 ["code": "INVALID_ROM", "message": "Could not read the picked file: \(error.localizedDescription)"])
         }
     }
 }

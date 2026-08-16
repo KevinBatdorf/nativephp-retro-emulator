@@ -418,6 +418,25 @@ class Emulator
     }
 
     /**
+     * Open the OS document picker; the chosen file is copied into
+     * $destination and RomPicked fires with its path ('' on cancel). ROM
+     * types have no MIME/UTI, so the picker cannot pre-filter — a pick
+     * outside $extensions dispatches EmulatorError (INVALID_ROM) instead.
+     *
+     * @param  string[]  $extensions  Allowed extensions, no dots; [] accepts anything.
+     */
+    public function pickRom(string $destination, array $extensions = []): static
+    {
+        $this->call('Emulator.PickRom', [
+            'surface' => $this->surface,
+            'destination' => $destination,
+            'extensions' => $extensions,
+        ]);
+
+        return $this;
+    }
+
+    /**
      * Instant rewind: jump straight to the state ~$seconds ago (capped by the
      * capture buffer) and keep playing — no backwards playback. Requires
      * rewind capture enabled, else throws REWIND_DISABLED. The jumped-over
