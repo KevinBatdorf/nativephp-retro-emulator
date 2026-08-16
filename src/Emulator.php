@@ -825,4 +825,38 @@ class Emulator
 
         return [];
     }
+
+    /**
+     * Window size and system-obscured insets (bars, Dynamic Island, cutout)
+     * in dp. EDGE's safe-area classes cover top/bottom only; the horizontal
+     * insets exist so overlays can dodge the island in landscape. Pair with
+     * WindowMetricsChanged to re-inset on rotation. All zeros without a
+     * bridge (tests, web preview). No surface required.
+     *
+     * @return array{width: int, height: int, top: int, bottom: int, left: int, right: int}
+     */
+    public static function windowMetrics(): array
+    {
+        $zeros = ['width' => 0, 'height' => 0, 'top' => 0, 'bottom' => 0, 'left' => 0, 'right' => 0];
+
+        if (! function_exists('nativephp_call')) {
+            return $zeros;
+        }
+
+        $result = nativephp_call('Emulator.WindowMetrics', '{}');
+        $decoded = $result ? json_decode($result, true) : null;
+
+        if (! is_array($decoded) || ! isset($decoded['width'])) {
+            return $zeros;
+        }
+
+        return [
+            'width' => (int) ($decoded['width'] ?? 0),
+            'height' => (int) ($decoded['height'] ?? 0),
+            'top' => (int) ($decoded['top'] ?? 0),
+            'bottom' => (int) ($decoded['bottom'] ?? 0),
+            'left' => (int) ($decoded['left'] ?? 0),
+            'right' => (int) ($decoded['right'] ?? 0),
+        ];
+    }
 }

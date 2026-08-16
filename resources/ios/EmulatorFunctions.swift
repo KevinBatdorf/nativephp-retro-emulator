@@ -1326,6 +1326,62 @@ enum EmulatorFunctions {
             return BridgeResponse.success(data: ["devices": devices])
         }
     }
+
+    // MARK: - Window metrics
+
+    private static var lastWindowMetrics: String?
+
+    /// Window size + safe-area insets in points; nil before a window exists.
+    /// Main thread only — UIKit window access.
+    private static func windowMetricsValues() -> [(String, Int)]? {
+        guard let window = UIApplication.shared.connectedScenes
+            .compactMap({ ($0 as? UIWindowScene)?.keyWindow })
+            .first else { return nil }
+        let insets = window.safeAreaInsets
+        return [
+            ("width", Int(window.bounds.width.rounded())),
+            ("height", Int(window.bounds.height.rounded())),
+            ("top", Int(insets.top.rounded())),
+            ("bottom", Int(insets.bottom.rounded())),
+            ("left", Int(insets.left.rounded())),
+            ("right", Int(insets.right.rounded())),
+        ]
+    }
+
+    /// The surface fills the window wherever overlay controls exist, so its
+    /// layout doubles as the rotation signal. Dedupe: one rotation produces
+    /// several layout passes.
+    static func maybeDispatchWindowMetrics() {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { maybeDispatchWindowMetrics() }
+            return
+        }
+        guard let values = windowMetricsValues() else { return }
+        let key = values.map { String($0.1) }.joined(separator: ",")
+        if key == lastWindowMetrics { return }
+        lastWindowMetrics = key
+        let json = (try? JSONSerialization.data(
+            withJSONObject: Dictionary(uniqueKeysWithValues: values)))
+            .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+        NativeElementBridge.sendNativeEvent(
+            eventName: "KevinBatdorf\\RetroEmulator\\Events\\WindowMetricsChanged",
+            payloadJson: json)
+    }
+
+    /// All zeros before a window exists — the wrapper's documented degraded
+    /// shape; Android never errors here either (decorView always exists).
+    class WindowMetrics: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            var values: [(String, Int)]?
+            if Thread.isMainThread {
+                values = windowMetricsValues()
+            } else {
+                DispatchQueue.main.sync { values = windowMetricsValues() }
+            }
+            let payload = values ?? ["width", "height", "top", "bottom", "left", "right"].map { ($0, 0) }
+            return BridgeResponse.success(data: Dictionary(uniqueKeysWithValues: payload))
+        }
+    }
 }
 
 

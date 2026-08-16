@@ -103,6 +103,7 @@ describe('Plugin Manifest', function () {
             'Emulator.GetSystems',
             'Emulator.GetInputDevices',
             'Emulator.GetPressedButtons',
+            'Emulator.WindowMetrics',
         ];
 
         foreach ($expected as $name) {
@@ -130,6 +131,7 @@ describe('Plugin Manifest', function () {
             'KevinBatdorf\\RetroEmulator\\Events\\MemoryChanged',
             'KevinBatdorf\\RetroEmulator\\Events\\EmulatorError',
             'KevinBatdorf\\RetroEmulator\\Events\\RomPicked',
+            'KevinBatdorf\\RetroEmulator\\Events\\WindowMetricsChanged',
         ];
 
         foreach ($expected as $event) {
@@ -522,6 +524,22 @@ describe('Bridge response parsing', function () {
     it('inputDevices returns empty array when none connected', function () {
         $GLOBALS['__nativephp_mock']['Emulator.GetInputDevices'] = json_encode(['devices' => []]);
         expect(Emulator::inputDevices())->toBe([]);
+    });
+
+    it('windowMetrics parses the native response', function () {
+        $GLOBALS['__nativephp_mock']['Emulator.WindowMetrics'] = json_encode([
+            'width' => 874, 'height' => 402, 'top' => 0, 'bottom' => 21, 'left' => 59, 'right' => 59,
+        ]);
+        expect(Emulator::windowMetrics())->toBe([
+            'width' => 874, 'height' => 402, 'top' => 0, 'bottom' => 21, 'left' => 59, 'right' => 59,
+        ]);
+    });
+
+    it('windowMetrics returns zeros on a response without metrics', function () {
+        $GLOBALS['__nativephp_mock']['Emulator.WindowMetrics'] = '{"status":"error"}';
+        expect(Emulator::windowMetrics())->toBe([
+            'width' => 0, 'height' => 0, 'top' => 0, 'bottom' => 0, 'left' => 0, 'right' => 0,
+        ]);
     });
 
     it('surface returns Emulator instance after successful native call', function () {

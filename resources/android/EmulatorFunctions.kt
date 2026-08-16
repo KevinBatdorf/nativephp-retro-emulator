@@ -8,6 +8,8 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import android.util.Log
 import android.view.InputDevice
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.FragmentActivity
 import com.nativephp.mobile.bridge.BridgeFunction
 import com.nativephp.mobile.bridge.BridgeResponse
@@ -239,6 +241,56 @@ object EmulatorFunctions {
     private fun dispatchEvent(activity: FragmentActivity, fqcn: String, payload: JSONObject) {
         Handler(Looper.getMainLooper()).post {
             NativeActionCoordinator.dispatchEvent(activity, fqcn, payload.toString())
+        }
+    }
+
+    private var lastWindowMetrics: String? = null
+
+    /**
+     * Window size + system-obscured insets, in dp. systemBars ∪ displayCutout
+     * approximates iOS safeAreaInsets; in immersive mode bars report 0 while
+     * a cutout still does.
+     */
+    private fun windowMetricsPayload(activity: FragmentActivity): JSONObject {
+        val density = activity.resources.displayMetrics.density
+        val decor = activity.window.decorView
+        val insets = ViewCompat.getRootWindowInsets(decor)?.getInsets(
+            WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout(),
+        )
+
+        return JSONObject().apply {
+            put("width", Math.round(decor.width / density))
+            put("height", Math.round(decor.height / density))
+            put("top", Math.round((insets?.top ?: 0) / density))
+            put("bottom", Math.round((insets?.bottom ?: 0) / density))
+            put("left", Math.round((insets?.left ?: 0) / density))
+            put("right", Math.round((insets?.right ?: 0) / density))
+        }
+    }
+
+    /**
+     * The surface fills the window wherever overlay controls exist, so its
+     * resize doubles as the rotation signal. Dedupe: one rotation produces
+     * several layout passes.
+     */
+    @JvmStatic
+    fun maybeDispatchWindowMetrics(renderer: EmulatorRenderer) {
+        val activity = surfaces.values.firstOrNull { it.renderer === renderer }?.activity ?: return
+        val payload = windowMetricsPayload(activity)
+        val key = payload.toString()
+        if (key == lastWindowMetrics) return
+        lastWindowMetrics = key
+        dispatchEvent(activity, "KevinBatdorf\\RetroEmulator\\Events\\WindowMetricsChanged", payload)
+    }
+
+    /** Window size + system-obscured insets in dp — see [windowMetricsPayload]. */
+    class WindowMetrics(private val activity: FragmentActivity) : BridgeFunction {
+        override fun execute(parameters: Map<String, Any>): Map<String, Any> {
+            val m = windowMetricsPayload(activity)
+            return BridgeResponse.success(
+                listOf("width", "height", "top", "bottom", "left", "right")
+                    .associateWith { m.getInt(it) },
+            )
         }
     }
 

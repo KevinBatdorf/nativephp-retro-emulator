@@ -752,6 +752,12 @@ final class EmulatorRenderer: UIView {
         audio.stop()
     }
 
+    // metalView already tracks bounds via autoresizingMask — no sizing here.
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        EmulatorFunctions.maybeDispatchWindowMetrics()
+    }
+
     // MARK: - Emulation loop
 
     private func startLoop() {

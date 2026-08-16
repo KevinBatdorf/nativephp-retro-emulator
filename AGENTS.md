@@ -160,6 +160,11 @@ $backend)` returns one pair's object directly. Consumers should read
 capabilities instead of hardcoding engine tables — the lists come from what
 each core actually declares.
 
+`Emulator::windowMetrics()` — window size and system-obscured insets (bars,
+Dynamic Island, cutout) in dp, no surface required. EDGE's safe-area classes
+cover top/bottom only; the horizontal insets are how overlay controls dodge
+the island in landscape. Pair with `WindowMetricsChanged` for rotation.
+
 ### Configs
 
 `Config` (shareable house style) and per-system `SystemConfig` subclasses:
@@ -193,7 +198,9 @@ All `Config` keys plus:
 
 `EmulatorStarted` (first frame — safe to query), `EmulatorStopped`,
 `EmulatorPaused`, `EmulatorResumed`, `MemoryRead`, `MemoryChanged`,
-`EmulatorError` (operational; carries `EmulatorErrorCode`). Listen with
+`EmulatorError` (operational; carries `EmulatorErrorCode`),
+`WindowMetricsChanged` (rotation/resize while an emulator surface is
+mounted; same dp payload as `Emulator::windowMetrics()`). Listen with
 NativePHP's `#[On(EmulatorStarted::class)]`.
 
 ### Elements

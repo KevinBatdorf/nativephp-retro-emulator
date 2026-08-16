@@ -310,6 +310,12 @@
             "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.GetInputDevices",
             "ios": "EmulatorFunctions.GetInputDevices",
             "description": "Return names of connected hardware controllers (gamepads)"
+        },
+        {
+            "name": "Emulator.WindowMetrics",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.WindowMetrics",
+            "ios": "EmulatorFunctions.WindowMetrics",
+            "description": "Window size and system-obscured insets (bars, island, cutout) in dp"
         }
     ],
     "events": [
@@ -320,7 +326,8 @@
         "KevinBatdorf\\RetroEmulator\\Events\\MemoryRead",
         "KevinBatdorf\\RetroEmulator\\Events\\MemoryChanged",
         "KevinBatdorf\\RetroEmulator\\Events\\EmulatorError",
-        "KevinBatdorf\\RetroEmulator\\Events\\RomPicked"
+        "KevinBatdorf\\RetroEmulator\\Events\\RomPicked",
+        "KevinBatdorf\\RetroEmulator\\Events\\WindowMetricsChanged"
     ],
     "service_provider": "KevinBatdorf\\RetroEmulator\\RetroEmulatorServiceProvider",
     "android": {

@@ -111,7 +111,11 @@ All under `KevinBatdorf\RetroEmulator\Events`: `EmulatorStarted` (first rendered
 `loadRom()`), `EmulatorStopped`, `EmulatorPaused`, `EmulatorResumed`, `MemoryRead` (response
 to `readMemoryAsync()`), `MemoryChanged` (watched address changed), `EmulatorError`
 (operational failures — missing ROM, failed save — carrying an `EmulatorErrorCode`;
-programmer errors throw `EmulatorException` synchronously instead).
+programmer errors throw `EmulatorException` synchronously instead), `WindowMetricsChanged`
+(rotation/resize while an emulator surface is mounted — width/height/top/bottom/left/right
+in dp, same shape as the `Emulator::windowMetrics()` query; use it to re-inset overlay
+controls around the Dynamic Island in landscape, which EDGE's top/bottom-only safe-area
+classes can't cover).
 
 @verbatim
 <code-snippet name="Listening for emulator events" lang="php">
