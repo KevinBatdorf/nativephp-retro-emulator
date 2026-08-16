@@ -8,8 +8,7 @@ composer require kevinbatdorf/retro-emulator
 php artisan native:plugin:register kevinbatdorf/retro-emulator
 ```
 
-> Tracks NativePHP Mobile v4 (EDGE). Until v4 tags, point composer at the
-> `dev-element` branch.
+> Requires NativePHP Mobile v4 (EDGE): `composer require nativephp/mobile:^4.0`.
 
 ## Engines
 
@@ -99,3 +98,5 @@ $emu->loadSystem(System::Sfc, new SfcConfig(
 ```
 
 Full API, events, elements, and engine internals: [AGENTS.md](AGENTS.md).
+
+AI was used to build this plugin and the readme
