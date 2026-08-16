@@ -724,7 +724,6 @@ final class EmulatorRenderer: UIView {
         metalRenderer = MetalFrameRenderer(device: device, pixelFormat: .bgra8Unorm)!
         metalView.delegate = metalRenderer
 
-        audio.ctx = ctx
         input = EmulatorInput(ctx: ctx)
 
         super.init(frame: frame)
@@ -750,6 +749,9 @@ final class EmulatorRenderer: UIView {
     private func startLoop() {
         guard !running else { return }
         running = true
+        // Not in init: a double-mounted duplicate that claims the pump
+        // silences the live game when its deinit detaches.
+        audio.ctx = ctx
         try? audio.start()
 
         let t = Thread { [weak self] in self?.emulationLoop() }
