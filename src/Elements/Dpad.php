@@ -193,12 +193,14 @@ class Dpad extends Element
     /**
      * Bound `pan()` to a dp range, per axis. Without it the values integrate
      * forever and whatever they move sails off-screen — and the axes need
-     * separate bounds, since a screen is rarely square.
+     * separate bounds, since a screen is rarely square. A negative max is
+     * window-relative: renderers resolve it as extent minus |max|, on every
+     * rotation.
      */
     public function panRange(int $minX, int $maxX, int $minY, int $maxY): static
     {
         foreach ([['x', $minX, $maxX], ['y', $minY, $maxY]] as [$axis, $min, $max]) {
-            if ($min >= $max) {
+            if ($max >= 0 && $min >= $max) {
                 throw new InvalidArgumentException(
                     "dpad panRange {$axis} needs min < max, got {$min}-{$max}",
                 );

@@ -227,6 +227,19 @@ describe('Dpad element contract', function () {
         expect($props['active_color'])->toBe('#FF0000FF');
     });
 
+    it('accepts a window-relative (negative) pan max, as the renderers resolve it', function () {
+        $element = new DpadElement;
+        $element->panRange(0, -56, 0, -128);
+
+        $props = $element->toArray(new CallbackRegistry)['props'];
+        expect($props['pan_x_max'])->toBe(-56);
+        expect($props['pan_y_max'])->toBe(-128);
+    });
+
+    it('still rejects an absolute pan range with min at or past max', function () {
+        (new DpadElement)->panRange(100, 100, 0, 200);
+    })->throws(InvalidArgumentException::class);
+
     it('supports fluent construction', function () {
         $node = DpadElement::make('side')
             ->port(2)
