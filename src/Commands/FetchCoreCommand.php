@@ -19,7 +19,7 @@ class FetchCoreCommand extends Command
         {cores* : Core names as the buildbot publishes them (snes9x, fceumm, mesen, …)}
         {--abi=* : ABIs to fetch (default: arm64-v8a and x86_64)}';
 
-    protected $description = 'Download libretro cores into resources/emulator-cores for bring-your-own engines';
+    protected $description = 'Download libretro cores into resources/emulator-cores for bring-your-own engines (Android only)';
 
     private const BUILDBOT = 'https://buildbot.libretro.com/nightly/android/latest';
 

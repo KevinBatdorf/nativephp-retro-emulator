@@ -38,6 +38,13 @@ test every core in the table on real hardware, and any other libretro core
 loads the same way. Read [LICENSING.md](LICENSING.md) before shipping a
 fetched core.
 
+**Fetched cores are Android-only.** libretro publishes no usable iOS
+builds, so iOS ships the bundled engines (ares, SameBoy, mGBA). A config
+that prefers a fetched core still works everywhere — engines that are not
+present are skipped and the boot lands on the built-in engine, ares.
+Embedding a core you compiled yourself as a signed framework is possible
+but on you; the loader probes `<name>_libretro_ios.dylib`.
+
 ## Show me
 
 Step one: drop the element into a view. It boots when it mounts, and the

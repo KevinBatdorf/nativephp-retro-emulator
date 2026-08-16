@@ -45,7 +45,9 @@ return [
     |
     | An engine that isn't present is skipped with a warning (your app log
     | and the device log) and the built-in engine, ares, is the final
-    | fallback — the app always boots. A single string works too
+    | fallback — the app always boots. Fetched cores are Android-only
+    | (libretro publishes no usable iOS builds), so on iOS this map's
+    | fetched entries skip and ares serves. A single string works too
     | ('gb' => 'sameboy'). A per-boot backend on the system's config
     | (SfcConfig(backend: 'bsnes')) overrides this map and is strict: what
     | you name must serve, or loadSystem throws. Emulator::systems()

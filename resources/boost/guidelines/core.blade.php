@@ -1,7 +1,8 @@
 ## kevinbatdorf/retro-emulator
 
 Native retro-game emulation for NativePHP Mobile with pluggable engines — ares, SameBoy and
-mGBA are bundled, and any fetched libretro core loads by name. The emulator renders on a
+mGBA are bundled, and any fetched libretro core loads by name (Android only; iOS runs the
+bundled engines). The emulator renders on a
 native surface positioned by the EDGE layout engine; PHP drives the lifecycle and reads
 emulated RAM live. There is **no JavaScript API** — all control is PHP-side.
 
@@ -82,7 +83,9 @@ Key API facts an assistant gets wrong without being told:
 - No system needs a BIOS file — firmware is embedded (GBA boots an open BIOS; a real dump via
   `biosPath` is an optional accuracy override).
 - `backend` picks the engine per boot (`'sameboy'`, `'mgba'`, or a libretro core name);
-  omitted, each system boots its default engine.
+  omitted, each system boots its default engine. Fetched libretro cores are
+  **Android-only** — iOS has the bundled engines (ares everywhere, SameBoy on gb/gbc,
+  mGBA on gba), and a config preferring a fetched core falls back to ares there.
 - Console boot intros are skipped by default — `bootAnimation: true` plays them. The plugin's
   audio corrections are also on by default — `rawAudio: true` restores the engine's own
   untouched output.
@@ -125,7 +128,8 @@ public function onMemoryChanged(string $surface, int $address, int $oldValue, in
 
 ### Platform notes
 
-Everything the API exposes works on Android and iOS. `setShader` applies librashader
+Everything the API exposes works on Android and iOS, with one asymmetry: bring-your-own
+libretro cores load on Android only. `setShader` applies librashader
 `.slangp` presets (a preset that fails to load reports an `EmulatorError`, `SHADER_FAILED`);
 `setInputMapping` merges a per-port controller remap (`['a' => 'b', 'b' => 'a']` swaps A and
 B; unknown buttons throw). Slotted media (SuFami Turbo, BS-X) load as
