@@ -384,6 +384,9 @@ class EmulatorCore {
      */
     fun toggleRewind(): Int = nativeToggleRewind()
 
+    /** Instant rewind (see EmulatorHost::rewindJump): seconds jumped, 0 none, -1 disabled. */
+    fun rewindJump(seconds: Int): Int = nativeRewindJump(seconds)
+
     /**
      * Enable/disable one-frame run-ahead: each tick runs a hidden frame plus
      * a rolled-back visible preview frame, cutting perceived input latency by
@@ -513,6 +516,8 @@ class EmulatorCore {
 
     private external fun nativeConfigureRewind(enabled: Boolean, bufferSeconds: Int)
     private external fun nativeToggleRewind(): Int
+
+    private external fun nativeRewindJump(seconds: Int): Int
     private external fun nativeSetRunAhead(enabled: Boolean)
     private external fun nativeSetFastForward(active: Boolean)
     private external fun nativeSetDynamicRateControl(enabled: Boolean)

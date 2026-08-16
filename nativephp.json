@@ -162,6 +162,12 @@
             "description": "Merge general live options (speed, runAhead, rewind, etc.)"
         },
         {
+            "name": "Emulator.Rewind",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.Rewind",
+            "ios": "EmulatorFunctions.Rewind",
+            "description": "Instant rewind: jump straight to the state ~seconds ago (buffer-capped)"
+        },
+        {
             "name": "Emulator.ToggleRewind",
             "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.ToggleRewind",
             "ios": "EmulatorFunctions.ToggleRewind",

@@ -1204,6 +1204,29 @@ int EmulatorHost::toggleRewind() {
     return rewind_.rewinding ? 1 : 0;
 }
 
+int EmulatorHost::rewindJump(int seconds) {
+    auto& rw = rewind_;
+    if (!rw.enabled) return -1;
+    if (rw.history.empty() || !activeBackend_ || seconds <= 0) return 0;
+
+    // Entries land every `frequency` frames (~60 fps): 6 per second stock.
+    const double perSecond = 60.0 / (double)rw.frequency;
+    size_t back = (size_t)((double)seconds * perSecond);
+    if (back == 0) back = 1;
+    size_t idx = rw.history.size() > back ? rw.history.size() - back : 0;
+
+    if (!activeBackend_->unserialize(rw.history[idx].data(), rw.history[idx].size())) {
+        return 0;
+    }
+
+    const size_t consumed = rw.history.size() - idx;
+    // Keep the older entries so repeated jumps walk further back.
+    rw.history.resize(idx);
+    rw.rewinding = false;
+    rw.counter = 0;
+    return (int)((double)consumed / perSecond + 0.5);
+}
+
 void EmulatorHost::setRunAhead(bool enabled) { runAheadEnabled_ = enabled; }
 
 void EmulatorHost::setFastForward(bool active) {

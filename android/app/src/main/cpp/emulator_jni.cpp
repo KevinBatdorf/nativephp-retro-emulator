@@ -739,6 +739,14 @@ Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeToggleRewind(JNIE
     return g_host ? (jint)g_host->toggleRewind() : -1;
 }
 
+/** Instant rewind: seconds actually jumped, 0 none, -1 capture disabled. */
+JNIEXPORT jint JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeRewindJump(
+    JNIEnv*, jobject, jint seconds)
+{
+    return g_host ? (jint)g_host->rewindJump((int)seconds) : -1;
+}
+
 /** Enable/disable one-frame run-ahead (see the host tick loop). */
 JNIEXPORT void JNICALL
 Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeSetRunAhead(

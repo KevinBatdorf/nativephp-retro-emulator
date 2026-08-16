@@ -79,6 +79,7 @@ describe('Plugin Manifest', function () {
             'Emulator.SetAudio',
             'Emulator.SetVideo',
             'Emulator.Configure',
+            'Emulator.Rewind',
             'Emulator.ToggleRewind',
             'Emulator.SetSystemOptions',
             'Emulator.FastForward',
@@ -556,6 +557,23 @@ describe('Bridge response parsing', function () {
         $emu = Emulator::surface()->toggleRewind();
         expect($emu)->toBeInstanceOf(Emulator::class);
     });
+
+    it('rewind sends the seconds and returns fluent instance', function () {
+        $GLOBALS['__nativephp_mock']['Emulator.Rewind'] = '{"jumped":10}';
+        $emu = Emulator::surface()->rewind(10);
+        expect($emu)->toBeInstanceOf(Emulator::class);
+
+        $call = collect($GLOBALS['__nativephp_calls'])->last(
+            fn ($c) => $c['function'] === 'Emulator.Rewind',
+        );
+        expect($call['payload']['seconds'])->toBe(10);
+    });
+
+    it('rewind throws REWIND_DISABLED when capture is off', function () {
+        $GLOBALS['__nativephp_mock']['Emulator.Rewind'] =
+            '{"status":"error","code":"REWIND_DISABLED","message":"Rewind capture is off"}';
+        Emulator::surface()->rewind();
+    })->throws(KevinBatdorf\RetroEmulator\EmulatorException::class);
 
     it('saveState returns fluent instance', function () {
         $GLOBALS['__nativephp_mock']['Emulator.StateSave'] = '{"status":"saved","slot":1}';

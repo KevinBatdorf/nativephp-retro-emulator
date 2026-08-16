@@ -418,6 +418,22 @@ class Emulator
     }
 
     /**
+     * Instant rewind: jump straight to the state ~$seconds ago (capped by the
+     * capture buffer) and keep playing — no backwards playback. Requires
+     * rewind capture enabled, else throws REWIND_DISABLED. The jumped-over
+     * history is dropped, so repeated calls walk further back.
+     */
+    public function rewind(int $seconds = 10): static
+    {
+        $this->call('Emulator.Rewind', [
+            'surface' => $this->surface,
+            'seconds' => $seconds,
+        ]);
+
+        return $this;
+    }
+
+    /**
      * Enter/exit rewind playback (5× the capture rate, ares desktop
      * semantics). Play resumes automatically when history runs out. Requires
      * rewind capture enabled via loadSystem() config or configure() —

@@ -187,6 +187,10 @@ int emu_toggle_rewind(EmuContext* ctx) {
     return ctx ? ctx->host.toggleRewind() : -1;
 }
 
+int emu_rewind_jump(EmuContext* ctx, int seconds) {
+    return ctx ? ctx->host.rewindJump(seconds) : -1;
+}
+
 void emu_set_run_ahead(EmuContext* ctx, bool enabled) {
     if (ctx) ctx->host.setRunAhead(enabled);
 }

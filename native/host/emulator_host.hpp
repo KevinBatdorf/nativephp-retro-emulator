@@ -138,6 +138,9 @@ public:
     // Rewind / run-ahead / pacing -------------------------------------------
     void configureRewind(bool enabled, int bufferSeconds);    // emulation thread
     int  toggleRewind();                                      // 1/0/-1
+    // Instant jump: load the snapshot ~seconds back, drop the newer history.
+    // Returns seconds actually jumped (0 = none), -1 = capture disabled.
+    int  rewindJump(int seconds);                             // emulation thread
     void setRunAhead(bool enabled);                           // emulation thread
     void setFastForward(bool active);                         // any thread
     void setDynamicRateControl(bool enabled);                 // any thread

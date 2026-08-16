@@ -251,6 +251,9 @@ void emu_configure_rewind(EmuContext* ctx, bool enabled, int buffer_seconds);
 // Returns 1 rewinding, 0 playing, -1 rewind capture not enabled.
 int emu_toggle_rewind(EmuContext* ctx);
 
+/// Instant rewind: seconds actually jumped, 0 none, -1 capture disabled.
+int emu_rewind_jump(EmuContext* ctx, int seconds);
+
 // Enable/disable one-frame run-ahead: each tick runs a hidden frame plus a
 // rolled-back visible preview, cutting perceived input latency by one frame
 // at 2× emulation cost.  Suppressed during fast-forward and rewind.

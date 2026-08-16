@@ -920,6 +920,23 @@ enum EmulatorFunctions {
         }
     }
 
+    /// Instant rewind: jump straight to the state ~seconds ago (capped by the
+    /// capture buffer) instead of playing the history backwards.
+    class Rewind: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
+            let seconds = (parameters["seconds"] as? NSNumber)?.intValue ?? 10
+
+            switch renderer.rewindJump(seconds: seconds) {
+            case -1: return BridgeResponse.error(
+                code: "REWIND_DISABLED",
+                message: "Rewind capture is off — enable it via configure(['rewind' => true]) first"
+            )
+            case let jumped: return BridgeResponse.success(data: ["jumped": jumped])
+            }
+        }
+    }
+
     class SetSystemOptions: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }

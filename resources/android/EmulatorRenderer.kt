@@ -838,6 +838,9 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
      */
     fun syncToggleRewind(): Int? = syncOnGlThread { core.toggleRewind() }
 
+    /** Instant rewind jump. Blocks ≤2 s. Seconds jumped, 0 none, -1 disabled, null timeout. */
+    fun syncRewindJump(seconds: Int): Int? = syncOnGlThread { core.rewindJump(seconds) }
+
     /** Enable/disable one-frame run-ahead (see [EmulatorCore.setRunAhead]). Fire-and-forget. */
     fun queueSetRunAhead(enabled: Boolean) = queueEvent { core.setRunAhead(enabled) }
 

@@ -423,6 +423,14 @@ final class EmulatorRenderer: UIView {
         emuLock.unlock()
     }
 
+    /// Instant rewind jump: seconds actually jumped, 0 none, -1 capture disabled.
+    func rewindJump(seconds: Int) -> Int {
+        emuLock.lock()
+        let jumped = Int(emu_rewind_jump(ctx, Int32(seconds)))
+        emuLock.unlock()
+        return jumped
+    }
+
     /// Enter/exit rewind playback. Returns 1 rewinding, 0 playing, -1 rewind not enabled.
     func toggleRewind() -> Int {
         emuLock.lock()

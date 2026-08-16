@@ -1069,6 +1069,27 @@ object EmulatorFunctions {
         }
     }
 
+    /**
+     * Instant rewind: jump straight to the state ~seconds ago (capped by the
+     * capture buffer) instead of playing the history backwards.
+     */
+    class Rewind(private val activity: FragmentActivity) : BridgeFunction {
+        override fun execute(parameters: Map<String, Any>): Map<String, Any> {
+            val (entry, err) = entry(parameters)
+            if (err != null) return err
+            val seconds = (parameters["seconds"] as? Number)?.toInt() ?: 10
+
+            return when (val jumped = entry!!.renderer.syncRewindJump(seconds)) {
+                null -> operationalError(entry, "REWIND_FAILED", "Emulator not running")
+                -1 -> BridgeResponse.error(
+                    "REWIND_DISABLED",
+                    "Rewind capture is off — enable it via configure(['rewind' => true]) first",
+                )
+                else -> BridgeResponse.success(mapOf("jumped" to jumped))
+            }
+        }
+    }
+
     class SetSystemOptions(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
             val (entry, err) = entry(parameters)
