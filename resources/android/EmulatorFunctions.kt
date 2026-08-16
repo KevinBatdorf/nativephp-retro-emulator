@@ -882,7 +882,7 @@ object EmulatorFunctions {
      * Merge GLOBAL display options — omitted options keep their current values,
      * and the surface's options persist across ROM/system reloads (desktop
      * reapplies its settings at load the same way). luminance/saturation
-     * 0–100 and gamma 50–200 are whole percentages (100 = unchanged);
+     * 0–100 and gamma 100–200 are whole percentages (100 = unchanged);
      * colorBleed/overscan are booleans, applied on the ares
      * screen node; presentation settings output (scale/integer/integerFixed/
      * stretch), fixedScale, and aspectCorrection (none/standard/anamorphic)
@@ -935,7 +935,7 @@ object EmulatorFunctions {
             if (luminance is Percent.Failure) return luminance.response
             val saturation = percent(options, "saturation", 0, 100)
             if (saturation is Percent.Failure) return saturation.response
-            val gamma = percent(options, "gamma", 50, 200)
+            val gamma = percent(options, "gamma", 100, 200)
             if (gamma is Percent.Failure) return gamma.response
 
             entry!!.renderer.queueVideoOptions(

@@ -22,8 +22,8 @@ class Config
      *
      * @param  int|null  $luminance  Percent, 0–100; 100 is untouched.
      * @param  int|null  $saturation  Percent, 0–100; 100 is untouched.
-     * @param  int|null  $gamma  Percent, 50–200; 100 is untouched. Above 100
-     *                           darkens midtones, below brightens them.
+     * @param  int|null  $gamma  Percent, 100–200 like ares desktop; 100 is
+     *                           untouched, higher darkens midtones.
      * @param  int|null  $volume  Percent, 0–100.
      * @param  int|null  $balance  Percent, −100 (full left) … +100 (full right).
      * @param  bool|null  $rawAudio  Restores each engine's own sound — today the

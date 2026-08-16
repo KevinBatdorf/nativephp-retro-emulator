@@ -761,7 +761,7 @@ enum EmulatorFunctions {
     /// Merge global display options — omitted options keep their current
     /// values, and the surface's options persist across ROM/system reloads
     /// (desktop reapplies its settings at load the same way). luminance/
-    /// saturation 0–100 and gamma 50–200 are whole percentages (100 =
+    /// saturation 0–100 and gamma 100–200 are whole percentages (100 =
     /// unchanged); colorBleed/overscan are booleans, applied
     /// on the ares screen node; presentation settings output (scale/integer/
     /// integerFixed/stretch), fixedScale, and aspectCorrection (none/standard/
@@ -810,7 +810,7 @@ enum EmulatorFunctions {
             if let error = luminance.error { return error }
             let saturation = percent(options, "saturation", min: 0, max: 100)
             if let error = saturation.error { return error }
-            let gamma = percent(options, "gamma", min: 50, max: 200)
+            let gamma = percent(options, "gamma", min: 100, max: 200)
             if let error = gamma.error { return error }
 
             renderer.setVideoOptions(

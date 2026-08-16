@@ -356,7 +356,8 @@ class Emulator
      * overscan: true shows the full canvas.
      *
      * luminance, saturation and gamma are whole PERCENTAGES where 100 leaves the
-     * picture untouched — gamma spans 50–200, the others 0–100. Out-of-range
+     * picture untouched — gamma spans 100–200 (ares desktop's own range,
+     * exponent 1.0–2.0), the others 0–100. Out-of-range
      * values are rejected, not clamped.
      */
     public function setVideo(
