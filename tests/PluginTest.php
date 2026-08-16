@@ -864,6 +864,10 @@ describe('Typed layer', function () {
             // One shape for every console: [fast pick, accurate pick].
             expect($map['backends'][$id])->toBeArray()->toHaveCount(2);
         }
+
+        expect($map['backends']['gb'][0])->toBe('sameboy');
+        expect($map['backends']['gbc'][0])->toBe('sameboy');
+        expect($map['backends']['gba'][0])->toBe('mgba');
     });
 
     it('config classes send only explicitly set options', function () {

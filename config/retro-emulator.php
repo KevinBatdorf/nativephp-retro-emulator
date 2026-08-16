@@ -58,11 +58,8 @@ return [
     'backends' => [
         'fc' => ['fceumm', 'mesen'],
         'sfc' => ['snes9x', 'bsnes'],
-        // ares first: its GB mixer (with our constant-idle patch) is the
-        // click-free pick; SameBoy models the hardware's DAC steps, which pop
-        // on GBDK sound drivers.
-        'gb' => ['ares', 'sameboy'],
-        'gbc' => ['ares', 'sameboy'],
+        'gb' => ['sameboy', 'ares'],
+        'gbc' => ['sameboy', 'ares'],
         'gba' => ['mgba', 'ares'],
         // PicoDrive's FM voicing is audibly off; keep it an explicit pick.
         'md' => ['ares', 'picodrive'],
