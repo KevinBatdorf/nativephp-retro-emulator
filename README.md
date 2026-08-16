@@ -99,4 +99,14 @@ $emu->loadSystem(System::Sfc, new SfcConfig(
 
 Full API, events, elements, and engine internals: [AGENTS.md](AGENTS.md).
 
-AI was used to build this plugin and the readme
+<details>
+<summary>AI Disclosure</summary>
+
+This project was built by the developer using AI tooling and autonomous
+coding agents. Design, architecture, and product decisions are human;
+implementation was AI-assisted under direction, with every change reviewed
+and verified on real hardware before shipping.
+
+However, AI wrote the above too (but the dev wrote this line!), so use your own judgement.
+
+</details>
