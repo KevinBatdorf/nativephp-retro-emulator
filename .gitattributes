@@ -5,6 +5,10 @@
 # shipping them bloats every consumer's Laravel bundle (see the demo's
 # cold-boot fan issue: a symlinked path-repo drags these into the app bundle).
 /ares            export-ignore
+/sameboy         export-ignore
+/mgba            export-ignore
+/patches         export-ignore
+/tools           export-ignore
 /build           export-ignore
 /local           export-ignore
 /android         export-ignore

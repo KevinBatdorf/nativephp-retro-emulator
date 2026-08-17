@@ -1,7 +1,6 @@
 {
     "name": "kevinbatdorf/retro-emulator",
     "description": "Native retro emulation for NativePHP Mobile apps via the ares emulator core",
-    "version": "0.1.0",
     "type": "nativephp-plugin",
     "license": "MIT",
     "authors": [
