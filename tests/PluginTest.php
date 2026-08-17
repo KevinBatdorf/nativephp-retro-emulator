@@ -616,7 +616,7 @@ describe('Bridge response parsing', function () {
         $GLOBALS['__nativephp_mock']['Emulator.Rewind'] =
             '{"status":"error","code":"REWIND_DISABLED","message":"Rewind capture is off"}';
         Emulator::surface()->rewind();
-    })->throws(KevinBatdorf\RetroEmulator\EmulatorException::class);
+    })->throws(EmulatorException::class);
 
     it('saveState returns fluent instance', function () {
         $GLOBALS['__nativephp_mock']['Emulator.StateSave'] = '{"status":"saved","slot":1}';

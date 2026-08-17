@@ -3,6 +3,7 @@
 namespace KevinBatdorf\RetroEmulator\Commands;
 
 use Illuminate\Filesystem\Filesystem;
+use KevinBatdorf\RetroEmulator\Backend;
 use Native\Mobile\Plugins\Commands\NativePluginHookCommand;
 
 class CopyAssetsCommand extends NativePluginHookCommand
@@ -82,7 +83,7 @@ class CopyAssetsCommand extends NativePluginHookCommand
 
         foreach ((array) config('retro-emulator.backends', []) as $system => $engines) {
             foreach ((array) $engines as $engine) {
-                $engine = $engine instanceof \KevinBatdorf\RetroEmulator\Backend
+                $engine = $engine instanceof Backend
                     ? $engine->value
                     : (string) $engine;
 

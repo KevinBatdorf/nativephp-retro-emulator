@@ -2,7 +2,6 @@
 
 namespace KevinBatdorf\RetroEmulator;
 
-use KevinBatdorf\RetroEmulator\Backend;
 use KevinBatdorf\RetroEmulator\Concerns\InteractsWithBridge;
 use KevinBatdorf\RetroEmulator\Config\Config;
 use KevinBatdorf\RetroEmulator\Config\SystemConfig;
