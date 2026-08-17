@@ -177,6 +177,17 @@ describe('Plugin Manifest', function () {
             expect(file_exists(__DIR__."/../resources/ios/Sources/{$component['ios_renderer']}.swift"))->toBeTrue();
         }
     });
+
+    it('exports a JavaScript function for every declared bridge function', function () {
+        $js = file_get_contents(dirname(__DIR__).'/resources/js/index.js');
+
+        foreach ($this->manifest['bridge_functions'] as $function) {
+            $short = str($function['name'])->afterLast('.')->toString();
+
+            expect($js)->toContain("export async function {$short}(");
+            expect($js)->toContain("'{$function['name']}'");
+        }
+    });
 });
 
 describe('Service provider', function () {
