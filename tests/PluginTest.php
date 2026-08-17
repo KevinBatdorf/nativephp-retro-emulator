@@ -173,8 +173,8 @@ describe('Plugin Manifest', function () {
         foreach ($this->manifest['components'] ?? [] as $component) {
             $android = str($component['android_renderer'])->afterLast('.')->toString();
 
-            expect(file_exists(__DIR__."/../resources/android/{$android}.kt"))->toBeTrue();
-            expect(file_exists(__DIR__."/../resources/ios/{$component['ios_renderer']}.swift"))->toBeTrue();
+            expect(file_exists(__DIR__."/../resources/android/src/{$android}.kt"))->toBeTrue();
+            expect(file_exists(__DIR__."/../resources/ios/Sources/{$component['ios_renderer']}.swift"))->toBeTrue();
         }
     });
 });
@@ -308,10 +308,10 @@ describe('Error handling', function () {
     });
 
     it('error codes match the native source', function () {
-        $sources = file_get_contents(dirname(__DIR__).'/resources/android/EmulatorFunctions.kt')
-            .file_get_contents(dirname(__DIR__).'/resources/android/EmulatorRenderer.kt')
-            .file_get_contents(dirname(__DIR__).'/resources/ios/EmulatorFunctions.swift')
-            .file_get_contents(dirname(__DIR__).'/resources/ios/EmulatorRenderer.swift')
+        $sources = file_get_contents(dirname(__DIR__).'/resources/android/src/EmulatorFunctions.kt')
+            .file_get_contents(dirname(__DIR__).'/resources/android/src/EmulatorRenderer.kt')
+            .file_get_contents(dirname(__DIR__).'/resources/ios/Sources/EmulatorFunctions.swift')
+            .file_get_contents(dirname(__DIR__).'/resources/ios/Sources/EmulatorRenderer.swift')
             .file_get_contents(dirname(__DIR__).'/android/app/src/main/cpp/emulator_jni.cpp')
             .file_get_contents(dirname(__DIR__).'/ios/emulator_api.cpp')
             .file_get_contents(dirname(__DIR__).'/native/host/emulator_host.cpp');
@@ -710,7 +710,7 @@ describe('Typed layer', function () {
     ]);
 
     it('system enum matches the ids GetSystems reports', function () {
-        $kotlin = file_get_contents(dirname(__DIR__).'/resources/android/EmulatorFunctions.kt');
+        $kotlin = file_get_contents(dirname(__DIR__).'/resources/android/src/EmulatorFunctions.kt');
 
         preg_match_all('/system\("([a-z0-9]+)",\s*"/', $kotlin, $m);
         $native = $m[1];
