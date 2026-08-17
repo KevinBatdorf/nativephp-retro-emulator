@@ -2,7 +2,7 @@
 
 All notable changes to `kevinbatdorf/retro-emulator` are documented here.
 
-## [Unreleased]
+## 0.1.0 — 2026-08-17
 
 Initial marketplace release.
 
