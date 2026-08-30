@@ -1,6 +1,6 @@
 # Retro Emulator for NativePHP Mobile
 
-Full retro consoles inside your Laravel-powered mobile app.
+Native emulation for six consoles, NES through Genesis — zero setup.
 
 ## Install
 
