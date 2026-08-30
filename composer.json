@@ -1,5 +1,5 @@
 {
-    "name": "kevinbatdorf/retro-emulator",
+    "name": "kevinbatdorf/nativephp-retro-emulator",
     "description": "Native retro emulation for NativePHP Mobile apps via the ares emulator core",
     "type": "nativephp-plugin",
     "license": "MIT",

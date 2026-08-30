@@ -7,7 +7,7 @@
  *
  * @example
  * import Emulator, { LoadRom, onNativeEvent }
- *     from './vendor/kevinbatdorf/retro-emulator/resources/js/index.js';
+ *     from './vendor/kevinbatdorf/nativephp-retro-emulator/resources/js/index.js';
  *
  * await Emulator.Boot({ system: 'snes' });
  * await LoadRom({ path: '/roms/game.sfc' });

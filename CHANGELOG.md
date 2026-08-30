@@ -1,6 +1,12 @@
 # Changelog
 
-All notable changes to `kevinbatdorf/retro-emulator` are documented here.
+All notable changes to `kevinbatdorf/nativephp-retro-emulator` are documented here.
+
+## 0.1.1 — 2026-08-30
+
+- Package renamed to `kevinbatdorf/nativephp-retro-emulator` (was
+  `kevinbatdorf/retro-emulator`) to match the repository and the
+  NativePHP plugin naming convention. No code changes.
 
 ## 0.1.0 — 2026-08-30
 

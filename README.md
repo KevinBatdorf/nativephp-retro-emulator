@@ -11,8 +11,8 @@ yourself in minutes.
 ## Install
 
 ```bash
-composer require kevinbatdorf/retro-emulator
-php artisan native:plugin:register kevinbatdorf/retro-emulator
+composer require kevinbatdorf/nativephp-retro-emulator
+php artisan native:plugin:register kevinbatdorf/nativephp-retro-emulator
 ```
 
 Requires NativePHP Mobile v4. No BIOS files, no API keys, no setup — your
@@ -82,7 +82,7 @@ named JavaScript export:
 
 ```js
 import Emulator, { LoadRom, StateSave, onNativeEvent }
-    from './vendor/kevinbatdorf/retro-emulator/resources/js/index.js';
+    from './vendor/kevinbatdorf/nativephp-retro-emulator/resources/js/index.js';
 
 await Emulator.Boot({ system: 'snes' });
 await LoadRom({ path: romPath });

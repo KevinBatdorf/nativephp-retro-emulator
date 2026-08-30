@@ -1,4 +1,4 @@
-## kevinbatdorf/retro-emulator
+## kevinbatdorf/nativephp-retro-emulator
 
 Native retro-game emulation for NativePHP Mobile with pluggable engines — ares, SameBoy and
 mGBA are bundled, and any fetched libretro core loads by name (Android only; iOS runs the
@@ -9,8 +9,8 @@ emulated RAM live. There is **no JavaScript API** — all control is PHP-side.
 ### Installation
 
 ```bash
-composer require kevinbatdorf/retro-emulator
-php artisan native:plugin:register kevinbatdorf/retro-emulator
+composer require kevinbatdorf/nativephp-retro-emulator
+php artisan native:plugin:register kevinbatdorf/nativephp-retro-emulator
 php artisan native:install
 ```
 

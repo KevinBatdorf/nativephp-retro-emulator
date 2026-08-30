@@ -133,10 +133,10 @@ describe('Podfile', function () {
     RUBY;
 
     it('injects the pod after the plugin-pods markers', function () use ($podfile) {
-        $result = Podfile::ensurePod($podfile, '../../vendor/kevinbatdorf/retro-emulator');
+        $result = Podfile::ensurePod($podfile, '../../vendor/kevinbatdorf/nativephp-retro-emulator');
 
         expect($result)->toContain(
-            "# NATIVEPHP_PLUGIN_PODS_END\n  pod 'RetroEmulator', :path => '../../vendor/kevinbatdorf/retro-emulator'"
+            "# NATIVEPHP_PLUGIN_PODS_END\n  pod 'RetroEmulator', :path => '../../vendor/kevinbatdorf/nativephp-retro-emulator'"
         );
     });
 
@@ -147,7 +147,7 @@ describe('Podfile', function () {
             $podfile
         );
 
-        expect(Podfile::ensurePod($existing, '../../vendor/kevinbatdorf/retro-emulator'))->toBeNull();
+        expect(Podfile::ensurePod($existing, '../../vendor/kevinbatdorf/nativephp-retro-emulator'))->toBeNull();
     });
 
     it('is idempotent across runs', function () use ($podfile) {
@@ -161,8 +161,8 @@ describe('Podfile', function () {
     });
 
     it('computes the relative path between build and plugin dirs', function () {
-        expect(Podfile::relativePath('/app/nativephp/ios', '/app/vendor/kevinbatdorf/retro-emulator'))
-            ->toBe('../../vendor/kevinbatdorf/retro-emulator')
+        expect(Podfile::relativePath('/app/nativephp/ios', '/app/vendor/kevinbatdorf/nativephp-retro-emulator'))
+            ->toBe('../../vendor/kevinbatdorf/nativephp-retro-emulator')
             ->and(Podfile::relativePath('/app/nativephp/ios', '/code/plugin'))
             ->toBe('../../../code/plugin');
     });
