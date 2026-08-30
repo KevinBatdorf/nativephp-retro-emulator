@@ -3,7 +3,10 @@
 namespace KevinBatdorf\RetroEmulator\Commands;
 
 use Illuminate\Filesystem\Filesystem;
+use Illuminate\Support\Facades\Http;
 use KevinBatdorf\RetroEmulator\Backend;
+use KevinBatdorf\RetroEmulator\Support\NativeAssets;
+use KevinBatdorf\RetroEmulator\Support\Podfile;
 use Native\Mobile\Plugins\Commands\NativePluginHookCommand;
 
 class CopyAssetsCommand extends NativePluginHookCommand
@@ -14,6 +17,14 @@ class CopyAssetsCommand extends NativePluginHookCommand
 
     public function handle(): int
     {
+        if (! $this->ensureNativeAssets()) {
+            return self::FAILURE;
+        }
+
+        if ($this->isIos()) {
+            return $this->ensurePodfileEntry();
+        }
+
         if (! $this->isAndroid()) {
             return self::SUCCESS;
         }
@@ -24,7 +35,7 @@ class CopyAssetsCommand extends NativePluginHookCommand
         $destination = $this->buildPath().'/app/src/main/jniLibs';
 
         if (! is_dir($source)) {
-            $this->error('Prebuilt jniLibs missing — run scripts/build_android_libs.sh in the plugin repo.');
+            $this->error('Prebuilt jniLibs missing — see the download errors above, or run scripts/build_android_libs.sh in a plugin checkout.');
 
             return self::FAILURE;
         }
@@ -67,6 +78,73 @@ class CopyAssetsCommand extends NativePluginHookCommand
 
         $this->bundleDroppedInCores($files, $destination);
         $this->warnAboutMissingPreferredEngines($destination);
+
+        return self::SUCCESS;
+    }
+
+    private function ensureNativeAssets(): bool
+    {
+        $missing = NativeAssets::missing($this->pluginPath(), $this->platform());
+
+        if ($missing === []) {
+            return true;
+        }
+
+        $manifest = NativeAssets::manifest($this->pluginPath());
+
+        foreach ($missing as $name => $spec) {
+            $url = NativeAssets::url($manifest, $name);
+            $this->info("retro-emulator: downloading {$name} (one-time, cached in vendor/) from {$url}");
+
+            $zip = (string) tempnam(sys_get_temp_dir(), 'retro-emulator-asset');
+
+            try {
+                $response = Http::timeout(600)->withOptions(['sink' => $zip])->get($url);
+
+                if (! $response->successful()) {
+                    $this->error("retro-emulator: {$name} download failed (HTTP {$response->status()}) — the first build needs network access to github.com.");
+
+                    return false;
+                }
+
+                if (! NativeAssets::install($this->pluginPath(), $spec, $zip)) {
+                    $this->error("retro-emulator: {$name} failed sha256 or layout verification — refusing to install it.");
+
+                    return false;
+                }
+            } finally {
+                @unlink($zip);
+            }
+
+            $this->info("retro-emulator: installed {$name}");
+        }
+
+        return true;
+    }
+
+    private function ensurePodfileEntry(): int
+    {
+        $podfilePath = $this->buildPath().'/Podfile';
+        $manualLine = "pod 'RetroEmulator', :path => '{$this->pluginPath()}'";
+
+        if (! is_file($podfilePath)) {
+            $this->warn("retro-emulator: no Podfile at {$podfilePath} — add this to your iOS targets: {$manualLine}");
+
+            return self::SUCCESS;
+        }
+
+        $contents = (string) file_get_contents($podfilePath);
+        $updated = Podfile::ensurePod(
+            $contents,
+            Podfile::relativePath($this->buildPath(), $this->pluginPath())
+        );
+
+        if ($updated !== null) {
+            file_put_contents($podfilePath, $updated);
+            $this->info('retro-emulator: added the RetroEmulator pod to the Podfile');
+        } elseif (! str_contains($contents, "pod 'RetroEmulator'")) {
+            $this->warn("retro-emulator: could not find where to insert the pod — add this to your iOS targets: {$manualLine}");
+        }
 
         return self::SUCCESS;
     }
