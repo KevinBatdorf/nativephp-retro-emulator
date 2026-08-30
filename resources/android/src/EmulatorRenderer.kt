@@ -538,7 +538,7 @@ class EmulatorRenderer(context: Context) : SurfaceView(context), SurfaceHolder.C
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
         currentSurface = holder.surface
-        EmulatorFunctions.maybeDispatchWindowMetrics(this)
+        eventListener?.onWindowMetrics()
         queueEvent {
             surfaceW = width
             surfaceH = height

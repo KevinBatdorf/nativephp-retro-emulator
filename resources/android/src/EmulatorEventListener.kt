@@ -12,6 +12,9 @@ interface EmulatorEventListener {
     fun onPaused()
     fun onResumed()
 
+    /** Default no-op — the renderer can't reference EmulatorFunctions (the dev harness excludes it). */
+    fun onWindowMetrics() {}
+
     /**
      * Fired when a watched address changes value.
      *

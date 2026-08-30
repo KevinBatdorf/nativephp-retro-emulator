@@ -274,8 +274,7 @@ object EmulatorFunctions {
      * several layout passes.
      */
     @JvmStatic
-    fun maybeDispatchWindowMetrics(renderer: EmulatorRenderer) {
-        val activity = surfaces.values.firstOrNull { it.renderer === renderer }?.activity ?: return
+    fun maybeDispatchWindowMetrics(activity: FragmentActivity) {
         val payload = windowMetricsPayload(activity)
         val key = payload.toString()
         if (key == lastWindowMetrics) return
@@ -318,6 +317,10 @@ object EmulatorFunctions {
                 put("romPath", romPath)
             }
             dispatchEvent(activity, "KevinBatdorf\\RetroEmulator\\Events\\EmulatorStarted", payload)
+        }
+
+        override fun onWindowMetrics() {
+            maybeDispatchWindowMetrics(activity)
         }
 
         override fun onStopped() {
