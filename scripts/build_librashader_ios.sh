@@ -14,7 +14,8 @@
 #   build/librashader-ios/ios-arm64/liblibrashader.a            (device)
 #   build/librashader-ios/ios-arm64_x86_64-simulator/liblibrashader.a
 set -euo pipefail
-shopt -s inherit_errexit
+# macOS system bash is 3.2; take the errexit hardening where available.
+shopt -s inherit_errexit 2>/dev/null || true
 
 LIBRASHADER_TAG="librashader-v0.12.0"
 

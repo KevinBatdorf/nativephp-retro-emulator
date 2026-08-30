@@ -33,9 +33,9 @@ jobs:
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.0.12077973" > /dev/null
 
       - name: librashader (Vulkan, both ABIs)
-        env:
-          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
-        run: ./scripts/build_librashader_android.sh
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.0.12077973"
+          ./scripts/build_librashader_android.sh
 
       - name: Android native libraries
         run: ./scripts/build_android_libs.sh
