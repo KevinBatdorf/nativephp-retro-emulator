@@ -1,16 +1,16 @@
 {
-    "release": "v0.1.0",
+    "release": "v0.1.1",
     "base_url": "https://github.com/KevinBatdorf/nativephp-retro-emulator/releases/download",
     "assets": {
         "android-jniLibs.zip": {
             "platform": "android",
-            "sha256": "ebc15b5c479db88116d7a419c9324df27ae5706e231612fd2a9b60e05f4e6488",
+            "sha256": "fe8bda57a6e3bea8f4941bf496a094471e270e326125af73311bc15f5ea694f2",
             "extract_to": "resources/android/jniLibs",
             "probe": "resources/android/jniLibs/arm64-v8a/libbackend_ares.so"
         },
         "RetroEmulator.xcframework.zip": {
             "platform": "ios",
-            "sha256": "8c3228d9b69aae08ea526a386b87d3a1bf70cef73a3d0cdaa340e231430b68dc",
+            "sha256": "3156f42728a0d16453e90e283469f500d43b20f2cb68abf72fea761be68dec31",
             "extract_to": "build",
             "probe": "build/RetroEmulator.xcframework/Info.plist"
         }
