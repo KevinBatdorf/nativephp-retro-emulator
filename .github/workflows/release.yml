@@ -19,7 +19,25 @@ permissions:
   contents: write
 
 jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Refuse to re-release an existing version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          RECUT: ${{ inputs.recut }}
+        run: |
+          V="${INPUT_VERSION#v}"
+          [ -z "$V" ] && V="$(php -r 'echo json_decode(file_get_contents("nativephp.json"))->version;')"
+          if [ "$RECUT" != "true" ] && git ls-remote --tags origin "refs/tags/v$V" | grep -q .; then
+            echo "::error::v$V is already released — enter the next version in the dispatch form." >&2
+            exit 1
+          fi
+          echo "releasing v$V"
+
   android:
+    needs: preflight
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -51,6 +69,7 @@ jobs:
           if-no-files-found: error
 
   ios:
+    needs: preflight
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
