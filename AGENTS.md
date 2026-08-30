@@ -31,7 +31,7 @@ Systems: `fc` (NES), `sfc` (SNES), `gb`/`gbc`, `gba`, `md` (Genesis).
 | `android/app/` | JNI (`emulator_jni.cpp`), CMake, instrumented tests, dev-harness `EmulatorActivity` |
 | `ios/` | `emulator_api.{h,cpp}` C API, CMake, static-link anchors (`core_link.cpp`), SwiftPM test package (`ios/test/`) |
 | `resources/android/`, `resources/ios/` | The bridge layers apps actually run (EmulatorCore/Renderer/Functions + elements) |
-| `resources/android/jniLibs/` | Prebuilt `.so` set consumers install (committed; rebuild after any native change) |
+| `resources/android/jniLibs/` | Prebuilt `.so` set (gitignored; built locally, shipped as release assets — see Native binary delivery) |
 | `src/` | PHP: Emulator, configs, enums, events, elements, artisan commands |
 | `tests/` | Pest (includes drift scanners that parse native sources) |
 | `scripts/` | Native build scripts |
@@ -41,15 +41,15 @@ Systems: `fc` (NES), `sfc` (SNES), `gb`/`gbc`, `gba`, `md` (Genesis).
 ## Build and test
 
 ```bash
-# Native rebuild — REQUIRED after any native/ change; the committed
-# prebuilts in resources/android/jniLibs and the xcframework are what
-# consumers run. Instrumented tests compile from source and can go green
-# while a stale prebuilt still crashes apps.
+# Native rebuild — REQUIRED after any native/ change; consumers run the
+# prebuilts shipped as release assets (see Native binary delivery), and
+# local builds fill the same paths. Instrumented tests compile from
+# source and can go green while a stale prebuilt still crashes apps.
 ./scripts/build_android_libs.sh
 ./scripts/build_xcframework.sh
 
 # PHP
-./vendor/bin/pest                              # 152 tests, <1s
+./vendor/bin/pest                              # 174 tests, <1s
 
 # Android instrumented (device attached; 103 tests)
 cd android && ./gradlew connectedDebugAndroidTest --no-daemon
@@ -69,6 +69,32 @@ cp vendor-engines/cores/snes9x_libretro_android.so \
 
 Gates before a commit: Pest + full instrumented suite + iOS suite green; if
 behavior is user-visible, verify on hardware with a real ROM and your eyes.
+
+## Native binary delivery
+
+Consumers never compile C++ and git tracks no binaries. The prebuilts ship
+as GitHub release assets pinned by `resources/native-assets.json` — release
+tag, sha256, extract path, and a probe file per asset. The copy-assets hook
+downloads whatever the probe says is missing, refuses sha or layout
+mismatches, and extracts into the plugin dir. A checkout with locally built
+artifacts never downloads.
+
+iOS needs two extra moves the SDK can't make (its pod-injection emits only
+name/version pods, no vendored frameworks): the xcframework is vendored
+through the local `RetroEmulator.podspec`, and the hook writes
+`pod 'RetroEmulator', :path => …` into the app's Podfile idempotently —
+after the SDK's `NATIVEPHP_PLUGIN_PODS` markers, before `pod install`.
+
+Cutting a release:
+
+1. `./scripts/build_android_libs.sh` and `./scripts/build_xcframework.sh`
+2. `./scripts/package_release_assets.sh` — zips both sets into
+   `build/release-assets/` and pins their sha256s into the manifest
+3. Commit the manifest; tag `vX.Y.Z` matching `nativephp.json`'s version
+4. `gh release create vX.Y.Z build/release-assets/*.zip`
+
+The manifest names the release it downloads from — a tag published without
+those assets breaks every consumer's first build.
 
 ## PHP API
 
@@ -198,7 +224,8 @@ All `Config` keys plus:
 
 `EmulatorStarted` (first frame — safe to query), `EmulatorStopped`,
 `EmulatorPaused`, `EmulatorResumed`, `MemoryRead`, `MemoryChanged`,
-`EmulatorError` (operational; carries `EmulatorErrorCode`),
+`EmulatorError` (operational; carries `EmulatorErrorCode`), `RomPicked`
+(the OS document picker returned; empty path means cancelled),
 `WindowMetricsChanged` (rotation/resize while an emulator surface is
 mounted; same dp payload as `Emulator::windowMetrics()`). Listen with
 NativePHP's `#[On(EmulatorStarted::class)]`.
@@ -227,6 +254,17 @@ Finger position resolves natively (diagonals, slide-off-and-keep-walking; no
 PHP per press). `@change` reports held directions (`"Up,Right"`, `""`).
 `:pan-x`/`:pan-y` integrate into `SharedValue`s on the native frame clock
 (`pan-speed`, per-axis min/max) for driving non-emulator UI without PHP.
+
+### JavaScript bridge
+
+`resources/js/index.js` exports one `async` function per bridge function
+(wire names: `StateSave`, `LoadRom`, …) plus `onNativeEvent(name, cb)`
+returning an unsubscriber. Every export POSTs to NativePHP's
+`/_native/api/call` endpoint with params passed to the native layer
+verbatim. Native events reach the page as a `native-event` CustomEvent on
+`document` (`detail.event` = PHP event class, `detail.payload` = data), so
+SPA code can also listen without the helper. Pest drift tests hold the
+export list to the manifest.
 
 ## Engines and cores
 
@@ -315,8 +353,10 @@ optionally takes a real dump via `biosPath` (overrides the embedded one).
 
 - `retro-emulator:fetch-core {cores*} {--abi=*}` — download cores into the
   drop-in dir; prints licence + untested note per core.
-- `nativephp:retro-emulator:copy-assets` — build hook; ships prebuilt libs
-  filtered by `config('retro-emulator.systems')` + any dropped-in cores.
+- `nativephp:retro-emulator:copy-assets` — build hook; downloads missing
+  release assets (see Native binary delivery), writes the iOS Podfile pod
+  line, and ships prebuilt libs filtered by
+  `config('retro-emulator.systems')` + any dropped-in cores.
 
 `config/retro-emulator.php`: `systems` (null = all), `shaders` (bool),
 `backends` (system → engine/core map).
@@ -329,9 +369,9 @@ optionally takes a real dump via `biosPath` (overrides the embedded one).
 - **Positional button bits** are a cross-layer contract (Kotlin, Swift, PHP
   enums, catalog, RetroPad); Pest drift scanners parse the native sources —
   keep `system_catalog.cpp` literals and error-code strings scanner-friendly.
-- **Rebuild prebuilts** after native changes (both scripts) and commit the
-  `.so`s; iOS static cores need their link anchor added to the sum in
-  `ios/core_link.cpp` (a bare read is elided at -O2 and the archive drops
-  the object).
+- **Rebuild prebuilts** after native changes (both scripts) — they ship via
+  `scripts/package_release_assets.sh` + release upload, not git; iOS static
+  cores need their link anchor added to the sum in `ios/core_link.cpp` (a
+  bare read is elided at -O2 and the archive drops the object).
 - Never commit: ROMs, BIOS dumps, downloaded cores (`vendor-engines/`,
   `resources/emulator-cores/`, `local/`), or anything under `.claude/`.
