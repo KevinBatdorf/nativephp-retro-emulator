@@ -191,12 +191,12 @@ directly — `resources/js/index.js` exports one function per bridge
 function, plus an `onNativeEvent` helper:
 
 ```js
-import Emulator, { LoadRom, SaveState, onNativeEvent }
+import Emulator, { LoadRom, StateSave, onNativeEvent }
     from './vendor/kevinbatdorf/retro-emulator/resources/js/index.js';
 
 await Emulator.Boot({ system: 'snes' });
 await LoadRom({ path: romPath });
-await SaveState({ slot: 1 });
+await StateSave({ slot: 1 });
 
 const off = onNativeEvent('EmulatorStarted', (payload) => {
     console.log('first frame', payload);

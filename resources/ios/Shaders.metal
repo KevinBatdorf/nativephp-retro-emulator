@@ -1,3 +1,5 @@
+// Reference only: the plugin compiler ships .swift files, never .metal —
+// the live copy is blitShaderSource in MetalFrameRenderer.swift.
 #include <metal_stdlib>
 using namespace metal;
 

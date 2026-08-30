@@ -12,8 +12,10 @@ Initial marketplace release.
 - `<native:emulator>` and `<native:dpad>` EDGE elements.
 - Fluent PHP API: boot/playback, save states with undo, rewind,
   fast-forward, memory read/write/watch, controllers + multitap + mouse,
-  cheats, shaders (librashader), video/audio settings, screenshots,
-  capability introspection.
+  rumble, cheats, shaders (librashader), video/audio settings,
+  screenshots, capability introspection.
+- OS document picker for loading ROMs from device storage
+  (`Emulator::pickRom()`), with the pick copied into app storage.
 - JavaScript bridge library exporting every bridge function for SPA
   frontends, with `onNativeEvent` for native event listening.
 - Nine dispatched events, from `EmulatorStarted` to `WindowMetricsChanged`.

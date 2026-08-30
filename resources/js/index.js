@@ -6,7 +6,8 @@
  * to the native layer verbatim.
  *
  * @example
- * import Emulator, { LoadRom, onNativeEvent } from '@kevinbatdorf/retro-emulator';
+ * import Emulator, { LoadRom, onNativeEvent }
+ *     from './vendor/kevinbatdorf/retro-emulator/resources/js/index.js';
  *
  * await Emulator.Boot({ system: 'snes' });
  * await LoadRom({ path: '/roms/game.sfc' });
