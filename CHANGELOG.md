@@ -2,9 +2,13 @@
 
 All notable changes to `kevinbatdorf/retro-emulator` are documented here.
 
-## 0.1.0 — 2026-08-17
+## 0.1.0 — 2026-08-30
 
 Initial marketplace release.
+
+- Prebuilt native cores download on the first build for each platform
+  from this repo's GitHub release, sha256-pinned — the composer package
+  ships no binaries, and iOS Podfile wiring is automatic.
 
 - NES, SNES, Game Boy, Game Boy Color, GBA, and Mega Drive emulation
   via ares, SameBoy, and mGBA, with optional fetchable libretro cores
