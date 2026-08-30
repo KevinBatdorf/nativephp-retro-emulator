@@ -45,7 +45,7 @@
             "name": "Emulator.Boot",
             "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.Boot",
             "ios": "EmulatorFunctions.Boot",
-            "description": "Internal — invoked by Emulator::surface() to bind the named surface and create its rendering surface; not called directly"
+            "description": "Internal \u2014 invoked by Emulator::surface() to bind the named surface and create its rendering surface; not called directly"
         },
         {
             "name": "Emulator.LoadSystem",
@@ -63,7 +63,7 @@
             "name": "Emulator.StageSlot",
             "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.StageSlot",
             "ios": "EmulatorFunctions.StageSlot",
-            "description": "Internal — invoked by Emulator::loadRom() to stage a SuFami Turbo slot ROM before boot; not called directly"
+            "description": "Internal \u2014 invoked by Emulator::loadRom() to stage a SuFami Turbo slot ROM before boot; not called directly"
         },
         {
             "name": "Emulator.Pause",
@@ -111,13 +111,13 @@
             "name": "Emulator.ReadMemory",
             "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.ReadMemory",
             "ios": "EmulatorFunctions.ReadMemory",
-            "description": "Sync RAM read — returns bytes directly"
+            "description": "Sync RAM read \u2014 returns bytes directly"
         },
         {
             "name": "Emulator.ReadMemoryAsync",
             "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.ReadMemoryAsync",
             "ios": "EmulatorFunctions.ReadMemoryAsync",
-            "description": "Async RAM read — dispatches MemoryRead event"
+            "description": "Async RAM read \u2014 dispatches MemoryRead event"
         },
         {
             "name": "Emulator.WriteMemory",
