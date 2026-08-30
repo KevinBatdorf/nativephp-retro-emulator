@@ -2,6 +2,11 @@
 
 Native emulation for six consoles, NES through Genesis — zero setup.
 
+See it running first: the
+[demo app](https://github.com/KevinBatdorf/nativephp-retro-emulator-demo)
+boots all six systems — sideload the APK from its releases, or build it
+in minutes.
+
 ## Install
 
 ```bash
