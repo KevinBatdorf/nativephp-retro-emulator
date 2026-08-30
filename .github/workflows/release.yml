@@ -6,6 +6,10 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
+      version:
+        description: "Version to release (e.g. 0.2.0); empty keeps nativephp.json's"
+        type: string
+        default: ""
       recut:
         description: "Delete this version's existing tag + release first"
         type: boolean
@@ -83,6 +87,19 @@ jobs:
           name: xcframework
           path: build/RetroEmulator.xcframework
 
+      - name: Set version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          [ -z "$INPUT_VERSION" ] && exit 0
+          V="${INPUT_VERSION#v}"
+          php -r '
+          $m = json_decode(file_get_contents("nativephp.json"), true);
+          $m["version"] = $argv[1];
+          file_put_contents("nativephp.json", json_encode($m, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n");
+          ' "$V"
+          sed -i "s/^  s.version      = '.*'/  s.version      = '$V'/" RetroEmulator.podspec
+
       - name: Package assets and pin checksums
         run: ./scripts/package_release_assets.sh
 
@@ -100,8 +117,8 @@ jobs:
             git push origin ":refs/tags/$VERSION" 2>/dev/null || true
           fi
 
-          git add resources/native-assets.json
-          git diff --cached --quiet || git commit -m "Release $VERSION: pin CI-built asset checksums"
+          git add resources/native-assets.json nativephp.json RetroEmulator.podspec
+          git diff --cached --quiet || git commit -m "Release $VERSION: version + CI-built asset checksums"
           git tag "$VERSION"
           git push origin "HEAD:${{ github.ref_name }}" "$VERSION"
 

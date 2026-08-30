@@ -87,11 +87,12 @@ after the SDK's `NATIVEPHP_PLUGIN_PODS` markers, before `pod install`.
 
 Cutting a release:
 
-1. Bump `version` in `nativephp.json` (and the podspec); date the CHANGELOG.
-2. Run the **Release** workflow (Actions tab; `recut` replaces an existing
-   same-version release). It builds both native sets from a bare checkout on
-   GitHub runners, zips them, pins their sha256s into the manifest, commits,
-   tags, and publishes the release with the zips attached.
+1. Write the CHANGELOG entry (the one human step).
+2. Run the **Release** workflow (Actions tab). Its `version` input bumps
+   `nativephp.json` + the podspec; `recut` replaces an existing same-version
+   release. It builds both native sets from a bare checkout on GitHub
+   runners, zips them, pins their sha256s into the manifest, commits, tags,
+   and publishes the release with the zips attached.
 
 Release binaries only ever ship through that workflow — a developer machine
 is never a dependency of a release. The local scripts remain the dev loop,
