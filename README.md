@@ -1,9 +1,6 @@
 # Retro Emulator for NativePHP Mobile
 
-Full retro consoles inside your Laravel-powered mobile app — NES, SNES,
-Game Boy, Game Boy Color, Game Boy Advance, and Sega Genesis, rendered
-natively on Android and iOS. Save states, rewind, cheats, CRT shaders,
-physical controllers, live memory access — all one fluent PHP call away.
+Full retro consoles inside your Laravel-powered mobile app.
 
 ## Install
 
@@ -15,6 +12,27 @@ php artisan native:plugin:register kevinbatdorf/retro-emulator
 Requires NativePHP Mobile v4. No BIOS files, no API keys, no setup — your
 first build for each platform downloads the prebuilt emulator cores
 automatically (checksum-verified, cached from then on).
+
+The bundled engines (ares, SameBoy, mGBA — all permissively licensed) play
+everything. Want a lighter or more accurate core? Fetch it once and your
+builds bundle it from then on:
+
+```bash
+php artisan retro-emulator:fetch-core snes9x
+```
+
+| System | Fast | Accurate |
+|---|---|---|
+| NES | fceumm † | mesen † |
+| SNES | snes9x † | bsnes † |
+| Game Boy / Color | SameBoy | ares |
+| GBA | mGBA | ares |
+| Genesis | picodrive † | genesis_plus_gx † |
+
+† fetched, not bundled — GPL and non-commercial licences stay out of your
+app unless you opt in; read [LICENSING.md](LICENSING.md) before shipping
+one. Fetched cores are Android-only; iOS plays everything through the
+bundled engines. Any other libretro core loads the same way.
 
 ## A console in two lines
 
@@ -78,29 +96,6 @@ onNativeEvent('EmulatorStarted', () => console.log('first frame'));
   correction, screenshots.
 - **Cheats**, region control, accuracy toggles, an OS ROM picker
   (`pickRom()`), and window/safe-area metrics for overlay layouts.
-
-## Choose your engine
-
-The bundled engines (ares, SameBoy, mGBA — all permissively licensed) play
-everything. Want a lighter or more accurate core? Fetch it once and your
-builds bundle it from then on:
-
-```bash
-php artisan retro-emulator:fetch-core snes9x
-```
-
-| System | Fast | Accurate |
-|---|---|---|
-| NES | fceumm † | mesen † |
-| SNES | snes9x † | bsnes † |
-| Game Boy / Color | SameBoy | ares |
-| GBA | mGBA | ares |
-| Genesis | picodrive † | genesis_plus_gx † |
-
-† fetched, not bundled — GPL and non-commercial licences stay out of your
-app unless you opt in; read [LICENSING.md](LICENSING.md) before shipping
-one. Fetched cores are Android-only; iOS plays everything through the
-bundled engines. Any other libretro core loads the same way.
 
 ## Events
 
