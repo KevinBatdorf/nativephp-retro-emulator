@@ -126,6 +126,6 @@ coding agents. Design, architecture, and product decisions are human;
 implementation was AI-assisted under direction, with every change reviewed
 and verified on real hardware before shipping.
 
-However, AI wrote the above too (but the dev wrote this line!), so use your own judgement.
+However, AI wrote the above too, so use your own judgement.
 
 </details>
