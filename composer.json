@@ -1,6 +1,6 @@
 {
     "name": "kevinbatdorf/nativephp-retro-emulator",
-    "description": "Native retro emulation for NativePHP Mobile apps via the ares emulator core",
+    "description": "Native retro emulation for NativePHP Mobile apps — NES, SNES, Game Boy, Game Boy Color, Game Boy Advance, and Genesis via swappable cores (ares, SameBoy, mGBA, or bring-your-own libretro)",
     "type": "nativephp-plugin",
     "license": "MIT",
     "authors": [
