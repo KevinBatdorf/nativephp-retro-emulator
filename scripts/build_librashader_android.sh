@@ -76,7 +76,7 @@ for abi in "${ABIS[@]}"; do
     "$STRIP" --strip-unneeded "$BUILD_OUT/$abi/liblibrashader_capi.so" \
         -o "$OUT/$abi/liblibrashader.so"
     cp "$OUT/$abi/liblibrashader.so" "$DEVHARNESS/$abi/liblibrashader.so"
-    echo "installed $OUT/$abi/liblibrashader.so ($(stat -f%z "$OUT/$abi/liblibrashader.so") bytes)"
+    echo "installed $OUT/$abi/liblibrashader.so ($(wc -c < "$OUT/$abi/liblibrashader.so") bytes)"
 done
 
 # Refresh the vendored C header from the SAME tag so it never skews from the .so.

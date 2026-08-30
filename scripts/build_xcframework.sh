@@ -12,15 +12,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# The ares submodule stays pristine upstream; local fixes live in patches/
-# and apply idempotently before every build (--check fails once applied).
-for p in "$REPO_ROOT"/patches/ares-*.patch; do
-  [ -e "$p" ] || continue
-  if git -C "$REPO_ROOT/ares" apply --check "$p" 2>/dev/null; then
-    git -C "$REPO_ROOT/ares" apply "$p"
-    echo "applied $(basename "$p")"
-  fi
-done
+"$REPO_ROOT/scripts/apply_engine_patches.sh"
 IOS_SRC="$REPO_ROOT/ios"
 BUILD_ROOT="$REPO_ROOT/build"
 HEADERS_DIR="$IOS_SRC/headers"

@@ -1,0 +1,110 @@
+# Builds the native release assets from a bare checkout and cuts the GitHub
+# release — no developer machine in the path. Trigger from the Actions tab;
+# the version comes from nativephp.json.
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      recut:
+        description: "Delete this version's existing tag + release first"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # build.gradle.kts pins this NDK; the librashader script's fallback
+      # would grab the newest installed one instead.
+      - name: Install pinned NDK
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.0.12077973" > /dev/null
+
+      - name: librashader (Vulkan, both ABIs)
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
+        run: ./scripts/build_librashader_android.sh
+
+      - name: Android native libraries
+        run: ./scripts/build_android_libs.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jniLibs
+          path: resources/android/jniLibs
+          if-no-files-found: error
+
+  ios:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: librashader (Metal, device + simulator)
+        run: ./scripts/build_librashader_ios.sh
+
+      - name: RetroEmulator.xcframework
+        run: ./scripts/build_xcframework.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xcframework
+          path: build/RetroEmulator.xcframework
+          if-no-files-found: error
+
+  release:
+    needs: [android, ios]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: jniLibs
+          path: resources/android/jniLibs
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: xcframework
+          path: build/RetroEmulator.xcframework
+
+      - name: Package assets and pin checksums
+        run: ./scripts/package_release_assets.sh
+
+      - name: Commit manifest, tag, publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RECUT: ${{ inputs.recut }}
+        run: |
+          VERSION="v$(php -r 'echo json_decode(file_get_contents("nativephp.json"))->version;')"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if [ "$RECUT" = "true" ]; then
+            gh release delete "$VERSION" --yes 2>/dev/null || true
+            git push origin ":refs/tags/$VERSION" 2>/dev/null || true
+          fi
+
+          git add resources/native-assets.json
+          git diff --cached --quiet || git commit -m "Release $VERSION: pin CI-built asset checksums"
+          git tag "$VERSION"
+          git push origin "HEAD:${{ github.ref_name }}" "$VERSION"
+
+          gh release create "$VERSION" build/release-assets/*.zip \
+            --title "$VERSION" \
+            --notes "See CHANGELOG.md. The attached zips are the CI-built native cores; the plugin's copy-assets hook downloads them (sha256-pinned by resources/native-assets.json) on a consumer's first build per platform."

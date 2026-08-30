@@ -87,11 +87,16 @@ after the SDK's `NATIVEPHP_PLUGIN_PODS` markers, before `pod install`.
 
 Cutting a release:
 
-1. `./scripts/build_android_libs.sh` and `./scripts/build_xcframework.sh`
-2. `./scripts/package_release_assets.sh` — zips both sets into
-   `build/release-assets/` and pins their sha256s into the manifest
-3. Commit the manifest; tag `vX.Y.Z` matching `nativephp.json`'s version
-4. `gh release create vX.Y.Z build/release-assets/*.zip`
+1. Bump `version` in `nativephp.json` (and the podspec); date the CHANGELOG.
+2. Run the **Release** workflow (Actions tab; `recut` replaces an existing
+   same-version release). It builds both native sets from a bare checkout on
+   GitHub runners, zips them, pins their sha256s into the manifest, commits,
+   tags, and publishes the release with the zips attached.
+
+Release binaries only ever ship through that workflow — a developer machine
+is never a dependency of a release. The local scripts remain the dev loop,
+and `scripts/apply_engine_patches.sh` (run by every build script) is what
+makes a bare checkout compile the same patched engines a dev tree carries.
 
 The manifest names the release it downloads from — a tag published without
 those assets breaks every consumer's first build.
