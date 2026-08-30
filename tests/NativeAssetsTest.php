@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Filesystem\Filesystem;
+use KevinBatdorf\RetroEmulator\Support\GradleGuard;
 use KevinBatdorf\RetroEmulator\Support\NativeAssets;
 use KevinBatdorf\RetroEmulator\Support\Podfile;
 
@@ -165,5 +166,51 @@ describe('Podfile', function () {
             ->toBe('../../vendor/kevinbatdorf/nativephp-retro-emulator')
             ->and(Podfile::relativePath('/app/nativephp/ios', '/code/plugin'))
             ->toBe('../../../code/plugin');
+    });
+});
+
+describe('GradleGuard', function () {
+    it('appends the preBuild check with its marker and error-file read', function () {
+        $result = GradleGuard::inject("android {\n}\n");
+
+        expect($result)
+            ->toContain(GradleGuard::MARKER)
+            ->toContain('GradleException')
+            ->toContain(GradleGuard::ERROR_FILE)
+            ->toContain('libbackend_');
+    });
+
+    it('is idempotent across runs', function () {
+        $once = GradleGuard::inject("android {\n}\n");
+
+        expect(GradleGuard::inject($once))->toBeNull();
+    });
+
+    it('ensure writes the check into app/build.gradle.kts exactly once', function () {
+        $gradle = $this->pluginPath.'/app/build.gradle.kts';
+        $this->files->ensureDirectoryExists(dirname($gradle));
+        file_put_contents($gradle, "android {\n}\n");
+
+        GradleGuard::ensure($this->pluginPath);
+        GradleGuard::ensure($this->pluginPath);
+
+        expect(substr_count((string) file_get_contents($gradle), GradleGuard::MARKER))->toBe(1);
+    });
+
+    it('ensure does nothing when the scaffold has no gradle file', function () {
+        GradleGuard::ensure($this->pluginPath);
+
+        expect(is_file($this->pluginPath.'/app/build.gradle.kts'))->toBeFalse();
+    });
+
+    it('report writes the hook error and clears it on success', function () {
+        $this->files->ensureDirectoryExists($this->pluginPath.'/app');
+        $errorFile = $this->pluginPath.'/app/'.GradleGuard::ERROR_FILE;
+
+        GradleGuard::report($this->pluginPath, 'download failed (HTTP 404)');
+        expect(trim((string) file_get_contents($errorFile)))->toBe('download failed (HTTP 404)');
+
+        GradleGuard::report($this->pluginPath, null);
+        expect(is_file($errorFile))->toBeFalse();
     });
 });

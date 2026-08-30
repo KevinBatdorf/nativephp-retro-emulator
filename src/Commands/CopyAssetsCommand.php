@@ -5,6 +5,7 @@ namespace KevinBatdorf\RetroEmulator\Commands;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Http;
 use KevinBatdorf\RetroEmulator\Backend;
+use KevinBatdorf\RetroEmulator\Support\GradleGuard;
 use KevinBatdorf\RetroEmulator\Support\NativeAssets;
 use KevinBatdorf\RetroEmulator\Support\Podfile;
 use Native\Mobile\Plugins\Commands\NativePluginHookCommand;
@@ -17,27 +18,41 @@ class CopyAssetsCommand extends NativePluginHookCommand
 
     public function handle(): int
     {
-        if (! $this->ensureNativeAssets()) {
-            return self::FAILURE;
-        }
+        if ($this->isAndroid()) {
+            GradleGuard::ensure($this->buildPath());
 
-        if ($this->isIos()) {
-            return $this->ensurePodfileEntry();
-        }
+            $error = $this->ensureNativeAssets() ?? $this->stageAndroidLibraries();
+            GradleGuard::report($this->buildPath(), $error);
 
-        if (! $this->isAndroid()) {
+            if ($error !== null) {
+                $this->error($error);
+
+                return self::FAILURE;
+            }
+
             return self::SUCCESS;
         }
 
-        // Host apps don't compile the ares C++ — they consume the prebuilt
-        // modular set (frontend + shared runtime + one library per core).
+        if (($error = $this->ensureNativeAssets()) !== null) {
+            $this->error($error);
+
+            return self::FAILURE;
+        }
+
+        return $this->isIos() ? $this->ensurePodfileEntry() : self::SUCCESS;
+    }
+
+    /**
+     * Host apps don't compile the ares C++ — they consume the prebuilt
+     * modular set (frontend + shared runtime + one library per core).
+     */
+    private function stageAndroidLibraries(): ?string
+    {
         $source = $this->pluginPath().'/resources/android/jniLibs';
         $destination = $this->buildPath().'/app/src/main/jniLibs';
 
         if (! is_dir($source)) {
-            $this->error('Prebuilt jniLibs missing — see the download errors above, or run scripts/build_android_libs.sh in a plugin checkout.');
-
-            return self::FAILURE;
+            return 'Prebuilt jniLibs missing from the plugin — the core download did not complete, or run scripts/build_android_libs.sh in a plugin checkout.';
         }
 
         $systems = config('retro-emulator.systems');
@@ -46,12 +61,8 @@ class CopyAssetsCommand extends NativePluginHookCommand
         if (is_array($systems)) {
             $unknown = array_diff($systems, $this->availableSystems($source));
             if ($unknown !== []) {
-                $this->error(
-                    'config/retro-emulator.php selects systems this plugin build does not provide: '
-                    .implode(', ', $unknown)
-                );
-
-                return self::FAILURE;
+                return 'config/retro-emulator.php selects systems this plugin build does not provide: '
+                    .implode(', ', $unknown);
             }
         }
 
@@ -79,15 +90,16 @@ class CopyAssetsCommand extends NativePluginHookCommand
         $this->bundleDroppedInCores($files, $destination);
         $this->warnAboutMissingPreferredEngines($destination);
 
-        return self::SUCCESS;
+        return null;
     }
 
-    private function ensureNativeAssets(): bool
+    /** Null means every platform asset is in place. */
+    private function ensureNativeAssets(): ?string
     {
         $missing = NativeAssets::missing($this->pluginPath(), $this->platform());
 
         if ($missing === []) {
-            return true;
+            return null;
         }
 
         $manifest = NativeAssets::manifest($this->pluginPath());
@@ -102,15 +114,11 @@ class CopyAssetsCommand extends NativePluginHookCommand
                 $response = Http::timeout(600)->withOptions(['sink' => $zip])->get($url);
 
                 if (! $response->successful()) {
-                    $this->error("retro-emulator: {$name} download failed (HTTP {$response->status()}) — the first build needs network access to github.com.");
-
-                    return false;
+                    return "{$name} download failed (HTTP {$response->status()}) from {$url} — the first build needs network access to github.com.";
                 }
 
                 if (! NativeAssets::install($this->pluginPath(), $spec, $zip)) {
-                    $this->error("retro-emulator: {$name} failed sha256 or layout verification — refusing to install it.");
-
-                    return false;
+                    return "{$name} failed sha256 or layout verification — refusing to install it.";
                 }
             } finally {
                 @unlink($zip);
@@ -119,7 +127,7 @@ class CopyAssetsCommand extends NativePluginHookCommand
             $this->info("retro-emulator: installed {$name}");
         }
 
-        return true;
+        return null;
     }
 
     private function ensurePodfileEntry(): int
