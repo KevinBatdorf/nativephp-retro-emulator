@@ -1,7 +1,7 @@
 {
     "name": "kevinbatdorf/nativephp-retro-emulator",
-    "version": "0.1.1",
-    "description": "Native retro emulation for NativePHP Mobile apps — NES, SNES, Game Boy, Game Boy Color, Game Boy Advance, and Genesis via swappable cores (ares, SameBoy, mGBA, or bring-your-own libretro)",
+    "version": "0.1.0",
+    "description": "Native retro emulation for NativePHP Mobile apps \u2014 NES, SNES, Game Boy, Game Boy Color, Game Boy Advance, and Genesis via swappable cores (ares, SameBoy, mGBA, or bring-your-own libretro)",
     "namespace": "Emulator",
     "keywords": [
         "emulator",

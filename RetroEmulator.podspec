@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name         = 'RetroEmulator'
-  s.version      = '0.1.1'
+  s.version      = '0.1.0'
   s.summary      = 'ares emulator native core (RetroEmulator.xcframework) for the NativePHP plugin.'
   s.homepage     = 'https://github.com/kevinbatdorf/nativephp-retro-emulator'
   s.license      = { :type => 'MIT' }
