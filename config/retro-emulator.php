@@ -55,14 +55,14 @@ return [
     |
     */
 
+    // Every list is [fast, accurate]; ares sits second because it's the engine the plugin ships.
     'backends' => [
-        'fc' => ['fceumm', 'mesen'],
-        'sfc' => ['snes9x', 'bsnes'],
+        'fc' => ['fceumm', 'ares'],
+        'sfc' => ['snes9x', 'ares'],
         'gb' => ['sameboy', 'ares'],
         'gbc' => ['sameboy', 'ares'],
         'gba' => ['mgba', 'ares'],
-        // PicoDrive's FM voicing is audibly off; keep it an explicit pick.
-        'md' => ['ares', 'picodrive'],
+        'md' => ['picodrive', 'ares'],
     ],
 
 ];
