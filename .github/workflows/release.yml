@@ -18,7 +18,7 @@ jobs:
   preflight:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Refuse to re-release an existing version
         env:
           INPUT_VERSION: ${{ inputs.version }}
@@ -38,11 +38,11 @@ jobs:
     needs: preflight
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "17"
@@ -60,7 +60,7 @@ jobs:
       - name: Android native libraries
         run: ./scripts/build_android_libs.sh
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: jniLibs
           path: resources/android/jniLibs
@@ -70,7 +70,7 @@ jobs:
     needs: preflight
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -80,7 +80,7 @@ jobs:
       - name: RetroEmulator.xcframework
         run: ./scripts/build_xcframework.sh
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: xcframework
           path: build/RetroEmulator.xcframework
@@ -90,16 +90,16 @@ jobs:
     needs: [android, ios]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: jniLibs
           path: resources/android/jniLibs
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: xcframework
           path: build/RetroEmulator.xcframework

@@ -13,7 +13,7 @@ jobs:
   pest:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         # Engine submodules are build-time only; the test suite reads the
         # in-repo sources.
         with:
@@ -27,7 +27,7 @@ jobs:
           coverage: none
 
       - name: Cache composer
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: vendor
           key: composer-${{ runner.os }}-${{ hashFiles('composer.lock') }}
