@@ -129,8 +129,12 @@ jobs:
 
           git add resources/native-assets.json nativephp.json RetroEmulator.podspec
           git diff --cached --quiet || git commit -m "Release $VERSION: version + CI-built asset checksums"
+
+          # Main can move during the ~20-min build; a rejected branch push must not orphan the tag.
+          git fetch origin "${{ github.ref_name }}"
+          git rebase "origin/${{ github.ref_name }}"
           git tag "$VERSION"
-          git push origin "HEAD:${{ github.ref_name }}" "$VERSION"
+          git push --atomic origin "HEAD:${{ github.ref_name }}" "$VERSION"
 
           gh release create "$VERSION" build/release-assets/*.zip \
             --title "$VERSION" \
