@@ -4,13 +4,13 @@
     "assets": {
         "android-jniLibs.zip": {
             "platform": "android",
-            "sha256": "1c5b9d3fb4bf5f3296b9c35cdeef1e90ee61533b002ee17709510ffaf09ec5ae",
+            "sha256": "dd0172bd96e34c8c6dfa1020ab217fcd9a77bf6dd57b33bc8b7c5d5f61138268",
             "extract_to": "resources/android/jniLibs",
             "probe": "resources/android/jniLibs/arm64-v8a/libbackend_ares.so"
         },
         "RetroEmulator.xcframework.zip": {
             "platform": "ios",
-            "sha256": "1d1e20d5709e24ac1fc564b809aa19b47eed30e17119575bc0b6aa2c8a5f21fb",
+            "sha256": "3e8726c891bc7f17e6b5ea7814963fadd32d444f38e837d67e2731ad8bff3062",
             "extract_to": "build",
             "probe": "build/RetroEmulator.xcframework/Info.plist"
         }
