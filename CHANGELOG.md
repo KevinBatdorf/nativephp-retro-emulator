@@ -2,6 +2,14 @@
 
 All notable changes to `kevinbatdorf/nativephp-retro-emulator` are documented here.
 
+## 0.1.4 — 2026-09-20
+
+- A running game survives its view being recreated or moved to another
+  window. The emulator core now lives until `stop()` or the process ends,
+  pauses while no view shows it, and resumes when one does. Before this,
+  navigating away and back, a recomposition, or moving the emulator to
+  another display rebooted the game from the logo.
+
 ## 0.1.1 — 2026-08-30
 
 - Package renamed to `kevinbatdorf/nativephp-retro-emulator` (was
