@@ -20,8 +20,8 @@ import java.io.File
  *   FIXED_SCALE       (Int, optional)    — multiplier for integerFixed.
  *   ASPECT_CORRECTION (String, optional) — none, standard (default), anamorphic.
  *
- * The activity displays an [EmulatorRenderer] full-screen and immediately
- * starts loading once the GL surface is ready.
+ * The activity shows one [EmulatorSession] through an [EmulatorRenderer]
+ * full-screen and queues the ROM load at once.
  */
 class EmulatorActivity : Activity() {
 
@@ -43,6 +43,7 @@ class EmulatorActivity : Activity() {
 
     // Internal so instrumented tests can stop emulation deterministically
     // (on the render thread, while it is still alive) before the scenario closes.
+    internal lateinit var session: EmulatorSession
     internal lateinit var renderer: EmulatorRenderer
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -56,17 +57,18 @@ class EmulatorActivity : Activity() {
         }
         val system = intent.getStringExtra(EXTRA_SYSTEM) ?: "sfc"
 
-        renderer = EmulatorRenderer(this)
+        session = EmulatorSession(this)
+        renderer = EmulatorRenderer(this, session)
         setContentView(renderer)
 
-        intent.getStringExtra(EXTRA_OUTPUT)?.let { renderer.videoOutput = it }
-        renderer.videoFixedScale = intent.getIntExtra(EXTRA_FIXED_SCALE, 2)
-        intent.getStringExtra(EXTRA_ASPECT_CORRECTION)?.let { renderer.videoAspectCorrection = it }
-        intent.getStringExtra(EXTRA_REGION)?.let { renderer.stagedRegion = it }
+        intent.getStringExtra(EXTRA_OUTPUT)?.let { session.videoOutput = it }
+        session.videoFixedScale = intent.getIntExtra(EXTRA_FIXED_SCALE, 2)
+        intent.getStringExtra(EXTRA_ASPECT_CORRECTION)?.let { session.videoAspectCorrection = it }
+        intent.getStringExtra(EXTRA_REGION)?.let { session.stagedRegion = it }
 
         // Stage the system. BIOS_PATH feeds firmware-gated systems (gba)
         // their dev-supplied dump; BACKEND pins an engine for A/B runs.
-        renderer.stageSystem(
+        session.stageSystem(
             system,
             intent.getStringExtra(EXTRA_BIOS_PATH) ?: "",
             backend = intent.getStringExtra(EXTRA_BACKEND),
@@ -82,10 +84,10 @@ class EmulatorActivity : Activity() {
         // bytes; the renderer inserts them into the core on the render thread
         // right before the boot, so ordering relative to the queued load — and
         // waiting for the core to exist — is handled there.
-        intent.getStringExtra(EXTRA_SLOT_A_PATH)?.let { renderer.stageSlot(0, File(it).readBytes()) }
-        intent.getStringExtra(EXTRA_SLOT_B_PATH)?.let { renderer.stageSlot(1, File(it).readBytes()) }
+        intent.getStringExtra(EXTRA_SLOT_A_PATH)?.let { session.stageSlot(0, File(it).readBytes()) }
+        intent.getStringExtra(EXTRA_SLOT_B_PATH)?.let { session.stageSlot(1, File(it).readBytes()) }
 
-        renderer.queueRomLoad(romBytes, system, romPath, savePrefix)
+        session.queueRomLoad(romBytes, system, romPath, savePrefix)
         Log.i(TAG, "ROM queued: $romPath (${romBytes.size} bytes, system=$system)")
 
         // Optional shader for on-device librashader verification. Applied off the
@@ -94,7 +96,7 @@ class EmulatorActivity : Activity() {
         intent.getStringExtra(EXTRA_SHADER)?.let { shaderPath ->
             Thread {
                 Thread.sleep(2500)
-                val ok = renderer.syncSetShader(shaderPath)
+                val ok = session.syncSetShader(shaderPath)
                 Log.i(TAG, "setShader($shaderPath) → $ok")
             }.start()
         }
@@ -105,7 +107,7 @@ class EmulatorActivity : Activity() {
         if (shotDelay > 0) {
             Thread {
                 Thread.sleep(shotDelay)
-                val png = renderer.syncScreenshot()
+                val png = session.syncScreenshot()
                 if (png != null) {
                     val f = File(filesDir, "screenshot.png")
                     f.writeBytes(png)
@@ -117,17 +119,17 @@ class EmulatorActivity : Activity() {
         }
     }
 
-    override fun onResume()  { super.onResume();  renderer.onResume() }
-    override fun onPause()   { super.onPause();   renderer.onPause();  renderer.input.reset() }
-    override fun onDestroy() { super.onDestroy(); renderer.release() }
+    override fun onResume()  { super.onResume();  session.onResume() }
+    override fun onPause()   { super.onPause();   session.onPause();  session.input.reset() }
+    override fun onDestroy() { super.onDestroy(); session.release() }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (renderer.input.onKeyEvent(event)) return true
+        if (session.input.onKeyEvent(event)) return true
         return super.dispatchKeyEvent(event)
     }
 
     override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
-        if (renderer.input.onMotionEvent(event)) return true
+        if (session.input.onMotionEvent(event)) return true
         return super.dispatchGenericMotionEvent(event)
     }
 }
