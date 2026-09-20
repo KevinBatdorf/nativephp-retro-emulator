@@ -22,13 +22,13 @@ import java.io.File
  * Bridge functions for the NativePHP Retro Emulator plugin.
  *
  * Each inner class handles one bridge function declared in nativephp.json.
- * The static registry ([registerSurface] / [unregisterSurface]) is populated
+ * The static registry ([sessionFor]) is populated
  * by the NativePHP component system when `<native:emulator name="..." />` is
  * rendered into the native layout.
  *
  * Threading model:
  *  - Bridge functions are called on an arbitrary NativePHP bridge thread.
- *  - render-thread-critical ares operations are posted to the render thread via [EmulatorRenderer].
+ *  - render-thread-critical ares operations are posted to the render thread via [EmulatorSession].
  *  - NativePHP events are always dispatched on the main thread.
  */
 object EmulatorFunctions {
@@ -44,9 +44,9 @@ object EmulatorFunctions {
     // typo'd or misplaced key can't read as applied.
     private val CONFIGURE_KEYS = setOf("speed", "runAhead", "rewind", "rewindBufferSeconds", "engineOptions")
 
-    private data class SurfaceEntry(
-        val renderer: EmulatorRenderer,
-        val activity: FragmentActivity,
+    private class SurfaceEntry(
+        val session: EmulatorSession,
+        @Volatile var activity: FragmentActivity,
     )
 
     private val surfaces = java.util.concurrent.ConcurrentHashMap<String, SurfaceEntry>()
@@ -56,52 +56,31 @@ object EmulatorFunctions {
     // ares; a fresh process forgets it and undo reports nothing_to_undo.
     private val undoSaveSlot = java.util.concurrent.ConcurrentHashMap<String, String>()
 
-    /**
-     * Register an [EmulatorRenderer] under [name] so bridge functions can locate it.
-     * Called by the NativePHP component system after creating the renderer.
-     */
+    /** Each mount re-points events at the activity hosting the view now; it changes when the element moves windows. */
     @JvmStatic
-    fun registerSurface(name: String, renderer: EmulatorRenderer, activity: FragmentActivity) {
-        renderer.eventListener = NativeEventForwarder(name, activity)
-        surfaces[name] = SurfaceEntry(renderer, activity)
-        Log.d(TAG, "Surface registered: $name")
-    }
-
-    /**
-     * Remove a surface from the registry — but only if [renderer] still owns the
-     * slot. During a fast remount (navigation / recomposition) the EDGE element
-     * can instantiate a new renderer that re-registers under the same name
-     * BEFORE the old instance's onRelease fires. A blind remove-by-name would
-     * then wipe the live renderer's entry, stranding every bridge call with
-     * SURFACE_NOT_FOUND. Compare identity so a superseded teardown leaves the
-     * live entry in place.
-     */
-    @JvmStatic
-    fun unregisterSurface(name: String, renderer: EmulatorRenderer) {
-        renderer.eventListener = null
-        var removed = false
-        surfaces.computeIfPresent(name) { _, entry ->
-            if (entry.renderer === renderer) {
-                removed = true
-                null
+    fun sessionFor(name: String, activity: FragmentActivity): EmulatorSession {
+        var created = false
+        val entry = surfaces.compute(name) { _, existing ->
+            if (existing == null) {
+                created = true
+                SurfaceEntry(EmulatorSession(activity), activity)
             } else {
-                entry
+                existing.activity = activity
+                existing
             }
-        }
-        Log.d(TAG, if (removed) {
-            "Surface unregistered: $name"
-        } else {
-            "Surface unregister skipped — '$name' owned by a newer instance"
-        })
+        }!!
+        entry.session.eventListener = NativeEventForwarder(name, activity)
+        Log.d(TAG, if (created) "Session created: $name" else "Session reattached: $name")
+        return entry.session
     }
 
     /**
-     * The renderer driving [name], for sibling elements that feed input straight
-     * into the core. Null until the emulator surface mounts, so an overlay laid
-     * out beside it simply drops presses until there is a core to receive them.
+     * The session driving [name], for sibling elements that feed input straight
+     * into the core. Null until something has mounted or booted it, so an overlay
+     * laid out beside it simply drops presses until there is a core to receive them.
      */
     @JvmStatic
-    fun rendererFor(name: String): EmulatorRenderer? = surfaces[name]?.renderer
+    fun sessionFor(name: String): EmulatorSession? = surfaces[name]?.session
 
     /**
      * Apply a `<native:emulator>` element's declarative setup — the same
@@ -130,7 +109,7 @@ object EmulatorFunctions {
             LoadSystem(activity).execute(params(JSONObject()
                 .put("surface", surface).put("system", system).put("config", config)))
 
-            if (surfaces[surface]?.renderer?.stagedSystemId != system) {
+            if (surfaces[surface]?.session?.stagedSystemId != system) {
                 Log.e(TAG, "Declarative boot: system '$system' did not stage on '$surface'")
                 return@Thread
             }
@@ -223,7 +202,7 @@ object EmulatorFunctions {
 
         // A screen's mount() runs before Compose has rendered the emulator
         // node, so the first Boot/LoadSystem arrives just ahead of
-        // registerSurface. Briefly await registration instead of failing.
+        // the session exists. Briefly await it instead of failing.
         val deadline = System.currentTimeMillis() + 3_000
         var entry = surfaces[name]
         while (entry == null && System.currentTimeMillis() < deadline) {
@@ -240,7 +219,8 @@ object EmulatorFunctions {
 
     private fun dispatchEvent(activity: FragmentActivity, fqcn: String, payload: JSONObject) {
         Handler(Looper.getMainLooper()).post {
-            NativeActionCoordinator.dispatchEvent(activity, fqcn, payload.toString())
+            // The view's window can be gone while the session lives on; the next mount re-points events.
+            if (!activity.isDestroyed) NativeActionCoordinator.dispatchEvent(activity, fqcn, payload.toString())
         }
     }
 
@@ -301,7 +281,7 @@ object EmulatorFunctions {
      * response off the wrapper's throw path (which fires on "error").
      */
     private fun operationalError(entry: SurfaceEntry, code: String, message: String): Map<String, Any> {
-        entry.renderer.eventListener?.onError(code, message)
+        entry.session.eventListener?.onError(code, message)
         return BridgeResponse.success(mapOf("status" to "failed", "code" to code, "message" to message))
     }
 
@@ -370,7 +350,7 @@ object EmulatorFunctions {
     /**
      * Bind to the named surface declared in the component tree.
      * The renderer is created by the NativePHP component system and registered
-     * via [registerSurface] before PHP calls Boot().
+     * via [sessionFor] before PHP calls Boot().
      */
     class Boot(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
@@ -425,7 +405,7 @@ object EmulatorFunctions {
                 )
             }
 
-            val renderer = entry!!.renderer
+            val renderer = entry!!.session
             renderer.fastForward = false
             renderer.autoSave = config["autoSave"] as? Boolean ?: true
             renderer.stagedRegion = config["region"] as? String ?: ""
@@ -590,7 +570,7 @@ object EmulatorFunctions {
                 return operationalError(entry!!, "ROM_NOT_FOUND", "ROM not found: $path")
             }
 
-            val system = entry!!.renderer.stagedSystemId
+            val system = entry!!.session.stagedSystemId
             if (system.isEmpty()) {
                 return BridgeResponse.error("SYSTEM_NOT_LOADED", "Call LoadSystem before LoadRom")
             }
@@ -622,7 +602,7 @@ object EmulatorFunctions {
                 File(stateDir, "undo_load.state").delete()
                 undoSaveSlot.remove(surface(parameters))
 
-                entry.renderer.queueRomLoad(romBytes, system, path, savePrefix)
+                entry.session.queueRomLoad(romBytes, system, path, savePrefix)
                 Log.d(TAG, "LoadRom: queued $path (${romBytes.size} bytes, saves=$savePrefix)")
                 BridgeResponse.success(mapOf("status" to "loading", "path" to path))
             } catch (e: Exception) {
@@ -646,7 +626,7 @@ object EmulatorFunctions {
             val file = File(path)
             if (!file.exists()) return operationalError(entry!!, "ROM_NOT_FOUND", "slot ROM not found: $path")
             return try {
-                entry!!.renderer.stageSlot(index, file.readBytes())
+                entry!!.session.stageSlot(index, file.readBytes())
                 BridgeResponse.success(mapOf("status" to "staged", "index" to index))
             } catch (e: Exception) {
                 BridgeResponse.error("READ_FAILED", e.message ?: "Failed to read slot ROM")
@@ -658,7 +638,7 @@ object EmulatorFunctions {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
             val (entry, err) = entry(parameters)
             if (err != null) return err
-            entry!!.renderer.pauseEmulation()
+            entry!!.session.pauseEmulation()
             return BridgeResponse.success(mapOf("status" to "paused"))
         }
     }
@@ -667,7 +647,7 @@ object EmulatorFunctions {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
             val (entry, err) = entry(parameters)
             if (err != null) return err
-            entry!!.renderer.resumeEmulation()
+            entry!!.session.resumeEmulation()
             return BridgeResponse.success(mapOf("status" to "running"))
         }
     }
@@ -676,7 +656,7 @@ object EmulatorFunctions {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
             val (entry, err) = entry(parameters)
             if (err != null) return err
-            entry!!.renderer.stopEmulation()
+            entry!!.session.stopEmulation()
             return BridgeResponse.success(mapOf("status" to "stopped"))
         }
     }
@@ -699,7 +679,7 @@ object EmulatorFunctions {
                 undoSaveSlot[surface(parameters)] = slot.toString()
             }
 
-            val ok = entry!!.renderer.syncStateSave(path)
+            val ok = entry!!.session.syncStateSave(path)
             return if (ok) {
                 BridgeResponse.success(mapOf("status" to "saved", "slot" to slot, "path" to path))
             } else {
@@ -721,13 +701,13 @@ object EmulatorFunctions {
             // Snapshot the current state to the undo-load file before touching
             // the slot (ares stateLoad, states.cpp:26-30) — even when the slot
             // turns out to be empty, matching the reference order.
-            entry!!.renderer.syncStateSave(File(stateDir, "undo_load.state").absolutePath)
+            entry!!.session.syncStateSave(File(stateDir, "undo_load.state").absolutePath)
 
             if (!statePath.exists()) {
                 return operationalError(entry, "SLOT_EMPTY", "No state in slot $slot")
             }
 
-            val ok = entry!!.renderer.syncStateLoad(statePath.absolutePath)
+            val ok = entry!!.session.syncStateLoad(statePath.absolutePath)
             return if (ok) {
                 BridgeResponse.success(mapOf("status" to "loaded", "slot" to slot))
             } else {
@@ -772,7 +752,7 @@ object EmulatorFunctions {
             }
             val (entry, err) = entry(parameters)
             if (err != null) return err
-            val ok = entry!!.renderer.syncStateLoad(undoFile.absolutePath)
+            val ok = entry!!.session.syncStateLoad(undoFile.absolutePath)
             return if (ok) {
                 undoFile.delete()
                 BridgeResponse.success(mapOf("status" to "undone"))
@@ -795,7 +775,7 @@ object EmulatorFunctions {
                 ?: return BridgeResponse.error("INVALID_PARAMETERS", "address is required")
             val length = (parameters["length"] as? Number)?.toInt() ?: 1
 
-            val bytes = entry!!.renderer.syncReadMemory(address, length)
+            val bytes = entry!!.session.syncReadMemory(address, length)
                 ?: return BridgeResponse.error(
                     "READ_FAILED",
                     "Memory read failed — address 0x${address.toString(16).uppercase()} out of range or emulator not running",
@@ -823,9 +803,9 @@ object EmulatorFunctions {
             val surfaceName = surface(parameters)
 
             Thread {
-                val bytes = entry!!.renderer.syncReadMemory(address, length)
+                val bytes = entry!!.session.syncReadMemory(address, length)
                 if (bytes != null) {
-                    entry.renderer.eventListener?.onMemoryRead(address, bytes)
+                    entry.session.eventListener?.onMemoryRead(address, bytes)
                 } else {
                     Log.w(TAG, "ReadMemoryAsync: read failed for 0x${address.toString(16).uppercase()}")
                 }
@@ -852,13 +832,13 @@ object EmulatorFunctions {
             // Validate the target synchronously: a read-probe of the same window
             // returns null for an out-of-range address or when no core is
             // running — exactly the cases a write must reject (WRITE_FAILED).
-            if (entry!!.renderer.syncReadMemory(address, bytes.size.coerceAtLeast(1)) == null) {
+            if (entry!!.session.syncReadMemory(address, bytes.size.coerceAtLeast(1)) == null) {
                 return BridgeResponse.error(
                     "WRITE_FAILED",
                     "Memory write failed — address 0x${address.toString(16).uppercase()} out of range or emulator not running",
                 )
             }
-            entry.renderer.queueWriteMemory(address, bytes)
+            entry.session.queueWriteMemory(address, bytes)
 
             return BridgeResponse.success(mapOf("status" to "queued", "address" to address, "length" to bytes.size))
         }
@@ -881,7 +861,7 @@ object EmulatorFunctions {
                 }
             }
 
-            entry!!.renderer.addWatches(coerced)
+            entry!!.session.addWatches(coerced)
             return BridgeResponse.success(mapOf("status" to "watching", "count" to coerced.size))
         }
     }
@@ -895,7 +875,7 @@ object EmulatorFunctions {
                 ?.mapNotNull { (it as? Number)?.toInt() }
                 ?: return BridgeResponse.error("INVALID_PARAMETERS", "addresses is required")
 
-            entry!!.renderer.removeWatches(addresses)
+            entry!!.session.removeWatches(addresses)
             return BridgeResponse.success(mapOf("status" to "unwatched"))
         }
     }
@@ -904,7 +884,7 @@ object EmulatorFunctions {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
             val (entry, err) = entry(parameters)
             if (err != null) return err
-            entry!!.renderer.clearMemoryWatches()
+            entry!!.session.clearMemoryWatches()
             return BridgeResponse.success(mapOf("status" to "cleared"))
         }
     }
@@ -925,7 +905,7 @@ object EmulatorFunctions {
             val balance = percent(options, "balance", -100, 100)
             if (balance is Percent.Failure) return balance.response
 
-            entry!!.renderer.setAudioOptions(
+            entry!!.session.setAudioOptions(
                 (volume as Percent.Value).scaled,
                 (balance as Percent.Value).scaled,
             )
@@ -993,7 +973,7 @@ object EmulatorFunctions {
             val gamma = percent(options, "gamma", 100, 200)
             if (gamma is Percent.Failure) return gamma.response
 
-            entry!!.renderer.queueVideoOptions(
+            entry!!.session.queueVideoOptions(
                 luminance  = (luminance as Percent.Value).scaled,
                 saturation = (saturation as Percent.Value).scaled,
                 gamma      = (gamma as Percent.Value).scaled,
@@ -1050,25 +1030,25 @@ object EmulatorFunctions {
                         "runAhead must be 0 or 1 — ares supports one hidden frame",
                     )
                 }
-                entry!!.renderer.queueSetRunAhead(frames == 1)
+                entry!!.session.queueSetRunAhead(frames == 1)
             }
 
             (options["rewind"] as? Boolean)?.let { enabled ->
-                entry!!.renderer.queueConfigureRewind(
+                entry!!.session.queueConfigureRewind(
                     enabled,
                     (options["rewindBufferSeconds"] as? Number)?.toInt() ?: 0,
                 )
             }
 
             (options["speed"] as? Number)?.toDouble()?.let { speed ->
-                entry!!.renderer.speedMultiplier = speed.coerceIn(0.25, 4.0)
+                entry!!.session.speedMultiplier = speed.coerceIn(0.25, 4.0)
             }
 
             // Runtime engine-option changes: cores re-read declared options
             // between frames, so a running game picks these up next tick.
             val engineOptions = (options["engineOptions"] as? Map<*, *>).orEmpty()
             for ((key, value) in engineOptions) {
-                val refusal = entry!!.renderer.syncSetEngineOption(
+                val refusal = entry!!.session.syncSetEngineOption(
                     key.toString(), value.toString(), staged = false,
                 )
                 if (refusal == null || refusal.isNotEmpty()) {
@@ -1116,7 +1096,7 @@ object EmulatorFunctions {
             val (entry, err) = entry(parameters)
             if (err != null) return err
 
-            return when (entry!!.renderer.syncToggleRewind()) {
+            return when (entry!!.session.syncToggleRewind()) {
                 1 -> BridgeResponse.success(mapOf("status" to "rewinding"))
                 0 -> BridgeResponse.success(mapOf("status" to "playing"))
                 -1 -> BridgeResponse.error(
@@ -1138,7 +1118,7 @@ object EmulatorFunctions {
             if (err != null) return err
             val seconds = (parameters["seconds"] as? Number)?.toInt() ?: 10
 
-            return when (val jumped = entry!!.renderer.syncRewindJump(seconds)) {
+            return when (val jumped = entry!!.session.syncRewindJump(seconds)) {
                 null -> operationalError(entry, "REWIND_FAILED", "Emulator not running")
                 -1 -> BridgeResponse.error(
                     "REWIND_DISABLED",
@@ -1237,7 +1217,7 @@ object EmulatorFunctions {
                     )
                 }
             }
-            if (toggles.isNotEmpty()) entry!!.renderer.queueCoreOptions(toggles)
+            if (toggles.isNotEmpty()) entry!!.session.queueCoreOptions(toggles)
             return BridgeResponse.success(mapOf("status" to "ok"))
         }
     }
@@ -1248,7 +1228,7 @@ object EmulatorFunctions {
             val (entry, err) = entry(parameters)
             if (err != null) return err
             val enabled = parameters["enabled"] as? Boolean ?: false
-            entry!!.renderer.fastForward = enabled
+            entry!!.session.fastForward = enabled
             return BridgeResponse.success(mapOf("status" to if (enabled) "fast" else "normal"))
         }
     }
@@ -1278,7 +1258,7 @@ object EmulatorFunctions {
             val emulated = pairs.map { it.key }.toTypedArray()
             val source = pairs.map { it.value.toString() }.toTypedArray()
 
-            val result = entry!!.renderer.setInputMapping(port, emulated, source)
+            val result = entry!!.session.setInputMapping(port, emulated, source)
             if (result.isEmpty()) {
                 return BridgeResponse.success(mapOf("status" to "mapped", "count" to emulated.size))
             }
@@ -1306,10 +1286,10 @@ object EmulatorFunctions {
             val (entry, err) = entry(parameters)
             if (err != null) return err
             val enabled = parameters["enabled"] as? Boolean ?: false
-            entry!!.renderer.setRumbleEnabled(enabled)
+            entry!!.session.setRumbleEnabled(enabled)
             return BridgeResponse.success(mapOf(
                 "status" to if (enabled) "enabled" else "disabled",
-                "hasVibrator" to entry.renderer.hasVibrator(),
+                "hasVibrator" to entry.session.hasVibrator(),
             ))
         }
     }
@@ -1326,7 +1306,7 @@ object EmulatorFunctions {
             if (err != null) return err
             val raw = parameters["path"] as? String
             val path = if (raw == null || raw == "none" || raw.isEmpty()) null else raw
-            return when (entry!!.renderer.syncSetShader(path)) {
+            return when (entry!!.session.syncSetShader(path)) {
                 true -> BridgeResponse.success(
                     mapOf("status" to if (path == null) "cleared" else "applied"))
                 false -> operationalError(
@@ -1351,7 +1331,7 @@ object EmulatorFunctions {
             val code = parameters["code"] as? String
                 ?: return BridgeResponse.error("INVALID_PARAMETERS", "code is required")
 
-            return when (entry!!.renderer.syncAddCheat(code)) {
+            return when (entry!!.session.syncAddCheat(code)) {
                 true  -> BridgeResponse.success(mapOf("status" to "added", "code" to code))
                 false -> operationalError(
                     entry,
@@ -1371,7 +1351,7 @@ object EmulatorFunctions {
             val code = parameters["code"] as? String
                 ?: return BridgeResponse.error("INVALID_PARAMETERS", "code is required")
 
-            return when (entry!!.renderer.syncRemoveCheat(code)) {
+            return when (entry!!.session.syncRemoveCheat(code)) {
                 true  -> BridgeResponse.success(mapOf("status" to "removed", "code" to code))
                 false -> BridgeResponse.success(mapOf("status" to "not_found", "code" to code))
                 null  -> operationalError(entry, "CHEAT_FAILED", "Emulator not running")
@@ -1384,7 +1364,7 @@ object EmulatorFunctions {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
             val (entry, err) = entry(parameters)
             if (err != null) return err
-            entry!!.renderer.queueClearCheats()
+            entry!!.session.queueClearCheats()
             return BridgeResponse.success(mapOf("status" to "cleared"))
         }
     }
@@ -1400,12 +1380,12 @@ object EmulatorFunctions {
             val port = (parameters["port"] as? Number)?.toInt()
                 ?: return BridgeResponse.error("INVALID_PARAMETERS", "port is required")
             val device = parameters["device"] as? String ?: ""
-            return when (val result = entry!!.renderer.connectDevice(port, device)) {
+            return when (val result = entry!!.session.connectDevice(port, device)) {
                 "" -> BridgeResponse.success(mapOf(
                     "status" to "connected", "port" to port, "device" to device,
                     // Logical ports this device occupies (4 for a multitap) — one
                     // Controller handle each on the PHP side.
-                    "ports" to entry.renderer.devicePorts(port).toList()))
+                    "ports" to entry.session.devicePorts(port).toList()))
                 "SYSTEM_NOT_LOADED" -> BridgeResponse.error("SYSTEM_NOT_LOADED", "no system is loaded")
                 "UNSUPPORTED_DEVICE" -> BridgeResponse.error("UNSUPPORTED_DEVICE", "device not supported: $device")
                 else -> BridgeResponse.error("INVALID_PARAMETERS", "invalid port for this system")
@@ -1422,7 +1402,7 @@ object EmulatorFunctions {
             val button = parameters["button"] as? String
                 ?: return BridgeResponse.error("INVALID_PARAMETERS", "button is required")
             return statusResponse(
-                entry!!.renderer.pressButton(port, button, true),
+                entry!!.session.pressButton(port, button, true),
                 mapOf("status" to "pressed", "button" to button))
         }
     }
@@ -1435,7 +1415,7 @@ object EmulatorFunctions {
             val button = parameters["button"] as? String
                 ?: return BridgeResponse.error("INVALID_PARAMETERS", "button is required")
             return statusResponse(
-                entry!!.renderer.pressButton(port, button, false),
+                entry!!.session.pressButton(port, button, false),
                 mapOf("status" to "released", "button" to button))
         }
     }
@@ -1452,7 +1432,7 @@ object EmulatorFunctions {
                 ?: return BridgeResponse.error("INVALID_PARAMETERS", "state map is required")
 
             for ((button, pressed) in state) {
-                entry!!.renderer.pressButton(port, button, pressed)
+                entry!!.session.pressButton(port, button, pressed)
             }
             return BridgeResponse.success(mapOf("status" to "ok"))
         }
@@ -1468,7 +1448,7 @@ object EmulatorFunctions {
                 ?: return BridgeResponse.error("INVALID_PARAMETERS", "axis is required")
             val value = (parameters["value"] as? Number)?.toInt() ?: 0
             return statusResponse(
-                entry!!.renderer.setAxis(port, axis, value),
+                entry!!.session.setAxis(port, axis, value),
                 mapOf("status" to "ok", "axis" to axis, "value" to value))
         }
     }
@@ -1484,7 +1464,7 @@ object EmulatorFunctions {
             val y = (parameters["y"] as? Number)?.toFloat()
                 ?: return BridgeResponse.error("INVALID_PARAMETERS", "y is required")
             return statusResponse(
-                entry!!.renderer.aimAt(port, x, y),
+                entry!!.session.aimAt(port, x, y),
                 mapOf("status" to "ok", "x" to x, "y" to y))
         }
     }
@@ -1498,7 +1478,7 @@ object EmulatorFunctions {
             val (entry, err) = entry(parameters)
             if (err != null) return err
 
-            val png = entry!!.renderer.syncScreenshot()
+            val png = entry!!.session.syncScreenshot()
                 ?: return BridgeResponse.error(
                     "SCREENSHOT_FAILED",
                     "No frame available or emulator not running",
@@ -1521,7 +1501,7 @@ object EmulatorFunctions {
     class GetStatus(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
             val name     = surface(parameters)
-            val renderer = surfaces[name]?.renderer
+            val renderer = surfaces[name]?.session
             val status   = renderer?.currentStatus ?: "stopped"
 
             // Read back from the running core (which PPU is actually bound),
@@ -1546,7 +1526,7 @@ object EmulatorFunctions {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
             val (entry, err) = entry(parameters)
             if (err != null) return err
-            val region = entry!!.renderer.getRegion()
+            val region = entry!!.session.getRegion()
             return BridgeResponse.success(mapOf("region" to region))
         }
     }
@@ -1558,7 +1538,7 @@ object EmulatorFunctions {
             if (err != null) return err
             val port = (parameters["port"] as? Number)?.toInt() ?: 1
 
-            val pressed = entry!!.renderer.pressedButtons(port)
+            val pressed = entry!!.session.pressedButtons(port)
                 .split(',')
                 .filter { it.isNotEmpty() }
 
@@ -1575,7 +1555,7 @@ object EmulatorFunctions {
             val (entry, err) = entry(parameters)
             if (err != null) return err
 
-            val json = entry!!.renderer.syncGetPortsJson()
+            val json = entry!!.session.syncGetPortsJson()
                 ?: return BridgeResponse.error("SYSTEM_NOT_LOADED", "Call LoadSystem before GetPorts")
             fun strings(obj: JSONObject, key: String) = buildList {
                 val a = obj.optJSONArray(key) ?: JSONArray()
