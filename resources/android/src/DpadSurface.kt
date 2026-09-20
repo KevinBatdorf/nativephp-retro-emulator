@@ -209,7 +209,7 @@ object DpadSurface {
         next: Set<DpadDirection>,
         previous: Set<DpadDirection>,
     ) {
-        val renderer = EmulatorFunctions.rendererFor(surface) ?: return
+        val renderer = EmulatorFunctions.sessionFor(surface) ?: return
         for (direction in next - previous) renderer.pressButton(port, direction.button, true)
         for (direction in previous - next) renderer.pressButton(port, direction.button, false)
     }
