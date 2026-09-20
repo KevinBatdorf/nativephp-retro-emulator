@@ -140,12 +140,13 @@ class VideoGeometryTest {
             Thread.sleep(2_000)
             scenario.onActivity { activity ->
                 val renderer = activity.renderer
-                renderer.queueVideoOptions(output = "integer")
-                renderer.queueVideoOptions(luminance = 0.5f)
-                assert(renderer.videoOutput == "integer") {
-                    "setting luminance must not reset output — got ${renderer.videoOutput}"
+                val session = activity.session
+                session.queueVideoOptions(output = "integer")
+                session.queueVideoOptions(luminance = 0.5f)
+                assert(session.videoOutput == "integer") {
+                    "setting luminance must not reset output — got ${session.videoOutput}"
                 }
-                renderer.stopEmulation()
+                session.stopEmulation()
             }
             Thread.sleep(1_000)
         }
@@ -197,11 +198,12 @@ class VideoGeometryTest {
             Thread.sleep(3_000)
             scenario.onActivity { activity ->
                 val renderer = activity.renderer
-                val png = renderer.syncScreenshot()
+                val session = activity.session
+                val png = session.syncScreenshot()
                 assert(png != null) { "screenshot must capture after 3 s of emulation" }
 
                 val bmp = BitmapFactory.decodeByteArray(png!!, 0, png.size)
-                val g = renderer.videoGeometry()
+                val g = session.videoGeometry()
                 var videoW = (g[0] * g[2]).toInt()
                 val videoH = (g[1] * g[3]).toInt()
                 videoW = (videoW * g[4] / g[5]).toInt()
@@ -219,7 +221,7 @@ class VideoGeometryTest {
                         abs(bmp.height - renderer.height) <= 2
                 ) { "output ${bmp.width}×${bmp.height} must best-fit ${renderer.width}×${renderer.height}" }
 
-                renderer.stopEmulation()
+                session.stopEmulation()
             }
             Thread.sleep(1_000)
         }

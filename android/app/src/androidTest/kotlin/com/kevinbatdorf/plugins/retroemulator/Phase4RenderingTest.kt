@@ -45,7 +45,7 @@ class Phase4RenderingTest {
             // Tear the core down on the GL thread while it is still alive —
             // ares requires teardown on the thread that loaded the system,
             // and later tests re-init the shared native core.
-            scenario.onActivity { it.renderer.stopEmulation() }
+            scenario.onActivity { it.session.stopEmulation() }
             Thread.sleep(1_000)
         }
     }
