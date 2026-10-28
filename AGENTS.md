@@ -60,7 +60,7 @@ cd ios/test && xcodebuild test -scheme RetroEmulatorTest-Package \
 ```
 
 BYO-core tests stage cores into gitignored `android/app/src/androidTest/jniLibs/arm64-v8a/`
-(SELinux only allows dlopen from installed APKs — never `/data/local/tmp`):
+(SELinux blocks dlopen from `/data/local/tmp`, so a pushed core cannot be staged there):
 
 ```bash
 cp vendor-engines/cores/snes9x_libretro_android.so \
@@ -309,6 +309,12 @@ dir into the app with the `lib` prefix Android needs. Name the core as
 `backend:` — bare name or full path. The loader validates
 `retro_api_version == 1`, and:
 
+- A full path may point into the app's own data dir, not just the packaged
+  `jniLibs` — `dlopen` succeeds from app-private storage, so a core placed
+  there after install serves without a rebuild. Verified on Android 13 by
+  adopting snes9x from `files/`, and by deleting that file to confirm the
+  packaged copy was not silently standing in. `/data/local/tmp` stays
+  blocked; the two directories are different SELinux contexts.
 - ROMs load from memory AND a staged file path under a core-declared
   extension (some cores, e.g. Mesen, identify format by extension;
   `need_fullpath` cores read the file).
