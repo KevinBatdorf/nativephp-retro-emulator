@@ -2,6 +2,16 @@
 
 All notable changes to `kevinbatdorf/nativephp-retro-emulator` are documented here.
 
+## Unreleased
+
+- Android: starting a game straight from a declarative `<native:emulator>`
+  could abort the app on a cold start (`std::bad_function_call` in
+  `availableSystems`). The render thread and the declarative setup thread
+  both loaded the backend modules at once behind an unguarded flag, so one
+  read the registry while the other was still filling it. Loading now
+  happens once, and a second caller waits for it. Apps that call the
+  emulator before mounting a surface, as the demo does, never hit it.
+
 ## 0.1.4 — 2026-09-20
 
 - A running game survives its view being recreated or moved to another
