@@ -4,6 +4,10 @@ All notable changes to `kevinbatdorf/nativephp-retro-emulator` are documented he
 
 ## Unreleased
 
+- `Controller::ignore()` takes hardware pad positions the game stops
+  seeing, so the app can use buttons a console doesn't have, such as X and
+  Y on a Game Boy, for its own hotkeys. On Android their key events go on
+  to the app.
 - `remap()` takes hardware pad positions as sources (`pad:south`,
   `pad:west`, `pad:l` and so on), so a console can use pad buttons it has
   no name for: a Game Boy's A can sit on the left face button.

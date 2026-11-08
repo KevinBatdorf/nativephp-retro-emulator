@@ -140,4 +140,24 @@ class Controller
 
         return $this;
     }
+
+    /**
+     * Hardware pad positions the game stops seeing, so the app can use them, such as hotkeys on a
+     * console with no X or Y. Positions are the ones remap() takes except the D-pad, which always
+     * reaches the game. Each call replaces the last; an empty array gives every button back. On
+     * Android an ignored button's key events go on to the app; port 1 only.
+     *
+     * @param  list<string>  $positions  `pad:south`, `pad:east`, `pad:west`, `pad:north`, `pad:l`,
+     *                                   `pad:r`, `pad:start` or `pad:select`
+     */
+    public function ignore(array $positions): static
+    {
+        $this->call('Emulator.IgnorePadButtons', [
+            'surface' => $this->surface,
+            'port' => $this->port,
+            'positions' => array_values($positions),
+        ]);
+
+        return $this;
+    }
 }

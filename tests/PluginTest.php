@@ -228,7 +228,7 @@ describe('Emulator class', function () {
     });
 
     it('Controller has all input methods', function () {
-        foreach (['press', 'release', 'setButtons', 'setAxis', 'aimAt', 'remap'] as $method) {
+        foreach (['press', 'release', 'setButtons', 'setAxis', 'aimAt', 'remap', 'ignore'] as $method) {
             expect(method_exists(Controller::class, $method))
                 ->toBeTrue("Controller::{$method}() is missing");
         }
@@ -373,6 +373,14 @@ describe('Error handling', function () {
             '{"status":"error","code":"UNKNOWN_BUTTON","message":"Unknown button: q"}';
 
         expect(fn () => Emulator::surface('main')->getDevice(1)->remap(['q' => 'a']))
+            ->toThrow(EmulatorException::class);
+    });
+
+    it('throws when an ignored position is not a pad button', function () {
+        $GLOBALS['__nativephp_mock']['Emulator.IgnorePadButtons'] =
+            '{"status":"error","code":"UNKNOWN_BUTTON","message":"Unknown pad position: pad:up"}';
+
+        expect(fn () => Emulator::surface('main')->getDevice(1)->ignore(['pad:up']))
             ->toThrow(EmulatorException::class);
     });
 
@@ -1136,6 +1144,14 @@ describe('Typed layer', function () {
         $call = collect($GLOBALS['__nativephp_calls'])->firstWhere('function', 'Emulator.SetInputMapping');
         expect($call['payload']['port'])->toBe(1);
         expect($call['payload']['mappings'])->toBe(['a' => 'b', 'b' => 'a']);
+    });
+
+    it('the handle ignores pad positions on its port', function () {
+        Emulator::surface()->getDevice(1)->ignore(['pad:west', 'pad:north']);
+
+        $call = collect($GLOBALS['__nativephp_calls'])->firstWhere('function', 'Emulator.IgnorePadButtons');
+        expect($call['payload']['port'])->toBe(1);
+        expect($call['payload']['positions'])->toBe(['pad:west', 'pad:north']);
     });
 
     it('the handle resets a remap with an empty map', function () {
