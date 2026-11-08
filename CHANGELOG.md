@@ -2,6 +2,12 @@
 
 All notable changes to `kevinbatdorf/nativephp-retro-emulator` are documented here.
 
+## Unreleased
+
+- Reopening the same game after `stop()` boots it again. The Android session
+  kept the last declarative boot, so a remounted `<native:emulator>` with the
+  same system, config and ROM skipped the boot and stayed black.
+
 ## 0.1.4 — 2026-09-20
 
 - A running game survives its view being recreated or moved to another

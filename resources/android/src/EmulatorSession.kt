@@ -650,6 +650,8 @@ class EmulatorSession(context: Context) {
      * Audio is stopped on the calling thread; core teardown runs on the render thread.
      */
     fun stopEmulation() {
+        // The session outlives its screen; a remount with the same props would otherwise skip the boot.
+        declaredBootKey = null
         watchedAddresses.clear()
         input.reset()
         audio.stop()
