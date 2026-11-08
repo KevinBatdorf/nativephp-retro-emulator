@@ -2,6 +2,12 @@
 
 All notable changes to `kevinbatdorf/nativephp-retro-emulator` are documented here.
 
+## Unreleased
+
+- `remap()` takes hardware pad positions as sources (`pad:south`,
+  `pad:west`, `pad:l` and so on), so a console can use pad buttons it has
+  no name for: a Game Boy's A can sit on the left face button.
+
 ## 0.1.4 — 2026-09-20
 
 - A running game survives its view being recreated or moved to another

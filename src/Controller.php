@@ -122,7 +122,11 @@ class Controller
     /**
      * Merge a button remap for this controller: each `emulated => source` pair
      * points an in-game button at a different input (`['a' => 'b', 'b' => 'a']`
-     * swaps A and B). Composes on the device defaults; an empty array resets.
+     * swaps A and B). A source is one of the device's own button names or a
+     * hardware pad position: `pad:south`, `pad:east`, `pad:west`, `pad:north`,
+     * `pad:l`, `pad:r`, `pad:start`, `pad:select`, `pad:up`, `pad:down`,
+     * `pad:left`, `pad:right` (`['a' => 'pad:west']` puts a Game Boy's A on the
+     * left face button). Composes on the device defaults; an empty array resets.
      *
      * @param  array<string, string>  $mappings  emulated button => source input
      */
