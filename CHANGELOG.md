@@ -2,6 +2,12 @@
 
 All notable changes to `kevinbatdorf/nativephp-retro-emulator` are documented here.
 
+## Unreleased
+
+- `<native:emulator system="…">` now boots on the engines the config's
+  `backends` map lists, like `loadSystem()` does. It ignored the map and ran
+  every game on ares, so GBA, GB and GBC never reached mGBA or SameBoy.
+
 ## 0.1.4 — 2026-09-20
 
 - A running game survives its view being recreated or moved to another
