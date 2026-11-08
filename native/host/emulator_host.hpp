@@ -62,6 +62,10 @@ public:
     // thread only. False when nothing was persisted.
     bool flushSaves();
 
+    // Folder for files an engine must open by path, such as a libretro core's
+    // ROM, so they stay out of the save folder. Kept across reset().
+    void setStagingDirectory(const std::string& dir) { stagingDir_ = dir; }
+
     // Emulation ------------------------------------------------------------
     // One tick: consumes pending device/remap changes, then (unless paused)
     // rate control, rewind, and the frame (with run-ahead when enabled).
@@ -228,6 +232,7 @@ private:
     bool romLoaded_    = false;
     std::string romRegion_;
     std::string savePrefix_;
+    std::string stagingDir_;
     // Overscan borders trimmed by default; setVideo(overscan: true) shows
     // them. Reapplied to the engine on every boot.
     bool overscan_ = false;

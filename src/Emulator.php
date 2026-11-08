@@ -164,8 +164,10 @@ class Emulator
      * @param  string|array{base: string, slotA?: string, slotB?: string}  $rom
      * @param  string|null  $savePath  Battery-save file prefix; null keeps the
      *                                 default per-surface location in app storage.
+     * @param  string|null  $stateDirectory  Folder for this ROM's save-state slots;
+     *                                       null keeps the surface's folder in app storage.
      */
-    public function loadRom(string|array $rom, ?string $savePath = null): static
+    public function loadRom(string|array $rom, ?string $savePath = null, ?string $stateDirectory = null): static
     {
         if (is_array($rom)) {
             foreach (['slotA' => 0, 'slotB' => 1] as $key => $index) {
@@ -186,6 +188,7 @@ class Emulator
             'surface' => $this->surface,
             'path' => $path,
             'savePath' => $savePath,
+            'stateDirectory' => $stateDirectory,
         ], fn ($value) => $value !== null));
 
         return $this;

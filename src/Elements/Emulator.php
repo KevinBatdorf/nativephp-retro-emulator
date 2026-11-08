@@ -106,6 +106,22 @@ class Emulator extends Element
         return $this;
     }
 
+    /** Battery-save file prefix for the ROM, as {@see \KevinBatdorf\RetroEmulator\Emulator::loadRom()} takes it. */
+    public function savePath(string $path): static
+    {
+        $this->emulatorProps['save_path'] = $path;
+
+        return $this;
+    }
+
+    /** Folder for this ROM's save states, as {@see \KevinBatdorf\RetroEmulator\Emulator::loadRom()} takes it. */
+    public function stateDirectory(string $path): static
+    {
+        $this->emulatorProps['state_directory'] = $path;
+
+        return $this;
+    }
+
     public function applyAttributes(array $attrs): void
     {
         if (isset($attrs['name'])) {
@@ -134,6 +150,12 @@ class Emulator extends Element
         }
         if (isset($attrs['rom'])) {
             $this->rom = (string) $attrs['rom'];
+        }
+        if (($path = $attrs['save-path'] ?? $attrs['savePath'] ?? null) !== null) {
+            $this->emulatorProps['save_path'] = (string) $path;
+        }
+        if (($path = $attrs['state-directory'] ?? $attrs['stateDirectory'] ?? null) !== null) {
+            $this->emulatorProps['state_directory'] = (string) $path;
         }
     }
 

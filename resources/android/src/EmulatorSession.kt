@@ -494,6 +494,7 @@ class EmulatorSession(context: Context) {
     }
 
     init {
+        core.setStagingDirectory(java.io.File(context.cacheDir, "retro-emulator").apply { mkdirs() }.path)
         // Staging can arrive from PHP before any view attaches; ares must still run on this thread.
         ensureRenderThread()
     }

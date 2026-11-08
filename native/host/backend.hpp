@@ -87,6 +87,13 @@ struct SaveMediaIO {
     // Filesystem path a write(name, …) lands at, for engines that must read
     // media by path (libretro need_fullpath cores). Empty = no file backing.
     virtual std::string pathFor(const std::string& name) { return {}; }
+    // Writes a file an engine must open by path (a need_fullpath core's ROM)
+    // and returns where it landed, or "" when nothing could hold it. Hosts with
+    // a staging folder keep such files out of the save folder.
+    virtual std::string stage(const std::string& name, const uint8_t* data, size_t size) {
+        std::string path = pathFor(name);
+        return (!path.empty() && write(name, data, size)) ? path : std::string{};
+    }
 };
 
 // What a backend can do for a given system. The host consults this to gate

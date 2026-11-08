@@ -535,15 +535,13 @@ EmuHost::BootResult LibretroBackend::boot(const EmuHost::BootSpec& spec,
                                                : std::string("bin"));
     }
     std::string staged = "rom." + ext;
-    std::string stagedPath = saves.pathFor(staged);
-    if (!stagedPath.empty() && saves.write(staged, rom->data(), rom->size())) {
+    std::string stagedPath = saves.stage(staged, rom->data(), rom->size());
+    if (!stagedPath.empty()) {
         game.path = stagedPath.c_str();
         auto slash = stagedPath.find_last_of('/');
         if (slash != std::string::npos) {
             systemDir_ = stagedPath.substr(0, slash);
         }
-    } else {
-        stagedPath.clear();
     }
     if (current_.needFullpath && stagedPath.empty()) {
         EMUHOST_LOGE("libretro: %s needs a ROM file (need_fullpath) and no "

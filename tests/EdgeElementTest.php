@@ -119,6 +119,17 @@ describe('EDGE element contract', function () {
         expect(json_decode($props['config'], true))->toBe(['rewind' => true, 'colorEmulation' => true]);
         expect($props['rom'])->toBe('/roms/x.gb');
     });
+
+    it('carries where the ROM keeps its battery save and states', function () {
+        $element = new EmulatorElement;
+        $element->applyAttributes(['system' => 'gb', 'rom' => '/roms/x.gb', 'save-path' => '/saves/x', 'state-directory' => '/states/x']);
+        $props = $element->toArray(new CallbackRegistry)['props'];
+
+        expect($props['save_path'])->toBe('/saves/x');
+        expect($props['state_directory'])->toBe('/states/x');
+        expect(EmulatorElement::make()->savePath('/a')->stateDirectory('/b')->toArray(new CallbackRegistry)['props'])
+            ->toMatchArray(['save_path' => '/a', 'state_directory' => '/b']);
+    });
 });
 
 describe('Blade component emits the element', function () {

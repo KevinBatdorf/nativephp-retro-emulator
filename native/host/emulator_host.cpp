@@ -14,6 +14,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <sys/stat.h>
 #include <thread>
 
 namespace EmuHost {
@@ -51,7 +52,9 @@ auto writeFile(const std::string& path, const uint8_t* data, size_t size) -> boo
 // call through this. An empty prefix disables persistence.
 struct FileSaveMediaIO final : SaveMediaIO {
     std::string prefix;
-    explicit FileSaveMediaIO(std::string p) : prefix(std::move(p)) {}
+    std::string stagingDir;
+    explicit FileSaveMediaIO(std::string p, std::string staging = {})
+        : prefix(std::move(p)), stagingDir(std::move(staging)) {}
     std::vector<uint8_t> read(const std::string& name) override {
         if (prefix.empty()) return {};
         return readFile(prefix + "." + name);
@@ -63,6 +66,14 @@ struct FileSaveMediaIO final : SaveMediaIO {
     std::string pathFor(const std::string& name) override {
         if (prefix.empty()) return {};
         return prefix + "." + name;
+    }
+    std::string stage(const std::string& name, const uint8_t* data, size_t size) override {
+        if (stagingDir.empty()) return SaveMediaIO::stage(name, data, size);
+        ::mkdir(stagingDir.c_str(), 0755);
+        auto slash = prefix.find_last_of('/');
+        std::string base = prefix.empty() ? "game" : prefix.substr(slash == std::string::npos ? 0 : slash + 1);
+        std::string path = stagingDir + "/" + base + "." + name;
+        return writeFile(path, data, size) ? path : std::string{};
     }
 };
 
@@ -286,7 +297,7 @@ std::string EmulatorHost::readBootOption(const std::string& name) {
 
 void EmulatorHost::unloadGame(bool flushSaves) {
     if (activeBackend_) {
-        FileSaveMediaIO saves{flushSaves ? savePrefix_ : std::string{}};
+        FileSaveMediaIO saves{flushSaves ? savePrefix_ : std::string{}, stagingDir_};
         activeBackend_->unload(saves);
     }
 
@@ -375,7 +386,7 @@ int EmulatorHost::loadRom(const uint8_t* rom, size_t size,
     spec.overscan    = overscan_;
 
     savePrefix_ = savePrefix;   // seed reads through it during boot
-    FileSaveMediaIO saves{savePrefix_};
+    FileSaveMediaIO saves{savePrefix_, stagingDir_};
 
     // Stated explicitly on every boot: engines act on this option's value,
     // and an absent key would leave their per-core flags at stale values.
@@ -532,7 +543,7 @@ bool EmulatorHost::flushSaves() {
     if (!romLoaded_ || !activeBackend_ || savePrefix_.empty()) return false;
     // Engine save() writes battery memory back into its media first.
     activeBackend_->syncSave();
-    FileSaveMediaIO saves{savePrefix_};
+    FileSaveMediaIO saves{savePrefix_, stagingDir_};
     return activeBackend_->collectSaveMedia(saves);
 }
 

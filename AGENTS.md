@@ -118,7 +118,7 @@ $emu = Emulator::surface('main');   // binds the named <native:emulator>
 | Call | Notes |
 |---|---|
 | `loadSystem(System\|string, SystemConfig\|array)` | Stages system + engine + options; synchronous validation |
-| `loadRom(string\|array, ?string $savePath)` | Boots; call again to swap ROMs. Array form for slotted media: `['base' => $biosRom, 'slotA' => $cart, 'slotB' => …]` (SuFami Turbo, Satellaview) |
+| `loadRom(string\|array, ?string $savePath, ?string $stateDirectory)` | Boots; call again to swap ROMs. `$stateDirectory` holds that ROM's slots instead of the surface's folder. Array form for slotted media: `['base' => $biosRom, 'slotA' => $cart, 'slotB' => …]` (SuFami Turbo, Satellaview) |
 | `pause()` / `resume()` / `stop()` | |
 | `setSpeed(float)` | 0.25–4.0 multiplier, 1.0 native |
 | `fastForward(bool)` | |
@@ -129,7 +129,7 @@ $emu = Emulator::surface('main');   // binds the named <native:emulator>
 ### Save states and battery saves
 
 `saveState($slot)` / `loadState($slot)` / `undoSaveState()` / `undoLoadState()`.
-Battery saves persist under `loadRom(savePath:)`; flushed on ROM swap and stop.
+Battery saves persist under `loadRom(savePath:)`; flushed on ROM swap and stop. The element takes the same two as `save-path` and `state-directory`.
 States are engine-tagged — loading a state saved by a different engine errors
 instead of corrupting.
 

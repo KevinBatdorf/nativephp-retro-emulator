@@ -27,6 +27,8 @@ object EmulatorSurface {
         val system = node.props.getString("system", "")
         val config = node.props.getString("config", "")
         val rom = node.props.getString("rom", "")
+        val savePath = node.props.getString("save_path", "")
+        val stateDirectory = node.props.getString("state_directory", "")
 
         AndroidView(
             modifier = modifier,
@@ -59,10 +61,10 @@ object EmulatorSurface {
             },
             update = { view ->
                 // Runs after factory and on every recomposition.
-                val bootKey = listOf(system, config, rom).joinToString(" ")
+                val bootKey = listOf(system, config, rom, savePath, stateDirectory).joinToString(" ")
                 if (system.isNotEmpty() && view.session.declaredBootKey != bootKey) {
                     view.session.declaredBootKey = bootKey
-                    EmulatorFunctions.applyDeclarativeSetup(name, system, config, rom)
+                    EmulatorFunctions.applyDeclarativeSetup(name, system, config, rom, savePath, stateDirectory)
                 }
             },
             onRelease = { view ->

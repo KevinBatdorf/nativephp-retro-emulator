@@ -57,6 +57,11 @@ void emu_destroy(EmuContext* ctx) {
     g_ctx = nullptr;
 }
 
+void emu_set_staging_directory(EmuContext* ctx, const char* dir) {
+    if (!ctx) return;
+    ctx->host.setStagingDirectory(dir ? dir : "");
+}
+
 void emu_reset(EmuContext* ctx) {
     if (!ctx || ctx != g_ctx) return;
     ctx->host.reset();

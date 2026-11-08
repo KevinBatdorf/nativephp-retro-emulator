@@ -34,6 +34,9 @@ class EmulatorCore {
     /** Initialize the ares platform singleton. Returns false if already initialized. */
     fun init(): Boolean = nativeInit()
 
+    /** Where engines stage files they must open by path, kept out of the save folder. */
+    fun setStagingDirectory(dir: String) = nativeSetStagingDirectory(dir)
+
     fun destroy() = nativeDestroy()
 
     /** Returns the ares version string (e.g. "v140-android"). */
@@ -438,6 +441,7 @@ class EmulatorCore {
     fun getPortsJson(): String = nativeGetPortsJson()
 
     private external fun nativeInit(): Boolean
+    private external fun nativeSetStagingDirectory(dir: String)
     private external fun nativeDestroy()
     private external fun nativeVersion(): String
 

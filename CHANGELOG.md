@@ -2,6 +2,16 @@
 
 All notable changes to `kevinbatdorf/nativephp-retro-emulator` are documented here.
 
+## Unreleased
+
+- `<native:emulator>` takes `save-path` and `state-directory`, and
+  `loadRom()` takes a `$stateDirectory`, so a game's battery save and
+  save-state slots can live in a folder of the app's choosing, such as one
+  the player can see. Without them nothing changes.
+- libretro cores that open their ROM by path (Mesen, bsnes, ClownMDEmu) get
+  it staged in the app's cache instead of beside the battery save, so a
+  visible save folder holds saves only.
+
 ## 0.1.4 — 2026-09-20
 
 - A running game survives its view being recreated or moved to another

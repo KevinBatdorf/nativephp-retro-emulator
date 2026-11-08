@@ -71,7 +71,7 @@ enum EmulatorFunctions {
     /// system, inputCapture already hoisted onto the surface) as a JSON object
     /// string. Runs off the caller's thread: LoadRom reads the ROM file inline
     /// and the native load blocks on the emulation lock.
-    static func applyDeclarativeSetup(surface: String, system: String, configJson: String, rom: String) {
+    static func applyDeclarativeSetup(surface: String, system: String, configJson: String, rom: String, savePath: String = "", stateDirectory: String = "") {
         guard !system.isEmpty else { return }
 
         let thread = Thread {
@@ -108,7 +108,10 @@ enum EmulatorFunctions {
 
             // Boot the staged system with the ROM (every load is a fresh boot).
             if !rom.isEmpty {
-                _ = try? LoadRom().execute(parameters: ["surface": surface, "path": rom])
+                var load: [String: Any] = ["surface": surface, "path": rom]
+                if !savePath.isEmpty { load["savePath"] = savePath }
+                if !stateDirectory.isEmpty { load["stateDirectory"] = stateDirectory }
+                _ = try? LoadRom().execute(parameters: load)
             }
         }
         thread.name = "emu-declarative-boot-\(surface)"
@@ -201,6 +204,15 @@ enum EmulatorFunctions {
     private static func int(_ value: Any?) -> Int? {
         if let n = value as? NSNumber { return n.intValue }
         return nil
+    }
+
+    private static var stateDirectories: [String: String] = [:]
+
+    private static func stateDirectory(_ surface: String) -> URL {
+        undoLock.lock()
+        let custom = stateDirectories[surface]
+        undoLock.unlock()
+        return custom.map { URL(fileURLWithPath: $0, isDirectory: true) } ?? documentsURL("states", surface)
     }
 
     private static func documentsURL(_ components: String...) -> URL {
@@ -491,6 +503,8 @@ enum EmulatorFunctions {
             let savePrefix: String
             if let savePath = parameters["savePath"] as? String {
                 savePrefix = savePath
+                try? FileManager.default.createDirectory(
+                    at: URL(fileURLWithPath: savePath).deletingLastPathComponent(), withIntermediateDirectories: true)
             } else {
                 let saveDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
                     .appendingPathComponent("saves/\(surfaceName(parameters))", isDirectory: true)
@@ -499,9 +513,14 @@ enum EmulatorFunctions {
                 savePrefix = saveDir.appendingPathComponent(base).path
             }
 
+            // A stateDirectory parameter puts this game's states there; without one they share the surface's folder.
+            let directory = (parameters["stateDirectory"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            undoLock.lock()
+            stateDirectories[surfaceName(parameters)] = directory
+            undoLock.unlock()
             // Undo files belong to the outgoing game (ares clearUndoStates,
             // load.cpp:170) — a stale cross-game snapshot must not survive.
-            let stateDir = documentsURL("states", surfaceName(parameters))
+            let stateDir = stateDirectory(surfaceName(parameters))
             try? FileManager.default.removeItem(at: stateDir.appendingPathComponent("undo_save.state"))
             try? FileManager.default.removeItem(at: stateDir.appendingPathComponent("undo_load.state"))
             undoLock.lock()
@@ -547,7 +566,7 @@ enum EmulatorFunctions {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
             let slot = parameters["slot"] ?? 1
-            let dir = documentsURL("states", surfaceName(parameters))
+            let dir = stateDirectory(surfaceName(parameters))
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             let slotURL = dir.appendingPathComponent("\(slot).state")
             let path = slotURL.path
@@ -576,7 +595,7 @@ enum EmulatorFunctions {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
             let slot = parameters["slot"] ?? 1
-            let dir = documentsURL("states", surfaceName(parameters))
+            let dir = stateDirectory(surfaceName(parameters))
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             let url = dir.appendingPathComponent("\(slot).state")
 
@@ -601,7 +620,7 @@ enum EmulatorFunctions {
     class UndoStateSave: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             let name = surfaceName(parameters)
-            let dir = documentsURL("states", name)
+            let dir = stateDirectory(name)
             let undoURL = dir.appendingPathComponent("undo_save.state")
             undoLock.lock()
             let slot = undoSaveSlot[name]
@@ -626,7 +645,7 @@ enum EmulatorFunctions {
     /// it (ares undoStateLoad, states.cpp:61-81).
     class UndoStateLoad: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
-            let url = documentsURL("states", surfaceName(parameters), "undo_load.state")
+            let url = stateDirectory(surfaceName(parameters)).appendingPathComponent("undo_load.state")
             guard FileManager.default.fileExists(atPath: url.path) else {
                 return BridgeResponse.success(data: ["status": "nothing_to_undo"])
             }
