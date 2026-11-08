@@ -1,0 +1,15 @@
+diff --git a/Core/apu.c b/Core/apu.c
+index caa54514..e1628dc2 100644
+--- a/Core/apu.c
++++ b/Core/apu.c
+@@ -239,6 +239,10 @@ static void update_sample(GB_gameboy_t *gb, GB_channel_t index, int8_t value, un
+     if (value == 0 && gb->apu.samples[index] == 0) return;
+     
+     if (!GB_apu_is_DAC_enabled(gb, index)) {
++        /* nativephp: NR50/NR51 writes leave 0x10 here to force a refresh; a parked DAC keeps the real sample. */
++        if (gb->apu.samples[index] == 0x10) {
++            gb->apu.samples[index] = value;
++        }
+         value = gb->apu.samples[index];
+     }
+     else {

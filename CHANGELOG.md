@@ -2,6 +2,14 @@
 
 All notable changes to `kevinbatdorf/nativephp-retro-emulator` are documented here.
 
+## Unreleased
+
+- Game Boy and Game Boy Color on SameBoy no longer pop when a game parks the
+  wave channel's DAC, writes NR50 or NR51, and turns the DAC back on.
+  SameBoy left its internal refresh marker (0x10) as the parked sample, so
+  the DAC faded back in at an out-of-range level. Link's Awakening's dialog
+  did this on every text sound.
+
 ## 0.1.4 — 2026-09-20
 
 - A running game survives its view being recreated or moved to another
