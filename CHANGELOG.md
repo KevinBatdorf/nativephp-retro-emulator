@@ -2,6 +2,13 @@
 
 All notable changes to `kevinbatdorf/nativephp-retro-emulator` are documented here.
 
+## Unreleased
+
+- Save states, loads and screenshots requested while the game is hidden,
+  such as from an `EmulatorPaused` listener when the player leaves the app,
+  run right away on Android instead of waiting out their timeouts (30 s for a
+  state). A screenshot taken then is the frame shown as the game was hidden.
+
 ## 0.1.4 — 2026-09-20
 
 - A running game survives its view being recreated or moved to another
