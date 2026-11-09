@@ -4,6 +4,7 @@ namespace KevinBatdorf\RetroEmulator\Elements;
 
 use KevinBatdorf\RetroEmulator\Config\Config;
 use KevinBatdorf\RetroEmulator\Config\SystemConfig;
+use KevinBatdorf\RetroEmulator\Emulator as EmulatorApi;
 use KevinBatdorf\RetroEmulator\InputCapture;
 use KevinBatdorf\RetroEmulator\System;
 use Native\Mobile\Edge\CallbackRegistry;
@@ -147,6 +148,11 @@ class Emulator extends Element
 
         // Native applies one effective config on mount, so merge before sending.
         $config = array_merge($this->config ?? [], $this->systemConfig ?? []);
+
+        if ($this->system !== null && ! isset($config['backend'])
+            && ($preferences = EmulatorApi::backendPreferences($this->system)) !== []) {
+            $config['backendPreferences'] = $preferences;
+        }
 
         // inputCapture is resolved at surface creation, never pushed to the core.
         if (isset($config['inputCapture'])) {

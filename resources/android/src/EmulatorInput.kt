@@ -52,6 +52,19 @@ class EmulatorInput(private val core: EmulatorCore) {
             "r"      -> BTN_R
             else     -> null
         }
+
+        /** A hardware pad position as remap() names it; null for the D-pad and unknown names. */
+        fun padPositionBit(name: String): Int? = when (name.lowercase()) {
+            "pad:south"  -> BTN_B
+            "pad:west"   -> BTN_Y
+            "pad:east"   -> BTN_A
+            "pad:north"  -> BTN_X
+            "pad:l"      -> BTN_L
+            "pad:r"      -> BTN_R
+            "pad:start"  -> BTN_START
+            "pad:select" -> BTN_SELECT
+            else         -> null
+        }
     }
 
     // Hardware gamepad state (UI thread). Software presses live natively
@@ -60,12 +73,21 @@ class EmulatorInput(private val core: EmulatorCore) {
     private var keyBits      = 0  // hardware key events
     private var motionBits   = 0  // hardware hat-switch + left-stick motion events
 
+    // Set from the bridge thread; their key events go back to the host instead of the game.
+    @Volatile private var ignored = 0
+
+    fun ignore(bits: Int) {
+        ignored = bits
+        pushPort1()
+    }
+
     /**
      * Process a key event from a connected gamepad. Returns true if the event
      * was consumed (i.e., maps to a recognized SNES button).
      */
     fun onKeyEvent(event: KeyEvent): Boolean {
         val bit = keycodeToBit(event.keyCode) ?: return false
+        if (bit and ignored != 0) return false
         when (event.action) {
             KeyEvent.ACTION_DOWN -> keyBits = keyBits or bit
             KeyEvent.ACTION_UP   -> keyBits = keyBits and bit.inv()
@@ -121,7 +143,7 @@ class EmulatorInput(private val core: EmulatorCore) {
     }
 
     private fun pushPort1() {
-        core.setInputState(1, keyBits or motionBits)
+        core.setInputState(1, (keyBits and ignored.inv()) or motionBits)
     }
 
     private fun keycodeToBit(keyCode: Int): Int? = when (keyCode) {
