@@ -646,6 +646,7 @@ class EmulatorSession(context: Context) {
     fun pauseEmulation() {
         audio.setPaused(true)
         core.pause()
+        input.release(true)
         queueEvent { core.flushSaves() }
         // A held one-shot would keep buzzing while the game is frozen.
         lastRumbleState = 0
@@ -658,6 +659,7 @@ class EmulatorSession(context: Context) {
     fun resumeEmulation() {
         audio.setPaused(false)
         core.resume()
+        input.release(false)
         currentStatus = if (firstFrameSent) "running" else "loading"
         eventListener?.onResumed()
     }

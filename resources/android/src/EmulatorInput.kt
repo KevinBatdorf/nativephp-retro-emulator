@@ -70,8 +70,19 @@ class EmulatorInput(private val core: EmulatorCore) {
     // Hardware gamepad state (UI thread). Software presses live natively
     // (swMask, resolved per connected device) and are OR'd in by Platform::input,
     // so this class only owns the physical pad's positional bits for port 1.
-    private var keyBits      = 0  // hardware key events
-    private var motionBits   = 0  // hardware hat-switch + left-stick motion events
+    @Volatile private var keyBits      = 0  // hardware key events
+    @Volatile private var motionBits   = 0  // hardware hat-switch + left-stick motion events
+
+    // While paused the host's menu is on screen and needs the pad.
+    @Volatile private var released = false
+
+    /** Hand the whole pad back to the host, or take it again; held buttons start released either way. */
+    fun release(released: Boolean) {
+        this.released = released
+        keyBits = 0
+        motionBits = 0
+        pushPort1()
+    }
 
     // Set from the bridge thread; their key events go back to the host instead of the game.
     @Volatile private var ignored = 0
@@ -86,6 +97,7 @@ class EmulatorInput(private val core: EmulatorCore) {
      * was consumed (i.e., maps to a recognized SNES button).
      */
     fun onKeyEvent(event: KeyEvent): Boolean {
+        if (released) return false
         val bit = keycodeToBit(event.keyCode) ?: return false
         if (bit and ignored != 0) return false
         when (event.action) {
@@ -109,8 +121,8 @@ class EmulatorInput(private val core: EmulatorCore) {
      */
     fun onMotionEvent(event: MotionEvent): Boolean {
         val src = event.source
-        if (src and InputDevice.SOURCE_GAMEPAD == 0 &&
-            src and InputDevice.SOURCE_JOYSTICK == 0) {
+        if (released || (src and InputDevice.SOURCE_GAMEPAD == 0 &&
+            src and InputDevice.SOURCE_JOYSTICK == 0)) {
             return false
         }
         var mask = directionBits(

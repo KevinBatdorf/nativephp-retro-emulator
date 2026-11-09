@@ -4,6 +4,11 @@ All notable changes to `kevinbatdorf/nativephp-retro-emulator` are documented he
 
 ## Unreleased
 
+- Android: a paused game hands the hardware pad back to the app, so an app's
+  own pause menu can be driven with the D-pad and buttons. With
+  `input-capture="global"` the emulator kept taking every mapped button and
+  every D-pad (hat) motion while paused. Buttons held across a pause or a
+  resume start released.
 - Android: the preBuild check that stops a build with no cores staged no
   longer breaks Gradle's configuration cache. It reached the project from
   inside `doFirst`, so builds with the cache on failed and apps had to turn
