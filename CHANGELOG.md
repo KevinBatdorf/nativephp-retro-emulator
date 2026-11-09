@@ -4,6 +4,21 @@ All notable changes to `kevinbatdorf/nativephp-retro-emulator` are documented he
 
 ## Unreleased
 
+- Android: starting a game straight from a declarative `<native:emulator>`
+  could abort the app on a cold start (`std::bad_function_call` in
+  `availableSystems`). The render thread and the declarative setup thread
+  both loaded the backend modules at once behind an unguarded flag, so one
+  read the registry while the other was still filling it. Loading now
+  happens once, and a second caller waits for it. Apps that call the
+  emulator before mounting a surface, as the demo does, never hit it.
+- `<native:emulator system="…">` now boots on the engines the config's
+  `backends` map lists, like `loadSystem()` does. It ignored the map and ran
+  every game on ares, so GBA, GB and GBC never reached mGBA or SameBoy.
+- Game Boy and Game Boy Color on SameBoy no longer pop when a game parks the
+  wave channel's DAC, writes NR50 or NR51, and turns the DAC back on.
+  SameBoy left its internal refresh marker (0x10) as the parked sample, so
+  the DAC faded back in at an out-of-range level. Link's Awakening's dialog
+  did this on every text sound.
 - `Controller::ignore()` takes hardware pad positions the game stops
   seeing, so the app can use buttons a console doesn't have, such as X and
   Y on a Game Boy, for its own hotkeys. On Android their key events go on
