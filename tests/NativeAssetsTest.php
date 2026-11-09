@@ -180,6 +180,27 @@ describe('GradleGuard', function () {
             ->toContain('libbackend_');
     });
 
+    it('resolves its files outside doFirst so the configuration cache can store the task', function () {
+        $result = GradleGuard::inject("android {\n}\n");
+
+        expect(substr($result, strpos($result, 'doFirst {')))->not->toContain('layout.');
+    });
+
+    it('swaps the check older versions injected for the current one', function () {
+        $legacy = Closure::bind(fn () => GradleGuard::legacySnippet(), null, GradleGuard::class)();
+
+        $upgraded = GradleGuard::inject("android {\n}\n\n{$legacy}\n");
+
+        expect($upgraded)->not->toBeNull()
+            ->and(substr_count($upgraded, GradleGuard::MARKER))->toBe(1)
+            ->and(substr($upgraded, strpos($upgraded, 'doFirst {')))->not->toContain('layout.')
+            ->and(GradleGuard::inject($upgraded))->toBeNull();
+    });
+
+    it('leaves a hand-edited check alone', function () {
+        expect(GradleGuard::inject("android {\n}\n\n".GradleGuard::MARKER."\n// edited\n"))->toBeNull();
+    });
+
     it('is idempotent across runs', function () {
         $once = GradleGuard::inject("android {\n}\n");
 

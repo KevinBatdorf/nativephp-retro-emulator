@@ -4,6 +4,11 @@ All notable changes to `kevinbatdorf/nativephp-retro-emulator` are documented he
 
 ## Unreleased
 
+- Android: the preBuild check that stops a build with no cores staged no
+  longer breaks Gradle's configuration cache. It reached the project from
+  inside `doFirst`, so builds with the cache on failed and apps had to turn
+  it off. The next build swaps in the new check for one an older version
+  injected.
 - Android: starting a game straight from a declarative `<native:emulator>`
   could abort the app on a cold start (`std::bad_function_call` in
   `availableSystems`). The render thread and the declarative setup thread
