@@ -192,6 +192,12 @@
             "description": "Toggle fast-forward mode"
         },
         {
+            "name": "Emulator.IgnorePadButtons",
+            "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.IgnorePadButtons",
+            "ios": "EmulatorFunctions.IgnorePadButtons",
+            "description": "Hardware pad positions the game stops seeing"
+        },
+        {
             "name": "Emulator.SetInputMapping",
             "android": "com.kevinbatdorf.plugins.retroemulator.EmulatorFunctions.SetInputMapping",
             "ios": "EmulatorFunctions.SetInputMapping",

@@ -19,6 +19,13 @@ All notable changes to `kevinbatdorf/nativephp-retro-emulator` are documented he
   SameBoy left its internal refresh marker (0x10) as the parked sample, so
   the DAC faded back in at an out-of-range level. Link's Awakening's dialog
   did this on every text sound.
+- `Controller::ignore()` takes hardware pad positions the game stops
+  seeing, so the app can use buttons a console doesn't have, such as X and
+  Y on a Game Boy, for its own hotkeys. On Android their key events go on
+  to the app.
+- `remap()` takes hardware pad positions as sources (`pad:south`,
+  `pad:west`, `pad:l` and so on), so a console can use pad buttons it has
+  no name for: a Game Boy's A can sit on the left face button.
 
 ## 0.1.4 — 2026-09-20
 

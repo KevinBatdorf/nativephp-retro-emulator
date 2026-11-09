@@ -129,6 +129,19 @@ auto bitForButtonName(const SystemCatalog::DeviceDescriptor& desc,
     return false;
 }
 
+// The hardware pad's own buttons, by position, so a remap can reach any of them on any console.
+auto bitForPadPosition(const std::string& name, uint32_t& out) -> bool {
+    static const std::pair<const char*, uint32_t> kPad[] = {
+        {"pad:south", 1u << 0}, {"pad:west", 1u << 1}, {"pad:select", 1u << 2}, {"pad:start", 1u << 3},
+        {"pad:up", 1u << 4}, {"pad:down", 1u << 5}, {"pad:left", 1u << 6}, {"pad:right", 1u << 7},
+        {"pad:east", 1u << 8}, {"pad:north", 1u << 9}, {"pad:l", 1u << 10}, {"pad:r", 1u << 11},
+    };
+    auto lname = toLower(name);
+    for (auto& [key, bit] : kPad)
+        if (lname == key) { out = bit; return true; }
+    return false;
+}
+
 auto jsonStringArray(const std::vector<std::string>& items) -> std::string {
     std::string s = "[";
     for (auto& it : items) { if (s.size() > 1) s += ","; s += "\"" + it + "\""; }
@@ -866,7 +879,7 @@ std::string EmulatorHost::setInputMapping(int port,
         uint32_t emuBit, srcBit;
         if (!bitForButtonName(desc, emulated[i], emuBit))
             return "UNKNOWN_BUTTON:" + emulated[i];
-        if (!bitForButtonName(desc, source[i], srcBit))
+        if (!bitForButtonName(desc, source[i], srcBit) && !bitForPadPosition(source[i], srcBit))
             return "UNKNOWN_BUTTON:" + source[i];
         resolved[toLower(emulated[i])] = srcBit;
     }
