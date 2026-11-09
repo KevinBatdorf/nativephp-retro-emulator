@@ -84,6 +84,10 @@ const char* emu_system_extensions(EmuContext* ctx, const char* system_id);
 // Returns 1 on success; 0 when the ROM was rejected BEFORE any teardown (a
 // running game is untouched); -1 when a later failure left the emulator
 // cleanly stopped.
+// Folder for files an engine must open by path, such as a libretro core's
+// ROM, so they stay out of the save folder.  Survives emu_reset.
+void emu_set_staging_directory(EmuContext* ctx, const char* dir);
+
 int emu_load_rom(EmuContext* ctx, const uint8_t* rom, size_t rom_size,
                   const char* save_prefix,
                   const char* region_override, const char* preferred_regions);

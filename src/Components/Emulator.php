@@ -25,6 +25,8 @@ class Emulator extends Component
         public ?Config $config = null,
         public ?SystemConfig $systemConfig = null,
         public ?string $rom = null,
+        public ?string $savePath = null,
+        public ?string $stateDirectory = null,
     ) {}
 
     public function render(): callable
@@ -49,6 +51,12 @@ class Emulator extends Component
             }
             if ($this->rom !== null) {
                 $attrs['rom'] = $this->rom;
+            }
+            if ($this->savePath !== null) {
+                $attrs['savePath'] = $this->savePath;
+            }
+            if ($this->stateDirectory !== null) {
+                $attrs['stateDirectory'] = $this->stateDirectory;
             }
 
             NativeElementCollector::leaf('emulator', $attrs);

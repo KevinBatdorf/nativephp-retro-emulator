@@ -720,6 +720,9 @@ final class EmulatorRenderer: UIView {
             fatalError("Metal not available")
         }
         ctx = emu_create()!
+        let staging = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("retro-emulator", isDirectory: true)
+        try? FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
+        emu_set_staging_directory(ctx, staging.path)
 
         metalView = MTKView(frame: .zero, device: device)
         metalView.autoresizingMask = [.flexibleWidth, .flexibleHeight]

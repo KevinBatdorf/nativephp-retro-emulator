@@ -23,6 +23,8 @@
 using EmuHost::EmulatorHost;
 
 static EmulatorHost* g_host = nullptr;
+// Outlives each host, which nativeDestroy/nativeInit replace on every stop.
+static std::string g_stagingDir;
 
 // The Vulkan display path. Created lazily in
 // nativeSurfaceCreated (device/instance are window-independent); the
@@ -102,12 +104,21 @@ Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeInit(
     loadBackendModules();
     if (!g_host) {
         g_host = new EmulatorHost{};
+        g_host->setStagingDirectory(g_stagingDir);
         auto* ares = EmuHost::Backends::byName("ares");
         LOGI("emulator host initialized — ares %s", ares ? ares->version() : "absent");
     }
     // NB: the Vulkan renderer (g_vk) is deliberately NOT created here — see
     // its declaration for the lifecycle story.
     return JNI_TRUE;
+}
+
+JNIEXPORT void JNICALL
+Java_com_kevinbatdorf_plugins_retroemulator_EmulatorCore_nativeSetStagingDirectory(
+    JNIEnv* env, jobject, jstring dir)
+{
+    g_stagingDir = jstringToString(env, dir);
+    if (g_host) g_host->setStagingDirectory(g_stagingDir);
 }
 
 JNIEXPORT void JNICALL

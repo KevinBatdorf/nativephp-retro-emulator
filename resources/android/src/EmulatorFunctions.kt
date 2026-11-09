@@ -92,7 +92,7 @@ object EmulatorFunctions {
      * and the appliers block on the render thread.
      */
     @JvmStatic
-    fun applyDeclarativeSetup(surface: String, system: String, configJson: String, rom: String) {
+    fun applyDeclarativeSetup(surface: String, system: String, configJson: String, rom: String, savePath: String = "", stateDirectory: String = "") {
         if (system.isEmpty()) return
         val activity = surfaces[surface]?.activity ?: return
 
@@ -134,14 +134,21 @@ object EmulatorFunctions {
 
             // Boot the staged system with the ROM (every load is a fresh boot).
             if (rom.isNotEmpty()) {
-                LoadRom(activity).execute(params(JSONObject()
-                    .put("surface", surface).put("path", rom)))
+                val load = JSONObject().put("surface", surface).put("path", rom)
+                if (savePath.isNotEmpty()) load.put("savePath", savePath)
+                if (stateDirectory.isNotEmpty()) load.put("stateDirectory", stateDirectory)
+                LoadRom(activity).execute(params(load))
             }
         }.also { it.name = "emu-declarative-boot-$surface"; it.start() }
     }
 
     // Unmarshal a payload exactly as the bridge router does, so the appliers
     // receive params identical to a real nativephp_call.
+    private val stateDirectories = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    private fun stateDir(activity: FragmentActivity, surface: String): File =
+        File(stateDirectories[surface] ?: File(activity.filesDir, "states/$surface").path)
+
     private fun params(payload: JSONObject): Map<String, Any> =
         BridgeParams.unmarshalLikeBridgeRouter(payload.toString())
 
@@ -595,9 +602,13 @@ object EmulatorFunctions {
                     saveDir.mkdirs()
                     File(saveDir, file.nameWithoutExtension).absolutePath
                 }
+                File(savePrefix).parentFile?.mkdirs()
+                // A stateDirectory parameter puts this game's states there; without one they share the surface's folder.
+                val directory = (parameters["stateDirectory"] as? String)?.takeIf { it.isNotEmpty() }
+                if (directory == null) stateDirectories.remove(surface(parameters)) else stateDirectories[surface(parameters)] = directory
                 // Undo files belong to the outgoing game (ares clearUndoStates,
                 // load.cpp:170) — a stale cross-game snapshot must not survive.
-                val stateDir = File(activity.filesDir, "states/${surface(parameters)}")
+                val stateDir = stateDir(activity, surface(parameters))
                 File(stateDir, "undo_save.state").delete()
                 File(stateDir, "undo_load.state").delete()
                 undoSaveSlot.remove(surface(parameters))
@@ -667,7 +678,7 @@ object EmulatorFunctions {
             if (err != null) return err
 
             val slot = parameters["slot"] ?: 1
-            val stateDir = File(activity.filesDir, "states/${surface(parameters)}")
+            val stateDir = stateDir(activity, surface(parameters))
             stateDir.mkdirs()
             val slotFile = File(stateDir, "$slot.state")
             val path = slotFile.absolutePath
@@ -694,7 +705,7 @@ object EmulatorFunctions {
             if (err != null) return err
 
             val slot = parameters["slot"] ?: 1
-            val stateDir = File(activity.filesDir, "states/${surface(parameters)}")
+            val stateDir = stateDir(activity, surface(parameters))
             stateDir.mkdirs()
             val statePath = File(stateDir, "$slot.state")
 
@@ -724,7 +735,7 @@ object EmulatorFunctions {
     class UndoStateSave(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
             val name = surface(parameters)
-            val stateDir = File(activity.filesDir, "states/$name")
+            val stateDir = stateDir(activity, name)
             val undoFile = File(stateDir, "undo_save.state")
             val slot = undoSaveSlot[name]
             if (slot == null || !undoFile.exists()) {
@@ -746,7 +757,7 @@ object EmulatorFunctions {
      */
     class UndoStateLoad(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
-            val undoFile = File(activity.filesDir, "states/${surface(parameters)}/undo_load.state")
+            val undoFile = File(stateDir(activity, surface(parameters)), "undo_load.state")
             if (!undoFile.exists()) {
                 return BridgeResponse.success(mapOf("status" to "nothing_to_undo"))
             }

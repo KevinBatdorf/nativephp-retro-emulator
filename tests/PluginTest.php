@@ -1197,6 +1197,18 @@ describe('Typed layer', function () {
         expect($calls[1]['payload']['savePath'])->toBe('/saves/b');
     });
 
+    it('loadRom sends a state directory only when given', function () {
+        Emulator::surface()->loadRom('/roms/a.sfc');
+        Emulator::surface()->loadRom('/roms/b.sfc', stateDirectory: '/states/b');
+
+        $calls = array_values(array_filter(
+            $GLOBALS['__nativephp_calls'],
+            fn (array $call) => $call['function'] === 'Emulator.LoadRom',
+        ));
+        expect($calls[0]['payload'])->not->toHaveKey('stateDirectory');
+        expect($calls[1]['payload']['stateDirectory'])->toBe('/states/b');
+    });
+
     it('setVideo sends only the named options', function () {
         Emulator::surface()->setVideo(luminance: 90, colorBleed: true);
 

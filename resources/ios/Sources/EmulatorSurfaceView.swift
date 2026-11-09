@@ -17,7 +17,9 @@ struct EmulatorSurfaceView: View {
             // "global", so the prop needs no wiring here.
             system: node.props.getString("system", default: ""),
             config: node.props.getString("config", default: ""),
-            rom: node.props.getString("rom", default: "")
+            rom: node.props.getString("rom", default: ""),
+            savePath: node.props.getString("save_path", default: ""),
+            stateDirectory: node.props.getString("state_directory", default: "")
         )
     }
 }
@@ -28,6 +30,8 @@ private struct EmulatorViewContainer: UIViewRepresentable {
     let system: String
     let config: String
     let rom: String
+    let savePath: String
+    let stateDirectory: String
 
     func makeUIView(context: Context) -> EmulatorRenderer {
         let renderer = EmulatorRenderer(frame: .zero)
@@ -40,11 +44,12 @@ private struct EmulatorViewContainer: UIViewRepresentable {
     // Runs after make and on every SwiftUI update; re-stage only when the
     // declarative props actually change.
     func updateUIView(_ uiView: EmulatorRenderer, context: Context) {
-        let bootKey = [system, config, rom].joined(separator: " ")
+        let bootKey = [system, config, rom, savePath, stateDirectory].joined(separator: " ")
         if !system.isEmpty, uiView.declaredBootKey != bootKey {
             uiView.declaredBootKey = bootKey
             EmulatorFunctions.applyDeclarativeSetup(
-                surface: name, system: system, configJson: config, rom: rom)
+                surface: name, system: system, configJson: config, rom: rom,
+                savePath: savePath, stateDirectory: stateDirectory)
         }
     }
 
