@@ -27,9 +27,17 @@ class GradleGuard
         }
     }
 
-    /** Null means the check is already present. */
+    /** Null means the current check is already present, or a hand-edited one the guard leaves alone. */
     public static function inject(string $contents): ?string
     {
+        if (str_contains($contents, self::snippet())) {
+            return null;
+        }
+
+        if (str_contains($contents, self::legacySnippet())) {
+            return str_replace(self::legacySnippet(), self::snippet(), $contents);
+        }
+
         if (str_contains($contents, self::MARKER)) {
             return null;
         }
@@ -54,6 +62,37 @@ class GradleGuard
     }
 
     private static function snippet(): string
+    {
+        $errorFile = self::ERROR_FILE;
+
+        return self::MARKER.<<<KOTLIN
+
+tasks.matching { it.name == "preBuild" }.configureEach {
+    // Resolved at configuration time: a doFirst that reaches the project breaks the configuration cache.
+    val hookError = layout.projectDirectory.file("{$errorFile}").asFile
+    val jniLibs = layout.projectDirectory.dir("src/main/jniLibs").asFile
+    doFirst {
+        if (hookError.exists()) {
+            throw GradleException("retro-emulator: " + hookError.readText().trim())
+        }
+        val staged = jniLibs.listFiles()?.any { abi ->
+            abi.listFiles()?.any { it.name.startsWith("libbackend_") && it.name.endsWith(".so") } == true
+        } == true
+        if (!staged) {
+            throw GradleException(
+                "retro-emulator: no emulator core libraries were staged into app/src/main/jniLibs, " +
+                "so this APK would abort at launch. The plugin's copy-assets hook did not run — " +
+                "re-run `php artisan native:run android`; the first build downloads the cores from " +
+                "the plugin's GitHub release and needs network access to github.com."
+            )
+        }
+    }
+}
+KOTLIN;
+    }
+
+    /** What 0.1.4 and earlier injected; the next build swaps it for the current check. */
+    private static function legacySnippet(): string
     {
         $errorFile = self::ERROR_FILE;
 
