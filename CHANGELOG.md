@@ -29,6 +29,10 @@ All notable changes to `kevinbatdorf/nativephp-retro-emulator` are documented he
 - Reopening the same game after `stop()` boots it again. The Android session
   kept the last declarative boot, so a remounted `<native:emulator>` with the
   same system, config and ROM skipped the boot and stayed black.
+- Save states, loads and screenshots requested while the game is hidden,
+  such as from an `EmulatorPaused` listener when the player leaves the app,
+  run right away on Android instead of waiting out their timeouts (30 s for a
+  state). A screenshot taken then is the frame shown as the game was hidden.
 
 ## 0.1.4 — 2026-09-20
 
