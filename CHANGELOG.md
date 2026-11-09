@@ -4,6 +4,10 @@ All notable changes to `kevinbatdorf/nativephp-retro-emulator` are documented he
 
 ## Unreleased
 
+- Android: a game keeps its shader when its view is rebuilt, for example
+  after the app opens another screen over it and comes back. The new
+  surface's swapchain started without the shader chain, so the game showed
+  unfiltered until the shader was set again.
 - Android: a paused game hands the hardware pad back to the app, so an app's
   own pause menu can be driven with the D-pad and buttons. With
   `input-capture="global"` the emulator kept taking every mapped button and
