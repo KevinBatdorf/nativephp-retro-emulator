@@ -26,6 +26,9 @@ All notable changes to `kevinbatdorf/nativephp-retro-emulator` are documented he
 - `remap()` takes hardware pad positions as sources (`pad:south`,
   `pad:west`, `pad:l` and so on), so a console can use pad buttons it has
   no name for: a Game Boy's A can sit on the left face button.
+- Reopening the same game after `stop()` boots it again. The Android session
+  kept the last declarative boot, so a remounted `<native:emulator>` with the
+  same system, config and ROM skipped the boot and stayed black.
 
 ## 0.1.4 — 2026-09-20
 
