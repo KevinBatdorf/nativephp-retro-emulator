@@ -69,17 +69,8 @@ class Emulator
         // Engine resolution: an explicit backend is strict (must serve or
         // throw); the config map is a graceful preference list — engines
         // that aren't present are skipped, ending at the built-in engine.
-        if (! isset($staged['backend'])) {
-            $preferences = config('retro-emulator.backends')[$systemId] ?? [];
-
-            if ($preferences !== [] && $preferences !== null) {
-                $staged['backendPreferences'] = array_values(array_map(
-                    fn (Backend|string $engine) => $engine instanceof Backend
-                        ? $engine->value
-                        : $engine,
-                    (array) $preferences,
-                ));
-            }
+        if (! isset($staged['backend']) && ($preferences = self::backendPreferences($systemId)) !== []) {
+            $staged['backendPreferences'] = $preferences;
         }
         $staged = array_filter($staged, fn ($value) => $value !== null);
 
@@ -110,6 +101,15 @@ class Emulator
      * Fan a config's presentation/AV knobs out to their own native channels,
      * which the staged system config doesn't carry.
      */
+    /** @return list<string> */
+    public static function backendPreferences(string $systemId): array
+    {
+        return array_values(array_map(
+            fn (Backend|string $engine) => $engine instanceof Backend ? $engine->value : $engine,
+            (array) (config('retro-emulator.backends')[$systemId] ?? []),
+        ));
+    }
+
     private function applyPresentation(Config $config): void
     {
         $video = [

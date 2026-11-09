@@ -1,5 +1,6 @@
 <?php
 
+use KevinBatdorf\RetroEmulator\Backend;
 use KevinBatdorf\RetroEmulator\Components\Dpad as DpadComponent;
 use KevinBatdorf\RetroEmulator\Components\Emulator as EmulatorComponent;
 use KevinBatdorf\RetroEmulator\Config\Config;
@@ -15,6 +16,8 @@ use Native\Mobile\Edge\ElementRegistry;
 use Native\Mobile\Edge\NativeElementCollector;
 
 describe('EDGE element contract', function () {
+    beforeEach(fn () => config()->set('retro-emulator.backends', []));
+
     it('extends the Edge Element base with the emulator type', function () {
         $element = new EmulatorElement;
 
@@ -70,6 +73,21 @@ describe('EDGE element contract', function () {
         expect($node['props']['system'])->toBe('sfc');
         expect(json_decode($node['props']['config'], true))->toBe(['volume' => 80]);
         expect($node['props']['rom'])->toBe('/roms/game.sfc');
+    });
+
+    it('sends the config map\'s engine preferences, as loadSystem does', function () {
+        config()->set('retro-emulator.backends', ['gba' => ['mgba', 'ares'], 'gb' => 'sameboy']);
+
+        $config = fn (EmulatorElement $element) => json_decode(
+            $element->toArray(new CallbackRegistry)['props']['config'] ?? '{}', true,
+        );
+
+        expect($config(EmulatorElement::make()->system(System::Gba)))
+            ->toBe(['backendPreferences' => ['mgba', 'ares']]);
+        expect($config(EmulatorElement::make()->system(System::Gb)->systemConfig(new GbConfig(backend: Backend::Ares))))
+            ->toBe(['backend' => 'ares']);
+        expect($config(EmulatorElement::make()->system(System::Sfc)))->toBe([]);
+        expect($config(EmulatorElement::make()))->toBe([]);
     });
 
     it('serializes config as a wire-safe JSON string, not a nested map', function () {

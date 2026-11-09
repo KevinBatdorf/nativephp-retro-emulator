@@ -577,6 +577,11 @@ final class EmulatorRenderer: UIView {
         return String(cString: emu_aim_at(ctx, Int32(port), x, y))
     }
 
+    /// Hardware pad positions the game stops seeing, as an EmulatorInput bitmask.
+    func ignorePadButtons(_ bits: UInt32) {
+        input.ignored = bits
+    }
+
     /// Merge a per-port controller remap; empty arrays reset to defaults.
     func setInputMapping(port: Int, emulated: [String], source: [String]) -> String {
         emuLock.lock()

@@ -218,6 +218,9 @@ class EmulatorSession(context: Context) {
     // an immediate native call can only fail. syncSetShader stages the path
     // instead and the render thread applies it right after the bind.
     @Volatile private var vkBound = false
+
+    // The frame on screen when the surface went away, for screenshots taken while hidden.
+    private var lastFrame: ByteArray? = null
     @Volatile private var wantedShaderPath: String? = null
     @Volatile private var shaderPending = false
 
@@ -252,7 +255,10 @@ class EmulatorSession(context: Context) {
                     // Bind / rebind / unbind the Vulkan surface on this thread.
                     val want = currentSurface
                     if (want !== boundSurface) {
-                        if (boundSurface != null) core.surfaceDestroyed()
+                        if (boundSurface != null) {
+                            lastFrame = if (romLoaded) captureFramebuffer() else null
+                            core.surfaceDestroyed()
+                        }
                         boundSurface = want
                         if (want != null) core.surfaceCreated(want)
                         vkBound = want != null
@@ -275,6 +281,12 @@ class EmulatorSession(context: Context) {
                     // Idle when there is nothing to draw, but keep draining
                     // events (release()/teardown must still run with no surface).
                     if (boundSurface == null || threadPaused) {
+                        // Leaving an app pauses its game; saves asked for then must not wait for a surface.
+                        serviceStateOp()
+                        pendingScreenshot.getAndSet(null)?.let { req ->
+                            req.result = if (vkBound) captureFramebuffer() else lastFrame
+                            req.latch.countDown()
+                        }
                         synchronized(lifecycleLock) {
                             if (running && events.isEmpty() &&
                                 currentSurface === boundSurface &&
@@ -291,6 +303,13 @@ class EmulatorSession(context: Context) {
                 core.releaseRenderer()
                 Log.i(TAG, "render thread stopped")
             }
+        }
+    }
+
+    private fun serviceStateOp() {
+        pendingStateOp.getAndSet(null)?.let { req ->
+            req.result = if (req.save) core.stateSave(req.path) else core.stateLoad(req.path)
+            req.latch.countDown()
         }
     }
 
@@ -439,10 +458,7 @@ class EmulatorSession(context: Context) {
                 req.latch.countDown()
             }
 
-            pendingStateOp.getAndSet(null)?.let { req ->
-                req.result = if (req.save) core.stateSave(req.path) else core.stateLoad(req.path)
-                req.latch.countDown()
-            }
+            serviceStateOp()
 
             // Screenshot reads outputRect, so it must run after the rect update.
             pendingScreenshot.getAndSet(null)?.let { req ->
@@ -651,6 +667,8 @@ class EmulatorSession(context: Context) {
      * Audio is stopped on the calling thread; core teardown runs on the render thread.
      */
     fun stopEmulation() {
+        // The session outlives its screen; a remount with the same props would otherwise skip the boot.
+        declaredBootKey = null
         watchedAddresses.clear()
         input.reset()
         audio.stop()
@@ -666,6 +684,7 @@ class EmulatorSession(context: Context) {
             systemStaged  = false
             audioStarted  = false
             firstFrameSent = false
+            lastFrame     = null
         }
         // Status flips with the event, not with the queued teardown — a
         // GetStatus right after EmulatorStopped must already say "stopped"

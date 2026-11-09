@@ -1020,6 +1020,26 @@ enum EmulatorFunctions {
     /// are validated natively against the staged system; an empty map resets the
     /// port to defaults. Validation failures are category-A programmer errors the
     /// PHP wrapper raises synchronously.
+    /// Hardware pad positions the game on port 1 stops seeing; an empty list gives them back.
+    class IgnorePadButtons: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }
+            guard int(parameters["port"]) == 1 else {
+                return BridgeResponse.error(code: "INVALID_PARAMETERS", message: "only port 1, the hardware pad, has buttons to ignore")
+            }
+            let names = (parameters["positions"] as? [Any] ?? []).map { "\($0)" }
+            var bits: UInt32 = 0
+            for name in names {
+                guard let bit = EmulatorInput.padPositionBit(name) else {
+                    return BridgeResponse.error(code: "UNKNOWN_BUTTON", message: "Unknown pad position: \(name)")
+                }
+                bits |= bit
+            }
+            renderer.ignorePadButtons(bits)
+            return BridgeResponse.success(data: ["status": "ignored", "count": names.count])
+        }
+    }
+
     class SetInputMapping: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             guard let renderer = renderer(parameters) else { return surfaceNotFound(parameters) }

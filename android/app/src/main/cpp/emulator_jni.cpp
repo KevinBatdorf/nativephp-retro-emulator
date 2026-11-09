@@ -78,22 +78,23 @@ extern "C" {
  */
 static void loadBackendModules()
 {
-    static bool attempted = false;
-    if (attempted) return;
-    attempted = true;
-
-    static const char* kBackendNames[] = {
-        "ares", "sameboy", "mgba", "libretro",
-    };
-    for (auto* name : kBackendNames) {
-        char lib[64];
-        std::snprintf(lib, sizeof(lib), "libbackend_%s.so", name);
-        if (dlopen(lib, RTLD_NOW | RTLD_LOCAL)) {
-            LOGI("backend module loaded: %s", lib);
+    // nativeInit and a declarative LoadSystem can arrive together; the second must wait for a full registry.
+    static const bool loaded = [] {
+        static const char* kBackendNames[] = {
+            "ares", "sameboy", "mgba", "libretro",
+        };
+        for (auto* name : kBackendNames) {
+            char lib[64];
+            std::snprintf(lib, sizeof(lib), "libbackend_%s.so", name);
+            if (dlopen(lib, RTLD_NOW | RTLD_LOCAL)) {
+                LOGI("backend module loaded: %s", lib);
+            }
         }
-    }
-    LOGI("registry: %zu system(s) available",
-         EmuHost::Backends::availableSystems().size());
+        LOGI("registry: %zu system(s) available",
+             EmuHost::Backends::availableSystems().size());
+        return true;
+    }();
+    (void)loaded;
 }
 
 JNIEXPORT jboolean JNICALL

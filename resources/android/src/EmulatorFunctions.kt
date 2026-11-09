@@ -1251,6 +1251,25 @@ object EmulatorFunctions {
      * port to defaults. Validation failures are category-A programmer errors the
      * PHP wrapper raises synchronously.
      */
+    /** Hardware pad positions the game on port 1 stops seeing; an empty list gives them back. */
+    class IgnorePadButtons(private val activity: FragmentActivity) : BridgeFunction {
+        override fun execute(parameters: Map<String, Any>): Map<String, Any> {
+            val (entry, err) = entry(parameters)
+            if (err != null) return err
+            if ((parameters["port"] as? Number)?.toInt() != 1) {
+                return BridgeResponse.error("INVALID_PARAMETERS", "only port 1, the hardware pad, has buttons to ignore")
+            }
+            val names = paramList(parameters, "positions")?.map { it.toString() } ?: emptyList()
+            var bits = 0
+            for (name in names) {
+                bits = bits or (EmulatorInput.padPositionBit(name)
+                    ?: return BridgeResponse.error("UNKNOWN_BUTTON", "Unknown pad position: $name"))
+            }
+            entry!!.session.input.ignore(bits)
+            return BridgeResponse.success(mapOf("status" to "ignored", "count" to names.size))
+        }
+    }
+
     class SetInputMapping(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
             val (entry, err) = entry(parameters)
