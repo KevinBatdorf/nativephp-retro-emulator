@@ -185,6 +185,10 @@ export async function ReleaseButton(params = {}) {
     return bridgeCall('Emulator.ReleaseButton', params);
 }
 
+export async function IgnorePadButtons(params = {}) {
+    return bridgeCall('Emulator.IgnorePadButtons', params);
+}
+
 export async function SetButtons(params = {}) {
     return bridgeCall('Emulator.SetButtons', params);
 }
