@@ -14,6 +14,31 @@ import org.junit.runner.RunWith
 class RemapTest {
 
     @Test
+    fun aRemapCanReadAPadButtonTheConsoleHasNoNameFor() {
+        val core = EmulatorCore()
+        try {
+            assert(core.init())
+            assert(core.loadSystem("gb"))
+            assert(core.loadRom(makeGbRom(), null) == EmulatorCore.LOAD_OK)
+            assert(core.connectDevice("gb", 1, "Gamepad").isEmpty()) { "connect gamepad" }
+            core.tick()
+
+            // The Game Boy has no X or Y; its A can still sit on the pad's west button.
+            assert(core.setInputMapping(1, arrayOf("A", "B"), arrayOf("pad:west", "pad:south")).isEmpty()) {
+                "pad positions must be valid remap sources"
+            }
+            core.tick()
+            assert(core.getButtonBit(1, "A") == EmulatorInput.BTN_Y) { "A reads the west slot" }
+            assert(core.getButtonBit(1, "B") == EmulatorInput.BTN_B) { "B reads the south slot" }
+            assert(core.setInputMapping(1, arrayOf("A"), arrayOf("pad:nowhere")).startsWith("UNKNOWN_BUTTON")) {
+                "an unknown position is still refused"
+            }
+        } finally {
+            core.destroy()
+        }
+    }
+
+    @Test
     fun remapSwapsMergesAndResets() {
         val core = EmulatorCore()
         try {
@@ -97,6 +122,17 @@ class RemapTest {
     }
 
     /** Same synthetic ROM-only LoROM as CoreOptionsTest / StateAndOptionsTest. */
+    /** A Game Boy cartridge that idles in a loop; the remap is all this test reads. */
+    private fun makeGbRom(): ByteArray {
+        val rom = ByteArray(0x8000)
+        byteArrayOf(0x00, 0xC3.toByte(), 0x50, 0x01).copyInto(rom, 0x100)
+        byteArrayOf(0x18, 0xFE.toByte()).copyInto(rom, 0x150)
+        var checksum = 0
+        for (i in 0x134 until 0x14D) checksum = (checksum - rom[i] - 1) and 0xFF
+        rom[0x14D] = checksum.toByte()
+        return rom
+    }
+
     private fun makeLoRom(): ByteArray {
         val rom = ByteArray(0x8000)
         rom[0x0000] = 0x78

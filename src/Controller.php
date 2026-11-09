@@ -122,7 +122,11 @@ class Controller
     /**
      * Merge a button remap for this controller: each `emulated => source` pair
      * points an in-game button at a different input (`['a' => 'b', 'b' => 'a']`
-     * swaps A and B). Composes on the device defaults; an empty array resets.
+     * swaps A and B). A source is one of the device's own button names or a
+     * hardware pad position: `pad:south`, `pad:east`, `pad:west`, `pad:north`,
+     * `pad:l`, `pad:r`, `pad:start`, `pad:select`, `pad:up`, `pad:down`,
+     * `pad:left`, `pad:right` (`['a' => 'pad:west']` puts a Game Boy's A on the
+     * left face button). Composes on the device defaults; an empty array resets.
      *
      * @param  array<string, string>  $mappings  emulated button => source input
      */
@@ -132,6 +136,26 @@ class Controller
             'surface' => $this->surface,
             'port' => $this->port,
             'mappings' => $mappings,
+        ]);
+
+        return $this;
+    }
+
+    /**
+     * Hardware pad positions the game stops seeing, so the app can use them, such as hotkeys on a
+     * console with no X or Y. Positions are the ones remap() takes except the D-pad, which always
+     * reaches the game. Each call replaces the last; an empty array gives every button back. On
+     * Android an ignored button's key events go on to the app; port 1 only.
+     *
+     * @param  list<string>  $positions  `pad:south`, `pad:east`, `pad:west`, `pad:north`, `pad:l`,
+     *                                   `pad:r`, `pad:start` or `pad:select`
+     */
+    public function ignore(array $positions): static
+    {
+        $this->call('Emulator.IgnorePadButtons', [
+            'surface' => $this->surface,
+            'port' => $this->port,
+            'positions' => array_values($positions),
         ]);
 
         return $this;

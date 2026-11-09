@@ -39,8 +39,25 @@ final class EmulatorInput {
         return mask
     }
 
+    /// A hardware pad position as remap() names it; nil for the D-pad and unknown names.
+    static func padPositionBit(_ name: String) -> UInt32? {
+        switch name.lowercased() {
+        case "pad:south": return B
+        case "pad:west": return Y
+        case "pad:east": return A
+        case "pad:north": return X
+        case "pad:l": return L
+        case "pad:r": return R
+        case "pad:start": return start
+        case "pad:select": return select
+        default: return nil
+        }
+    }
+
     private let ctx: OpaquePointer
     private var observations: [Any] = []
+
+    var ignored: UInt32 = 0
 
     init(ctx: OpaquePointer) {
         self.ctx = ctx
@@ -93,7 +110,7 @@ final class EmulatorInput {
             if pad.buttonOptions?.isPressed == true { mask |= Self.select }
             if pad.buttonMenu.isPressed             { mask |= Self.start }
 
-            emu_set_input(self.ctx, 1, mask)
+            emu_set_input(self.ctx, 1, mask & ~self.ignored)
         }
     }
 }
