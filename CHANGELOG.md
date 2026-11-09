@@ -11,6 +11,9 @@ All notable changes to `kevinbatdorf/nativephp-retro-emulator` are documented he
   read the registry while the other was still filling it. Loading now
   happens once, and a second caller waits for it. Apps that call the
   emulator before mounting a surface, as the demo does, never hit it.
+- `<native:emulator system="…">` now boots on the engines the config's
+  `backends` map lists, like `loadSystem()` does. It ignored the map and ran
+  every game on ares, so GBA, GB and GBC never reached mGBA or SameBoy.
 
 ## 0.1.4 — 2026-09-20
 
