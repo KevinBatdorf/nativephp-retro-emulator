@@ -14,6 +14,11 @@ All notable changes to `kevinbatdorf/nativephp-retro-emulator` are documented he
 - `<native:emulator system="…">` now boots on the engines the config's
   `backends` map lists, like `loadSystem()` does. It ignored the map and ran
   every game on ares, so GBA, GB and GBC never reached mGBA or SameBoy.
+- Game Boy and Game Boy Color on SameBoy no longer pop when a game parks the
+  wave channel's DAC, writes NR50 or NR51, and turns the DAC back on.
+  SameBoy left its internal refresh marker (0x10) as the parked sample, so
+  the DAC faded back in at an out-of-range level. Link's Awakening's dialog
+  did this on every text sound.
 
 ## 0.1.4 — 2026-09-20
 
