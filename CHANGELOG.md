@@ -2,7 +2,7 @@
 
 All notable changes to `kevinbatdorf/nativephp-retro-emulator` are documented here.
 
-## Unreleased
+## 0.1.7 — 2026-11-26
 
 - Android: `setShader()` on a paused game shows the new shader on the
   frame already on screen. A paused game presents no new frames, so the
