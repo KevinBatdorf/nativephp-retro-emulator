@@ -4,12 +4,15 @@
 # build outputs, dev media, and per-platform scaffolds are build-time only —
 # shipping them bloats every consumer's Laravel bundle (see the demo's
 # cold-boot fan issue: a symlinked path-repo drags these into the app bundle).
+#
+# NativePHP reads this from vendor/ to keep these paths out of the app bundle, so it must ship.
 /ares            export-ignore
 /sameboy         export-ignore
 /mgba            export-ignore
 /patches         export-ignore
 /tools           export-ignore
 /build           export-ignore
+/resources/android/jniLibs export-ignore
 /local           export-ignore
 /android         export-ignore
 /ios             export-ignore
@@ -19,4 +22,3 @@
 /docs            export-ignore
 /.claude         export-ignore
 /.github         export-ignore
-.gitattributes   export-ignore

@@ -2,6 +2,14 @@
 
 All notable changes to `kevinbatdorf/nativephp-retro-emulator` are documented here.
 
+## 0.1.6 — 2026-11-26
+
+- The native libraries the first build downloads no longer end up in the
+  app's Laravel bundle. They were saved in `resources/android/jniLibs` (and
+  `build/` on iOS) inside `vendor/`, which NativePHP packs into the PHP
+  bundle, adding about 14 MB to every Android app. The package now ships its
+  `.gitattributes`, which NativePHP reads to leave those paths out.
+
 ## 0.1.5 — 2026-11-26
 
 - Android: a game keeps its shader when its view is rebuilt, for example

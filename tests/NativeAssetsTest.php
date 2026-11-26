@@ -235,3 +235,23 @@ describe('GradleGuard', function () {
         expect(is_file($errorFile))->toBeFalse();
     });
 });
+
+test('every downloaded asset stays out of the app bundle', function () {
+    $root = dirname(__DIR__);
+    $attributes = file($root.'/.gitattributes', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    $ignored = [];
+
+    foreach ($attributes as $line) {
+        if ($line[0] !== '#' && str_contains($line, 'export-ignore')) {
+            $ignored[] = ltrim(preg_split('/\s+/', trim($line))[0], '/');
+        }
+    }
+
+    expect($ignored)->not->toContain('.gitattributes');
+
+    $manifest = json_decode(file_get_contents($root.'/resources/native-assets.json'), true);
+
+    foreach ($manifest['assets'] as $name => $spec) {
+        expect(in_array($spec['extract_to'], $ignored, true))->toBeTrue("{$name} would be packed into the app's Laravel bundle");
+    }
+});
