@@ -951,6 +951,10 @@ class EmulatorSession(context: Context) {
         var result = false
         queueEvent {
             result = core.setShader(path)
+            // A paused game presents no new frames, so the change would only show once it resumed.
+            if (result && romLoaded && firstFrameSent) {
+                core.presentFrame(outputRect.x, outputRect.y, outputRect.w, outputRect.h)
+            }
             latch.countDown()
         }
         requestRender()
