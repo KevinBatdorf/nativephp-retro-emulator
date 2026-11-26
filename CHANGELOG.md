@@ -2,7 +2,7 @@
 
 All notable changes to `kevinbatdorf/nativephp-retro-emulator` are documented here.
 
-## Unreleased
+## 0.1.6 — 2026-11-26
 
 - The native libraries the first build downloads no longer end up in the
   app's Laravel bundle. They were saved in `resources/android/jniLibs` (and
