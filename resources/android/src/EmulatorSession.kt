@@ -262,6 +262,8 @@ class EmulatorSession(context: Context) {
                         boundSurface = want
                         if (want != null) core.surfaceCreated(want)
                         vkBound = want != null
+                        // A new swapchain starts without the old one's shader, e.g. after the view is rebuilt.
+                        if (vkBound && wantedShaderPath != null) shaderPending = true
                     }
 
                     // Apply a shader staged before the first bind (see the
@@ -646,6 +648,7 @@ class EmulatorSession(context: Context) {
     fun pauseEmulation() {
         audio.setPaused(true)
         core.pause()
+        input.release(true)
         queueEvent { core.flushSaves() }
         // A held one-shot would keep buzzing while the game is frozen.
         lastRumbleState = 0
@@ -658,6 +661,7 @@ class EmulatorSession(context: Context) {
     fun resumeEmulation() {
         audio.setPaused(false)
         core.resume()
+        input.release(false)
         currentStatus = if (firstFrameSent) "running" else "loading"
         eventListener?.onResumed()
     }
