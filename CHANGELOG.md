@@ -2,7 +2,7 @@
 
 All notable changes to `kevinbatdorf/nativephp-retro-emulator` are documented here.
 
-## Unreleased
+## 0.1.5 — 2026-11-26
 
 - Android: a game keeps its shader when its view is rebuilt, for example
   after the app opens another screen over it and comes back. The new
